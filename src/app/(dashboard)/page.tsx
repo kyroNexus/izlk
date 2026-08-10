@@ -13,7 +13,6 @@ import {
 import { requireUser } from '@/lib/access'
 import { loadDashboard } from '@/lib/dashboard'
 import { formatDate, formatDateTime, formatMoney, initials, plural } from '@/lib/format'
-import { syncDeadlineNotifications } from '@/lib/notifications'
 import DepartmentBoard from '@/components/DepartmentBoard'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +38,6 @@ const SITE_STATUS_TONE: Record<SiteStatus, 'ok' | 'warn' | 'off' | 'danger'> = {
 
 export default async function DashboardPage() {
 	const user = await requireUser()
-	await syncDeadlineNotifications(user.id).catch(() => undefined)
 	const data = await loadDashboard(user)
 
 	const sectionsPercent =

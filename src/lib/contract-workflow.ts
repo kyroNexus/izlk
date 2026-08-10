@@ -1,6 +1,7 @@
 import type { ContractKind, ContractWorkflowStage, DocumentKind, DocumentState, Prisma, SectionCode } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { notify } from '@/lib/notifications'
+import { logger } from '@/lib/logger'
 import { addWorkingDays, calcContractDeadline } from '@/lib/deadline'
 import { canTransitionWorkflowStage, getNextWorkflowStages } from './workflow-rules'
 
@@ -35,10 +36,10 @@ export type StageTransitionInput = {
 async function transitionInTx(tx: Tx, input: StageTransitionInput) {
 	const contract = await tx.contract.findUnique({
 		where: { id: input.contractId },
-		select: { id: true, workflowStage: true },
+		select: { id: true, number: true, managerId: true, workflowStage: true },
 	})
 	if (!contract) throw new Error('Договор не найден')
-	if (contract.workflowStage === input.toStage) return { changed: false, fromStage: contract.workflowStage }
+	if (contract.workflowStage === input.toStage) return { changed: false, fromStage: contract.workflowStage, contract }
 	if (!input.force && !canTransitionWorkflowStage(contract.workflowStage, input.toStage)) {
 		throw new Error(`Нельзя перевести договор из стадии «${WORKFLOW_STAGE_LABEL[contract.workflowStage]}» в «${WORKFLOW_STAGE_LABEL[input.toStage]}»`)
 	}
@@ -53,12 +54,19 @@ async function transitionInTx(tx: Tx, input: StageTransitionInput) {
 			comment: input.comment?.trim() || null,
 		},
 	})
-	return { changed: true, fromStage: contract.workflowStage }
+	return { changed: true, fromStage: contract.workflowStage, contract }
+}
+
+async function notifyWaitingProduction(result: { changed: boolean; contract: { id: string; number: string; managerId: string | null } }, toStage: ContractWorkflowStage, fallbackUserId?: string | null) {
+	if (!result.changed || toStage !== 'WAITING_PRODUCTION') return
+	await notify({ userId: result.contract.managerId ?? fallbackUserId, type: 'WARNING', title: 'Договор ожидает действия производства', message: `Договор № ${result.contract.number} передан в очередь производства`, href: `/contracts/${result.contract.id}`, dedupeKey: `contract-waiting-production:${result.contract.id}` })
 }
 
 /** Единственная публичная точка ручного/автоматического перехода договора по процессу. */
 export async function transitionContractStage(input: StageTransitionInput) {
-	return prisma.$transaction((tx) => transitionInTx(tx, input))
+	const result = await prisma.$transaction((tx) => transitionInTx(tx, input))
+	await notifyWaitingProduction(result, input.toStage, input.actorId)
+	return result
 }
 
 /**
@@ -97,7 +105,7 @@ export async function trySyncWorkflowAfterDocumentUpload(input: { contractId: st
 		return { result: await syncWorkflowAfterDocumentUpload(input), error: null as string | null }
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Не удалось автоматически обновить этап договора.'
-		console.error('Workflow sync after document upload failed:', error)
+		logger.error('contract_workflow.sync_failed', { entityType: 'Contract', entityId: input.contractId, userId: input.actorId, error })
 		return { result: null, error: message }
 	}
 }
@@ -219,7 +227,7 @@ export async function activateSignedPr1Workflow(contractId: string, fallbackResp
 
 /** Переводит договор в ожидание производства, когда все созданные проектные разделы завершены. */
 export async function advanceAfterProjectSectionsReady(contractId: string, actorId: string) {
-	return prisma.$transaction(async (tx) => {
+	const result = await prisma.$transaction(async (tx) => {
 		const contract = await tx.contract.findUnique({
 			where: { id: contractId },
 			select: {
@@ -235,8 +243,8 @@ export async function advanceAfterProjectSectionsReady(contractId: string, actor
 		})
 		const km = contract?.projectSections[0]
 		// В цех нельзя передавать «готовый» КМ без итогового PDF: иначе у производства нет рабочего файла.
-		if (!contract || !km || km.queueStatus !== 'DONE' || km.documents.length === 0) return false
-		if (contract.workflowStage !== 'DESIGN') return false
+		if (!contract || !km || km.queueStatus !== 'DONE' || km.documents.length === 0) return null
+		if (contract.workflowStage !== 'DESIGN') return null
 		const moved = await transitionInTx(tx, {
 			contractId,
 			toStage: 'WAITING_PRODUCTION',
@@ -244,8 +252,11 @@ export async function advanceAfterProjectSectionsReady(contractId: string, actor
 			isAutomatic: true,
 			comment: 'КМ подтверждён как готовый, итоговый PDF передан в производственный буфер',
 		})
-		return moved.changed
+		return moved
 	})
+	if (!result) return false
+	await notifyWaitingProduction(result, 'WAITING_PRODUCTION', actorId)
+	return result.changed
 }
 
 /** Первый монтажный отчёт — фактическое подтверждение начала монтажа. */

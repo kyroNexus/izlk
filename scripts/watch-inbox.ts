@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { scanInbox } from '../src/lib/inbox-scanner'
+import { runRateLimitedInboxScan } from '../src/lib/inbox-scan-runner'
 import { INBOX_PATH } from '../src/lib/storage'
 import { prisma } from '../src/lib/prisma'
 import { purgeExpiredTrash } from '../src/lib/trash'
@@ -17,7 +17,9 @@ async function heartbeat(data: Record<string, unknown>) {
 async function cycle() {
 	const startedAt = new Date()
 	try {
-		const result = await scanInbox()
+		const operation = await runRateLimitedInboxScan('system:watch-inbox')
+		if (!operation.result) return
+		const result = operation.result
 		if (Date.now() - lastTrashCleanup > 24 * 60 * 60 * 1000) {
 			await purgeExpiredTrash()
 			lastTrashCleanup = Date.now()

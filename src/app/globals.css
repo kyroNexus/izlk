@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@media (prefers-reduced-motion: reduce) {
+	*, ::before, ::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+.workspace-surface table thead th { position: sticky; top: 0; z-index: 10; background: var(--raised); }
+.workspace-surface[data-table-density='compact'] table th { padding-top: .45rem; padding-bottom: .45rem; }
+.workspace-surface[data-table-density='compact'] table td { padding-top: .5rem; padding-bottom: .5rem; }
+
 /* Тёмная тема переключается классом .dark на <html>, а не системной настройкой */
 @custom-variant dark (&:where(.dark, .dark *));
 

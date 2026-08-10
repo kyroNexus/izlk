@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { contractScope, requireUser } from '@/lib/access'
 import { readStoredFile } from '@/lib/storage'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -37,7 +38,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 		const image = await readFile(`${outputPrefix}.png`)
 		return new NextResponse(new Uint8Array(image), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } })
 	} catch (error) {
-		console.error('PDF preview render failed:', error)
+		logger.error('document.preview_failed', { route: '/api/documents/[id]/preview', method: 'GET', userId: user.id, entityType: 'Document', entityId: params.id, error })
 		return NextResponse.json({ error: 'Не удалось подготовить страницу PDF. Откройте оригинал в новой вкладке.' }, { status: 422 })
 	} finally {
 		await rm(directory, { recursive: true, force: true }).catch(() => undefined)

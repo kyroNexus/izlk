@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react'
 import type { ContractStatus, ExecStatus } from '@prisma/client'
+import { Inbox } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import Icon from '@/components/Icon'
+
+export function RichEmptyState({ title, description, icon = Inbox, primaryAction, secondaryAction }: { title: string; description: ReactNode; icon?: LucideIcon; primaryAction?: ReactNode; secondaryAction?: ReactNode }) {
+	return <div className="ui-empty-state mx-3 my-3 rounded-[14px] border border-dashed border-line px-[18px] py-8 text-center"><span aria-hidden="true" className="mx-auto mb-3 grid h-9 w-9 place-items-center rounded-full bg-brand-soft text-brand-ink"><Icon icon={icon} size={18} /></span><h2 className="text-[13px] font-semibold text-ink">{title}</h2><p className="mx-auto mt-1 max-w-md text-[12px] leading-5 text-muted">{description}</p>{(primaryAction || secondaryAction) && <div className="mt-4 flex flex-wrap justify-center gap-2">{primaryAction}{secondaryAction}</div>}</div>
+}
 
 /* ---------------- Карточка ---------------- */
 
@@ -7,7 +14,7 @@ export function Card({ children, className = '', id }: { children: ReactNode; cl
 	return (
 		<div
 			id={id}
-			className={`rounded-[18px] border border-line bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(43,31,102,.035)] transition-[border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-px hover:border-brand/20 hover:shadow-[0_2px_4px_rgba(16,24,40,.05),0_14px_32px_rgba(72,50,154,.09)] motion-reduce:transform-none ${className}`}
+			className={`rounded-[18px] border border-line bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(43,31,102,.035)] transition-[border-color,box-shadow] duration-200 ease-out hover:border-brand/20 hover:shadow-[0_2px_4px_rgba(16,24,40,.05),0_14px_32px_rgba(72,50,154,.09)] ${className}`}
 		>
 			{children}
 		</div>
@@ -166,7 +173,7 @@ export function StatTile({
 	href?: string
 }) {
 	const body = (
-		<div className="flex h-full flex-col rounded-[14px] border border-line bg-surface p-[16px] transition-all duration-200 hover:-translate-y-px hover:border-brand/25 hover:shadow-[0_12px_28px_rgba(69,48,160,.10)]">
+		<div className="flex h-full flex-col rounded-[14px] border border-line bg-surface p-[16px] transition-[border-color,box-shadow] duration-200 hover:border-brand/25 hover:shadow-[0_12px_28px_rgba(69,48,160,.10)]">
 			<div className="text-[11.5px] font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
 			<div className={`tnum mt-[8px] text-[24px] font-bold leading-none tracking-[-0.02em] ${TILE_ACCENT[tone]}`}>
 				{value}

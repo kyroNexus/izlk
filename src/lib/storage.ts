@@ -183,7 +183,14 @@ export async function saveSitePhoto(input: { siteId: string; workId: string; fil
 	const fileName = assertSafePhotoUpload(input.fileName)
 	assertFileContentMatchesName(fileName, input.buffer)
 	const target = path.join(dir, `${sha256.slice(0, 12)}-${fileName}`)
-	await writeFile(target, input.buffer)
+	const temporary = `${target}.upload-${randomUUID()}.tmp`
+	try {
+		await writeFile(temporary, input.buffer)
+		await rename(temporary, target)
+	} catch (error) {
+		await rm(temporary, { force: true }).catch(() => undefined)
+		throw error
+	}
 	return { storagePath: target, sha256, sizeBytes: input.buffer.length, mimeType: mimeByFileName(fileName), fileName }
 }
 

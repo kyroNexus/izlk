@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireUser, contractScope } from '@/lib/access'
+import { contractScope, type SessionUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
 import { writeAudit } from '@/lib/audit'
 import { mimeByFileName, readStoredFile } from '@/lib/storage'
+import { logger } from '@/lib/logger'
 
 // fs/promises и crypto работают только в Node-рантайме, не в Edge.
 export const runtime = 'nodejs'
@@ -15,11 +17,11 @@ export const dynamic = 'force-dynamic'
  * только storagePath. Здесь файл отдаётся с проверкой доступа к договору,
  * защитой от выхода за пределы хранилища и записью в аудит.
  */
-export async function GET(
+async function get(
 	request: Request,
+	{ user, requestId }: { user: SessionUser; requestId: string },
 	{ params }: { params: { id: string } },
 ) {
-	const user = await requireUser()
 
 	const document = await prisma.document.findFirst({
 		where: {
@@ -49,7 +51,7 @@ export async function GET(
 	try {
 		file = await readStoredFile(document.storagePath)
 	} catch (error) {
-		console.error('Не удалось прочитать файл документа:', error)
+		logger.error('document.read_failed', { requestId, route: '/api/documents/[id]', method: 'GET', userId: user.id, entityType: 'Document', entityId: document.id, error })
 		return NextResponse.json({ error: 'Файл недоступен на диске' }, { status: 410 })
 	}
 
@@ -86,3 +88,5 @@ export async function GET(
 		},
 	})
 }
+
+export const GET = withApiAuth(get, { access: 'authenticated', rateLimit: 'document-download' })

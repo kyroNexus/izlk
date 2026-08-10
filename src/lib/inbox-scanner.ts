@@ -11,6 +11,7 @@ import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { writeImportEvent } from '@/lib/audit'
 import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath } from '@/lib/document-classifier'
 import { createVersionedDocument } from '@/lib/document-versioning'
+import { logger } from '@/lib/logger'
 
 export { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 
@@ -31,7 +32,7 @@ async function walk(dir: string): Promise<string[]> {
 	try {
 		entries = await readdir(dir, { withFileTypes: true })
 	} catch (error) {
-		console.warn(`Не удалось прочитать папку Inbox ${dir}:`, error)
+		logger.warn('inbox.directory_read_failed', { entityType: 'Inbox', error })
 		return []
 	}
 	const files: string[] = []
@@ -234,7 +235,7 @@ async function autoImportRecognizedItems() {
 		} catch (error) {
 			if (savedPath) {
 				const linked = await prisma.document.count({ where: { storagePath: savedPath } }).catch(() => 1)
-				if (linked === 0) console.warn(`Unlinked automatic Inbox file preserved for recovery: ${savedPath}`)
+				if (linked === 0) logger.warn('inbox.unlinked_upload', { entityType: 'InboxItem', entityId: item.id })
 			}
 			const duplicate = await prisma.document.findFirst({ where: { contractId: contract.id, sha256: item.sha256 }, select: { id: true } })
 			const message = error instanceof Error ? error.message : 'Ошибка автоматического импорта'

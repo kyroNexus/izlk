@@ -1,5 +1,6 @@
 import type { NotificationType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 type NotifyInput = {
   userId?: string | null
@@ -29,14 +30,19 @@ export async function notify(input: NotifyInput) {
     })
   } catch (error) {
     // Notifications are secondary to the business operation that triggered them.
-    console.error('Notification write failed:', error)
+	logger.error('notification.write_failed', { userId: input.userId, error })
     return null
   }
 }
 
 async function batchNotify(items: NotifyInput[]) {
   const valid = items.filter((item) => item.userId)
-  if (valid.length === 0) return
+  if (valid.length === 0) return { processed: 0, created: 0 }
+  const existing = await prisma.notification.findMany({
+    where: { OR: valid.filter((item) => item.dedupeKey).map((item) => ({ userId: item.userId!, dedupeKey: item.dedupeKey! })) },
+    select: { userId: true, dedupeKey: true },
+  })
+  const existingKeys = new Set(existing.map((item) => `${item.userId}:${item.dedupeKey}`))
   await prisma.$transaction(
     valid.map((input) =>
       prisma.notification.upsert({
@@ -52,7 +58,14 @@ async function batchNotify(items: NotifyInput[]) {
         },
       }),
     ),
-  ).catch((error) => console.error('Batch notification write failed:', error))
+	).catch((error) => {
+		logger.error('notification.batch_write_failed', { error })
+		throw error
+	})
+	return {
+		processed: valid.length,
+		created: valid.filter((item) => !item.dedupeKey || !existingKeys.has(`${item.userId}:${item.dedupeKey}`)).length,
+	}
 }
 
 export async function syncDeadlineNotifications(userId: string) {
@@ -60,7 +73,7 @@ export async function syncDeadlineNotifications(userId: string) {
   const horizon = new Date(now)
   horizon.setDate(horizon.getDate() + 5)
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
-  if (!user) return
+  if (!user) return { processed: 0, created: 0 }
 
   const [sections, tasks, contracts, invoices] = await Promise.all([
     prisma.projectSection.findMany({
@@ -144,5 +157,24 @@ export async function syncDeadlineNotifications(userId: string) {
     })
   }
 
-  await batchNotify(pending)
+  const result = await batchNotify(pending)
+  // `Notification` intentionally has no delivery state: dedupe makes a repeat
+  // safe and updates a warning when a deadline becomes overdue.
+  return result
+}
+
+export async function syncAllDeadlineNotifications() {
+  const users = await prisma.user.findMany({
+    where: { isActive: true, deletedAt: null },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
+  let processed = 0
+  let created = 0
+  for (const user of users) {
+    const result = await syncDeadlineNotifications(user.id)
+    processed += result.processed
+    created += result.created
+  }
+  return { processed, created }
 }

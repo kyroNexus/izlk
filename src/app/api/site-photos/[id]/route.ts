@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { requireUser, contractScope } from '@/lib/access'
+import { contractScope, type SessionUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { readStoredFile } from '@/lib/storage'
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
-	const user = await requireUser()
+async function get(_request: Request, { user }: { user: SessionUser }, { params }: { params: { id: string } }) {
 	const photo = await prisma.sitePhoto.findFirst({ where: { id: params.id, siteWork: { site: { contract: contractScope(user) } } }, select: { fileName: true, storagePath: true, mimeType: true } })
 	if (!photo) return new NextResponse('Not found', { status: 404 })
 	try {
@@ -14,3 +14,5 @@ export async function GET(_request: Request, { params }: { params: { id: string 
 		return new NextResponse('Файл недоступен в хранилище', { status: 410 })
 	}
 }
+
+export const GET = withApiAuth(get, { access: 'authenticated' })

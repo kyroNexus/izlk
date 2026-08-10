@@ -16,6 +16,7 @@ import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { formatDateTime, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { writeAudit } from '@/lib/audit'
+import { notify } from '@/lib/notifications'
 
 const taskStatuses: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']
 const taskPriorities: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
@@ -107,7 +108,7 @@ export default async function TaskPage({
               ],
             }),
       },
-      select: { id: true },
+      select: { id: true, assigneeId: true, title: true },
     })
     if (!current) redirect('/tasks')
 
@@ -163,6 +164,9 @@ export default async function TaskPage({
       entityType: 'Task',
       entityId: current.id,
     })
+    if (allowedAssignee.id !== current.assigneeId) {
+      await notify({ userId: allowedAssignee.id, type: 'ASSIGNMENT', title: 'Вы назначены исполнителем задачи', message: title, href: `/tasks/${current.id}`, dedupeKey: `task-assignment:${current.id}:${allowedAssignee.id}` })
+    }
     redirect(`/tasks/${current.id}`)
   }
 
@@ -186,7 +190,7 @@ export default async function TaskPage({
               }
             : { assigneeId: acting.id }),
       },
-      select: { id: true },
+      select: { id: true, assigneeId: true, creatorId: true, title: true },
     })
     if (visible && text) {
       const comment = await prisma.taskComment.create({
@@ -199,6 +203,8 @@ export default async function TaskPage({
         entityType: 'TaskComment',
         entityId: comment.id,
       })
+      if (visible.assigneeId !== acting.id) await notify({ userId: visible.assigneeId, type: 'INFO', title: 'Новый комментарий к задаче', message: visible.title, href: `/tasks/${visible.id}`, dedupeKey: `task-comment:${comment.id}:assignee` })
+      if (visible.creatorId !== acting.id && visible.creatorId !== visible.assigneeId) await notify({ userId: visible.creatorId, type: 'INFO', title: 'Новый комментарий к задаче', message: visible.title, href: `/tasks/${visible.id}`, dedupeKey: `task-comment:${comment.id}:creator` })
     }
     redirect(`/tasks/${params.id}`)
   }

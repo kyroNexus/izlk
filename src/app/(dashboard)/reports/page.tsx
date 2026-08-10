@@ -2,9 +2,8 @@ import Link from 'next/link'
 import Topbar from '@/components/Topbar'
 import { Card, CardHeader, Chip, EmptyState, FileIcon, ProgressBar, StatTile } from '@/components/ui'
 import { formatDate, formatMoney, initials, plural } from '@/lib/format'
-import { contractScope, requireUser } from '@/lib/access'
-import { loadDashboard } from '@/lib/dashboard'
-import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/access'
+import { loadReportData, parseReportPeriod } from '@/lib/report-data'
 import type { CommercialProposalStatus } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -21,32 +20,15 @@ const PROPOSAL_STATUS: Record<CommercialProposalStatus, { label: string; tone: '
  * Сводный отчёт. Пункт меню «Отчёты» раньше вёл на 404.
  * Использует тот же агрегатор, что и дашборд — логика не дублируется.
  */
-export default async function ReportsPage() {
+export default async function ReportsPage({ searchParams }: { searchParams: { from?: string; to?: string } }) {
 	const user = await requireUser()
-	const data = await loadDashboard(user)
+	const period = parseReportPeriod(searchParams)
+	const report = await loadReportData(user, period)
+	const data = report.dashboard
 	// The FigJam report catalogue is backed by the same scoped records as the
 	// rest of the workspace.  A manager therefore never sees another manager's
 	// commercial proposals merely by opening the reports screen.
-	const commercialProposals = await prisma.document.findMany({
-		where: {
-			deletedAt: null,
-			kind: 'COMMERCIAL_PROPOSAL',
-			contract: contractScope(user),
-			...(['VIEWER', 'DESIGNER'].includes(user.role) ? { isConfidential: false } : {}),
-		},
-		select: {
-			id: true,
-			fileName: true,
-			state: true,
-			proposalStatus: true,
-			proposalSentAt: true,
-			proposalRespondedAt: true,
-			createdAt: true,
-			contract: { select: { id: true, number: true, contractor: { select: { name: true } } } },
-		},
-		orderBy: { createdAt: 'desc' },
-		take: 500,
-	})
+	const commercialProposals = report.proposals
 	const proposalCounts = (Object.keys(PROPOSAL_STATUS) as CommercialProposalStatus[]).reduce((acc, status) => {
 		acc[status] = commercialProposals.filter((proposal) => proposal.proposalStatus === status).length
 		return acc
@@ -55,47 +37,12 @@ export default async function ReportsPage() {
 	// План берётся из разбивки договора, факт — только из внесённых дневных
 	// отчётов КЖ/КМ. Поэтому цифры не подменяют бухгалтерию, а показывают
 	// оперативную картину по производству.
-	const costContracts = data.canSeeAmounts
-		? await prisma.contract.findMany({
-			where: contractScope(user),
-			select: {
-				id: true,
-				number: true,
-				amount: true,
-				currency: true,
-				smrAmount: true,
-				mkAmount: true,
-				deliveryAmount: true,
-				sites: {
-					where: { deletedAt: null },
-					select: {
-						works: {
-							select: { direction: true, crewCost: true, equipmentCost: true, materialCost: true, otherCost: true },
-						},
-					},
-				},
-			},
-		})
-		: []
-
-	const costSummary = costContracts.reduce(
-		(acc, contract) => {
-			const plan = Number(contract.smrAmount ?? 0) + Number(contract.mkAmount ?? 0) + Number(contract.deliveryAmount ?? 0)
-			const hasPlan = contract.smrAmount != null || contract.mkAmount != null || contract.deliveryAmount != null
-			const works = contract.sites.flatMap((site) => site.works)
-			const actual = works.reduce((sum, work) => sum + Number(work.crewCost) + Number(work.equipmentCost) + Number(work.materialCost) + Number(work.otherCost), 0)
-			const kjActual = works.filter((work) => work.direction === 'KJ').reduce((sum, work) => sum + Number(work.crewCost) + Number(work.equipmentCost) + Number(work.materialCost) + Number(work.otherCost), 0)
-			acc.plan += plan
-			acc.actual += actual
-			acc.kjActual += kjActual
-			acc.kmActual += actual - kjActual
-			acc.withPlan += hasPlan ? 1 : 0
-			if (hasPlan) acc.risks.push({ id: contract.id, number: contract.number, plan, actual, currency: contract.currency })
-			return acc
-		},
-		{ plan: 0, actual: 0, kjActual: 0, kmActual: 0, withPlan: 0, risks: [] as Array<{ id: string; number: string; plan: number; actual: number; currency: string }> },
-	)
+	const costSummary = report.planFact.reduce((acc, row) => ({ ...acc, plan: acc.plan + row.plan, actual: acc.actual + row.actual, withPlan: acc.withPlan + Number(row.plan > 0), risks: row.plan > 0 ? [...acc.risks, row] : acc.risks }), { plan: 0, actual: 0, withPlan: 0, risks: [] as typeof report.planFact })
+	const costContracts = report.contracts
 	const costPercent = costSummary.plan > 0 ? Math.round((costSummary.actual / costSummary.plan) * 100) : 0
+	const works = report.contracts.flatMap((contract) => contract.sites.flatMap((site) => site.works))
+	const kjActual = works.filter((work) => work.direction === 'KJ').reduce((sum, work) => sum + Number(work.crewCost) + Number(work.equipmentCost) + Number(work.materialCost) + Number(work.otherCost), 0)
+	const kmActual = costSummary.actual - kjActual
 	const budgetRisks = costSummary.risks
 		.filter((row) => row.actual > 0 || row.plan > 0)
 		.sort((a, b) => (b.plan > 0 ? b.actual / b.plan : 0) - (a.plan > 0 ? a.actual / a.plan : 0))
@@ -121,7 +68,7 @@ export default async function ReportsPage() {
 
 			<div className="px-[26px] py-[22px]">
 				<div className="mb-[18px]">
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Отчёты</h1>
+					<div className="flex flex-wrap items-end justify-between gap-3"><h1 className="text-[26px] font-bold tracking-[-0.02em]">Отчёты</h1><form className="flex flex-wrap items-end gap-2" method="get"><label className="text-[11px] text-muted">С <input name="from" type="date" defaultValue={period.from.toISOString().slice(0, 10)} className="ml-1 rounded border border-line bg-surface px-2 py-1 text-ink" /></label><label className="text-[11px] text-muted">По <input name="to" type="date" defaultValue={period.to.toISOString().slice(0, 10)} className="ml-1 rounded border border-line bg-surface px-2 py-1 text-ink" /></label><button className="h-[30px] rounded border border-line px-3 text-[12px] font-semibold">Показать</button><a href={`/api/reports/export?from=${period.from.toISOString().slice(0, 10)}&to=${period.to.toISOString().slice(0, 10)}`} className="brand-gradient inline-flex h-[30px] items-center rounded px-3 text-[12px] font-semibold text-white">Скачать Excel</a></form></div>
 					<div className="mt-[5px] text-[13px] text-muted">
 						Сводка по {data.totals.contracts}{' '}
 						{plural(data.totals.contracts, 'договору', 'договорам', 'договорам')} в вашей зоне видимости
@@ -270,7 +217,7 @@ export default async function ReportsPage() {
 									<div className="mt-[6px]"><ProgressBar percent={costPercent} tone={costSummary.actual > costSummary.plan ? 'danger' : costPercent >= 80 ? 'warn' : 'brand'} height={7} /></div>
 									<div className={`mt-[7px] text-[12px] ${costSummary.actual > costSummary.plan ? 'text-danger' : 'text-muted'}`}>{costSummary.actual > costSummary.plan ? `Перерасход: ${formatMoney(costSummary.actual - costSummary.plan)}` : `Остаток бюджета: ${formatMoney(costSummary.plan - costSummary.actual)}`}</div>
 								</> : <div className="mt-[13px] rounded-[8px] bg-raised px-[10px] py-[9px] text-[12px] text-muted">Добавьте СМР, МК и доставку в карточках договоров — здесь появится контроль общего бюджета.</div>}
-								<div className="mt-[13px] flex gap-[14px] border-t border-line-soft pt-[11px] text-[11.5px] text-muted"><span>КЖ: <b className="tnum text-ink">{formatMoney(costSummary.kjActual)}</b></span><span>КМ: <b className="tnum text-ink">{formatMoney(costSummary.kmActual)}</b></span></div>
+								<div className="mt-[13px] flex gap-[14px] border-t border-line-soft pt-[11px] text-[11.5px] text-muted"><span>КЖ: <b className="tnum text-ink">{formatMoney(kjActual)}</b></span><span>КМ: <b className="tnum text-ink">{formatMoney(kmActual)}</b></span></div>
 							</div>
 						</Card>
 

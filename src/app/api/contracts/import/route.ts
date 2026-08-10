@@ -4,14 +4,15 @@ import { parseContractFile, MAX_FOLDER_FILES, MAX_FOLDER_TOTAL_BYTES, MAX_PARSE_
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
 import { EXEC_TEMPLATES } from '@/lib/executive'
 import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath, isTransientSystemFile } from '@/lib/document-classifier'
-import { isSameOriginRequest } from '@/lib/request-security'
 import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { contractImportSchema, firstIssue } from '@/lib/validation'
-import { canWrite, getActiveUser, grantDesignReadAccess } from '@/lib/access'
+import { grantDesignReadAccess, type SessionUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
 import { removeUnusedImportedContractor, rollbackNewContractImport } from '@/lib/contract-import-cleanup'
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { findMatchingContractor, normalizeCompanyName } from '@/lib/contractor-match'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -38,7 +39,7 @@ async function projectSectionForPath(contractId: string, filePath: string, secti
 
 async function removeUnlinkedUpload(storagePath: string) {
 	const linked = await prisma.document.count({ where: { storagePath } }).catch(() => 1)
-	if (linked === 0) console.warn(`Unlinked imported file preserved for recovery: ${storagePath}`)
+	if (linked === 0) logger.warn('contract_import.unlinked_upload', { entityType: 'StorageObject' })
 }
 
 async function attachFolderToContract(input: { contractId: string; uploads: FolderUpload[]; userId: string }) {
@@ -98,11 +99,7 @@ function contractNumberInName(fileName: string, number: string) {
 	return new RegExp(`(^|[^0-9A-ZА-Я])${escaped}(?=$|[^0-9A-ZА-Я])`, 'i').test(fileName)
 }
 
-export async function POST(request: Request) {
-	if (!isSameOriginRequest(request)) return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 })
-	const user = await getActiveUser()
-	if (!user || !canWrite(user)) return NextResponse.json({ error: 'Нет доступа' }, { status: 403 })
-
+async function post(request: Request, { user, requestId }: { user: SessionUser; requestId: string }) {
 	let createdContractId: string | null = null
 	let createdContractorId: string | null = null
 	let requestedFileName: string | null = null
@@ -268,10 +265,12 @@ export async function POST(request: Request) {
 		await writeAudit({ userId: user.id, action: 'CREATE', entityType: 'ContractImport', entityId: contract.id })
 		return NextResponse.json({ contractId: contract.id, importedFiles, skippedFiles, issues, parsingSkipped, contractorMatched: Boolean(match), contractorMatchReasons: match?.reasons ?? [] })
 	} catch (error) {
-		console.error(error)
+		logger.error('contract_import.failed', { requestId, route: '/api/contracts/import', method: 'POST', userId: user.id, entityType: 'Contract', entityId: createdContractId ?? undefined, error })
 		await writeImportEvent({ fileName: requestedFileName ?? 'Создание договора', event: 'CONTRACT_CREATED', outcome: 'FAILED', actorId: user.id, message: error instanceof Error ? error.message : 'Не удалось создать договор.' })
 		if (createdContractId) await rollbackNewContractImport(createdContractId)
 		await removeUnusedImportedContractor(createdContractorId)
 		return NextResponse.json({ error: error instanceof Error ? error.message : 'Не удалось создать договор' }, { status: 400 })
 	}
 }
+
+export const POST = withApiAuth(post, { access: 'write', csrf: true, rateLimit: 'contract-import' })

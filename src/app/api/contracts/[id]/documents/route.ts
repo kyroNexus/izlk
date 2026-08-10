@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
 import type { DocumentKind, DocumentState } from '@prisma/client'
-import { requireUser, assertContractAccess } from '@/lib/access'
+import { assertContractAccess, type SessionUser } from '@/lib/access'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
 import { DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
 import { orNull, parseDate } from '@/lib/validation'
 import { confirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
-import { configuredPublicOrigin, isSameOriginRequest } from '@/lib/request-security'
+import { configuredPublicOrigin } from '@/lib/request-security'
+import { withApiAuth } from '@/lib/api-auth'
 import { createVersionedDocument } from '@/lib/document-versioning'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,12 +31,10 @@ function uploadUrl(request: Request, contractId: string, message: string, execut
 	return url
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+async function post(request: Request, { user, requestId }: { user: SessionUser; requestId: string }, { params }: { params: { id: string } }) {
 	const contractId = params.id
 	let executiveId = ''
 	try {
-		if (!isSameOriginRequest(request)) return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 })
-		const user = await requireUser()
 		const formData = await request.formData()
 		executiveId = String(formData.get('executiveDocId') ?? '')
 		const requestedProjectSectionId = String(formData.get('projectSectionId') ?? '')
@@ -94,7 +94,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 				// Исходник нельзя удалять автоматически: даже если запись в БД не
 				// создалась, файл остаётся на сервере для ручной проверки и повторного
 				// импорта. Путь сохраняется в журнале импорта вместе с причиной ошибки.
-				if (savedPath) console.error('Unlinked upload preserved for recovery:', savedPath)
+				if (savedPath) logger.warn('contract_document.unlinked_upload', { requestId, route: '/api/contracts/[id]/documents', method: 'POST', userId: user.id, entityType: 'Contract', entityId: contractId })
 				const message = error instanceof Error ? error.message : 'Непредвиденная ошибка обработки файла.'
 				await writeImportEvent({ fileName: upload.name, event: 'MANUAL_IMPORTED', outcome: 'FAILED', contractId, actorId: user.id, message })
 			}
@@ -108,7 +108,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 		destination.searchParams.set('success', `Загружено файлов: ${uploadedCount}${skippedCount ? `. Пропущено копий: ${skippedCount}` : ''}${failedCount ? `. Ошибок: ${failedCount}; причины есть в журнале импорта` : ''}.${workflowText}`)
 		return NextResponse.redirect(destination, 303)
 	} catch (error) {
-		console.error('Ошибка пакетной загрузки документов:', error)
+		logger.error('contract_document.upload_failed', { requestId, route: '/api/contracts/[id]/documents', method: 'POST', userId: user.id, entityType: 'Contract', entityId: contractId, error })
 		return NextResponse.redirect(uploadUrl(request, contractId, 'Не удалось загрузить файлы. Повторите попытку.', executiveId), 303)
 	}
 }
+
+export const POST = withApiAuth(post, { access: 'write', csrf: true })

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { canWrite, getActiveUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
 import { parseContractFile, parseContractFolder, MAX_FOLDER_FILES, MAX_FOLDER_TOTAL_BYTES, MAX_PARSE_BYTES } from '@/lib/contract-parser'
-import { isSameOriginRequest } from '@/lib/request-security'
 import { isTransientSystemFile } from '@/lib/document-classifier'
 import { assertFileContentMatchesName } from '@/lib/storage'
 
@@ -15,11 +14,7 @@ function parserErrorMessage(error: unknown) {
 	return message || 'Не удалось прочитать файл'
 }
 
-export async function POST(request: Request) {
-	if (!isSameOriginRequest(request)) return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403 })
-	const user = await getActiveUser()
-	if (!user || !canWrite(user)) return NextResponse.json({ error: 'Нет доступа' }, { status: 403 })
-
+async function post(request: Request) {
 	try {
 		const form = await request.formData()
 		const file = form.get('file')
@@ -61,3 +56,5 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: parserErrorMessage(error) }, { status: 400 })
 	}
 }
+
+export const POST = withApiAuth(post, { access: 'write', csrf: true, rateLimit: 'contract-parse' })

@@ -8,7 +8,7 @@ import { isAdmin, requireUser } from '@/lib/access'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
 import { importInboxFile, readStoredFile } from '@/lib/storage'
 import { parseContractFile } from '@/lib/contract-parser'
-import { scanInbox } from '@/lib/inbox-scanner'
+import { runRateLimitedInboxScan } from '@/lib/inbox-scan-runner'
 import { EXEC_TEMPLATES } from '@/lib/executive'
 import { getInboxWatcherStatus } from '@/lib/inbox-watcher-status'
 import { notify } from '@/lib/notifications'
@@ -186,7 +186,8 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 		})
 		await writeImportEvent({ fileName: 'Массовый повтор обработки', event: 'RETRY', outcome: 'QUEUED', actorId: actingUser.id, message: 'Администратор запустил повторную проверку ошибочных файлов.' })
 		try {
-			await scanInbox()
+			const operation = await runRateLimitedInboxScan(`user:${actingUser.id}`)
+			if (!operation.result) throw new Error('Сканирование уже запущено или временно ограничено.')
 		} catch (error) {
 			redirect(`/inbox?error=${encodeURIComponent(error instanceof Error ? error.message : 'Не удалось повторить обработку файлов')}`)
 		}
@@ -197,7 +198,10 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 		'use server'
 		const actingUser = await requireUser()
 		if (!isAdmin(actingUser)) redirect('/')
-		try { await scanInbox() }
+		try {
+			const operation = await runRateLimitedInboxScan(`user:${actingUser.id}`)
+			if (!operation.result) throw new Error('Сканирование уже запущено или временно ограничено.')
+		}
 		catch (error) { redirect(`/inbox?error=${encodeURIComponent(error instanceof Error ? error.message : 'Не удалось проверить папку')}`) }
 		redirect('/inbox')
 	}

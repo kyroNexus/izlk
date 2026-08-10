@@ -1,5 +1,6 @@
 import type { AuditAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 /**
  * Запись в журнал действий.
@@ -29,7 +30,7 @@ export async function writeAudit(input: {
 			},
 		})
 	} catch (error) {
-		console.error('Не удалось записать событие аудита:', error)
+		logger.error('audit.write_failed', { userId: input.userId, entityType: input.entityType, entityId: input.entityId, error })
 	}
 }
 
@@ -46,6 +47,6 @@ export async function writeImportEvent(input: {
 	try {
 		await prisma.importEvent.create({ data: input })
 	} catch (error) {
-		console.error('Не удалось записать событие импорта:', error)
+		logger.error('import_event.write_failed', { userId: input.actorId ?? undefined, entityType: 'ImportEvent', entityId: input.inboxItemId ?? undefined, error })
 	}
 }

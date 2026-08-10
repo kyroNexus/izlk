@@ -85,6 +85,28 @@ model Notification {
   @@index([userId, readAt, createdAt])
 }
 
+enum BackgroundJobStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// Журнал фоновых запусков. Он не заменяет AuditLog: это технический статус
+/// планировщика, а не бизнес-аудит действий пользователя.
+model BackgroundJob {
+  id          String              @id @default(cuid())
+  type        String
+  startedAt   DateTime            @default(now())
+  finishedAt  DateTime?
+  status      BackgroundJobStatus @default(RUNNING)
+  processed   Int                 @default(0)
+  created     Int                 @default(0)
+  error       String?
+
+  @@index([type, startedAt])
+  @@index([status, startedAt])
+}
+
 // ------------------------------------------------------------
 // КОНТРАГЕНТЫ
 // ------------------------------------------------------------
@@ -475,6 +497,8 @@ model SiteWork {
   materialCost  Decimal       @default(0) @db.Decimal(15, 2)
   otherCost     Decimal       @default(0) @db.Decimal(15, 2)
   comment       String?
+  /// Browser-generated key makes a resumed mobile submission idempotent.
+  clientSubmissionId String? @unique
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -537,6 +561,7 @@ model SitePhoto {
 
   @@index([siteWorkId])
   @@index([sha256])
+  @@unique([siteWorkId, sha256])
 }
 
 enum SiteEventType {
@@ -730,6 +755,16 @@ model DepartmentDailySnapshot {
 
   @@unique([date, department])
   @@index([department, date])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+  lockToken String?
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 enum AccessLevel {

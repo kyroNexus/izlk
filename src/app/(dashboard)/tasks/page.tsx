@@ -8,6 +8,7 @@ import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { formatDate, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { writeAudit } from '@/lib/audit'
+import { notify } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 const STATUS: Record<TaskStatus, { label: string; tone: 'off' | 'brand' | 'ok' | 'danger' }> = { TODO: { label: 'Не начато', tone: 'off' }, IN_PROGRESS: { label: 'В работе', tone: 'brand' }, DONE: { label: 'Готово', tone: 'ok' }, CANCELLED: { label: 'Отменено', tone: 'danger' } }
@@ -35,6 +36,7 @@ export default async function TasksPage({ searchParams }: { searchParams: { cont
 		const contractId = allowedContract?.id ?? null
 		const created = await prisma.task.create({ data: { title, description: String(formData.get('description') ?? '').trim() || null, category: String(formData.get('category') ?? '').trim() || null, contractId, assigneeId, creatorId: acting.id, dueDate: due ? new Date(`${due}T12:00:00.000Z`) : null, priority }, select: { id: true } })
 		await writeAudit({ userId: acting.id, action: 'CREATE', entityType: 'Task', entityId: created.id })
+		await notify({ userId: assigneeId, type: 'ASSIGNMENT', title: 'Вам назначена задача', message: title, href: `/tasks/${created.id}`, dedupeKey: `task-assignment:${created.id}:${assigneeId}` })
 		redirect(`/tasks/${created.id}`)
 	}
 

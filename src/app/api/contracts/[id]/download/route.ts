@@ -1,7 +1,8 @@
 import JSZip from 'jszip'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { contractScope, requireUser } from '@/lib/access'
+import { contractScope, type SessionUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
 import { readStoredFile, safeFileName } from '@/lib/storage'
 import { writeAudit } from '@/lib/audit'
 import { DOCUMENT_KIND_LABELS } from '@/lib/format'
@@ -9,8 +10,7 @@ import { DOCUMENT_KIND_LABELS } from '@/lib/format'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-	const user = await requireUser()
+async function get(request: Request, { user }: { user: SessionUser }, { params }: { params: { id: string } }) {
 	const contract = await prisma.contract.findFirst({
 		where: { id: params.id, ...contractScope(user) },
 		select: { id: true, number: true, documents: { where: { deletedAt: null, ...(['VIEWER', 'DESIGNER'].includes(user.role) ? { isConfidential: false } : {}) }, select: { id: true, fileName: true, storagePath: true, kind: true, executiveDoc: { select: { name: true } } } } },
@@ -34,3 +34,5 @@ export async function GET(request: Request, { params }: { params: { id: string }
 	const archiveName = encodeURIComponent(`Договор-${contract.number}-документы.zip`)
 	return new NextResponse(new Uint8Array(archive), { headers: { 'Content-Type': 'application/zip', 'Content-Length': String(archive.length), 'Content-Disposition': `attachment; filename*=UTF-8''${archiveName}`, 'Cache-Control': 'private, no-store' } })
 }
+
+export const GET = withApiAuth(get, { access: 'authenticated', rateLimit: 'contract-download' })

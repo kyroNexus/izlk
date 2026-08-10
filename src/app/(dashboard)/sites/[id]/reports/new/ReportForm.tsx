@@ -1,38 +1,115 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Card, Field, inputClass, selectClass, textareaClass } from '@/components/ui'
 
 type Crew = { name: string; days: string; rate: string }
 type Cost = { category: 'EQUIPMENT' | 'MATERIAL' | 'OTHER'; name: string; payment: 'CASH' | 'CASHLESS'; quantity: string; unit: string; price: string }
+type QueuedPhoto = { id: string; file: File; preview: string; state: 'ready' | 'uploading' | 'failed' | 'done'; error?: string }
+type Draft = { fields: Record<string, string>; crew: Crew[]; costs: Cost[]; submissionId: string; reportId?: string; photos: string[] }
+const MAX_PHOTOS = 10
 const num = (value: string) => Number(value.replace(',', '.')) || 0
 const money = (value: number) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
+const newId = () => crypto.randomUUID()
 
-export default function ReportForm({ action, siteId, today }: { action: (formData: FormData) => void | Promise<void>; siteId: string; today: string }) {
+async function checksum(file: File) {
+	const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+	return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function compress(file: File): Promise<File> {
+	if (!file.type.startsWith('image/') || file.type === 'image/heic' || file.size < 1_000_000) return file
+	const image = await createImageBitmap(file).catch(() => null)
+	if (!image) return file
+	const scale = Math.min(1, 1920 / Math.max(image.width, image.height))
+	const canvas = document.createElement('canvas'); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale)
+	canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height); image.close()
+	const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', .82))
+	return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }) : file
+}
+
+export default function ReportForm({ siteId, today }: { siteId: string; today: string }) {
+	const key = `izlk:site-report:${siteId}`
+	const formRef = useRef<HTMLFormElement>(null)
+	const photosRef = useRef<QueuedPhoto[]>([])
 	const [crew, setCrew] = useState<Crew[]>([{ name: '', days: '1', rate: '0' }])
 	const [costs, setCosts] = useState<Cost[]>([{ category: 'EQUIPMENT', name: '', payment: 'CASHLESS', quantity: '1', unit: 'смена', price: '0' }])
+	const [photos, setPhotos] = useState<QueuedPhoto[]>([])
+	const [submissionId, setSubmissionId] = useState('')
+	const [reportId, setReportId] = useState<string | null>(null)
+	const [submitting, setSubmitting] = useState(false)
+	const [message, setMessage] = useState<string | null>(null)
 	const crewTotal = useMemo(() => crew.reduce((sum, row) => sum + num(row.days) * num(row.rate), 0), [crew])
 	const costTotals = useMemo(() => costs.reduce((sum, row) => ({ ...sum, [row.category]: sum[row.category] + num(row.quantity) * num(row.price) }), { EQUIPMENT: 0, MATERIAL: 0, OTHER: 0 }), [costs])
-	const updateCrew = (index: number, key: keyof Crew, value: string) => setCrew((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row))
-	const updateCost = (index: number, key: keyof Cost, value: string) => setCosts((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row))
+	const uploadedCount = photos.filter((photo) => photo.state === 'done').length
+	const updateCrew = (index: number, field: keyof Crew, value: string) => setCrew((rows) => rows.map((row, i) => i === index ? { ...row, [field]: value } : row))
+	const updateCost = (index: number, field: keyof Cost, value: string) => setCosts((rows) => rows.map((row, i) => i === index ? { ...row, [field]: value } : row))
 
-	return <Card className="overflow-hidden border-brand/20 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand-soft)_42%,var(--surface)),var(--surface)_34%)] p-[22px] shadow-[0_18px_42px_rgba(34,24,82,.10)]"><form action={action} className="flex flex-col gap-[18px]">
-		<input type="hidden" name="crewJson" value={JSON.stringify(crew)} /><input type="hidden" name="costJson" value={JSON.stringify(costs)} />
+	const saveDraft = () => {
+		const form = formRef.current; if (!form || !submissionId) return
+		const fields = Object.fromEntries([...new FormData(form).entries()].filter(([, value]) => typeof value === 'string') as [string, string][])
+		localStorage.setItem(key, JSON.stringify({ fields, crew, costs, submissionId, reportId: reportId ?? undefined, photos: photos.map((photo) => photo.file.name) } satisfies Draft))
+	}
+	useEffect(() => {
+		const raw = localStorage.getItem(key)
+		const draft: Draft | null = raw ? JSON.parse(raw) : null
+		setSubmissionId(draft?.submissionId ?? newId()); setReportId(draft?.reportId ?? null)
+		if (draft) { setCrew(draft.crew || []); setCosts(draft.costs || []); setMessage(draft.reportId ? 'Черновик восстановлен. Повторите выбор фото и отправку: уже загруженные файлы не задублируются.' : 'Черновик восстановлен.') }
+		requestAnimationFrame(() => Object.entries(draft?.fields ?? {}).forEach(([name, value]) => { const item = formRef.current?.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null; if (item) { if (item instanceof HTMLInputElement && item.type === 'checkbox') item.checked = value === 'on'; else item.value = value } }))
+	}, [key]) // Draft belongs only to this site.
+	useEffect(() => { saveDraft() }, [crew, costs, photos, reportId, submissionId]) // eslint-disable-line react-hooks/exhaustive-deps
+	useEffect(() => { photosRef.current = photos }, [photos])
+	useEffect(() => () => photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.preview)), [])
+
+	async function addPhotos(files: FileList | null) {
+		if (!files) return
+		const available = MAX_PHOTOS - photos.filter((photo) => photo.state !== 'done').length
+		if (files.length > available) setMessage(`Можно добавить не более ${MAX_PHOTOS} фотографий.`)
+		const prepared = await Promise.all([...files].slice(0, Math.max(0, available)).map(async (file) => { const compressed = await compress(file); return { id: newId(), file: compressed, preview: URL.createObjectURL(compressed), state: 'ready' as const } }))
+		setPhotos((current) => [...current, ...prepared])
+	}
+	async function upload(photo: QueuedPhoto, id: string): Promise<boolean> {
+		setPhotos((current) => current.map((item) => item.id === photo.id ? { ...item, state: 'uploading', error: undefined } : item))
+		try {
+			let error: unknown
+			for (let attempt = 0; attempt < 2; attempt++) try {
+				const body = new FormData(); body.set('photo', photo.file); body.set('checksum', await checksum(photo.file))
+				const response = await fetch(`/api/site-reports/${id}/photos`, { method: 'POST', body })
+				if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? 'Ошибка загрузки')
+				error = undefined; break
+			} catch (currentError) { error = currentError }
+			if (error) throw error
+			setPhotos((current) => current.map((item) => item.id === photo.id ? { ...item, state: 'done' } : item))
+			return true
+		} catch (error) { setPhotos((current) => current.map((item) => item.id === photo.id ? { ...item, state: 'failed', error: error instanceof Error ? error.message : 'Ошибка загрузки' } : item)); return false }
+	}
+	async function submit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault(); if (submitting) return
+		setSubmitting(true); setMessage(null); const form = new FormData(event.currentTarget)
+		try {
+			let id = reportId
+			if (!id) {
+				const response = await fetch(`/api/sites/${siteId}/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientSubmissionId: submissionId, direction: form.get('direction'), workDate: form.get('workDate'), stage: form.get('stage'), comment: form.get('comment'), finishDirection: form.get('finishDirection') === 'on', crew: crew.filter((row) => row.name.trim()).map((row) => ({ name: row.name, days: num(row.days), rate: num(row.rate) })), costs: costs.filter((row) => row.name.trim()).map((row) => ({ ...row, quantity: num(row.quantity), price: num(row.price) })) }) })
+				if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? 'Не удалось сохранить отчёт')
+				id = (await response.json()).reportId as string; setReportId(id)
+			}
+			const uploaded = await Promise.all(photos.filter((item) => item.state !== 'done').map((photo) => upload(photo, id)))
+			if (uploaded.every(Boolean)) { localStorage.removeItem(key); window.location.assign(`/sites/${siteId}`) }
+			else setMessage('Отчёт сохранён. Не все фото отправились — нажмите «Повторить» у нужных файлов.')
+		} catch (error) { setMessage(error instanceof Error ? error.message : 'Не удалось сохранить отчёт') } finally { setSubmitting(false) }
+	}
+
+	return <Card className="overflow-hidden border-brand/20 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand-soft)_42%,var(--surface)),var(--surface)_34%)] p-[14px] shadow-[0_18px_42px_rgba(34,24,82,.10)] sm:p-[22px]"><form ref={formRef} onSubmit={submit} onInput={saveDraft} className="flex flex-col gap-[18px]">
+		{message && <div role="status" className="rounded-[10px] bg-brand-soft px-3 py-2 text-[12px] text-brand-ink">{message}</div>}
 		<div className="grid grid-cols-1 gap-[14px] md:grid-cols-2"><Field label="Направление" required><select name="direction" className={selectClass} defaultValue="KJ"><option value="KJ">Монтаж КЖ</option><option value="KM">Монтаж КМ</option></select></Field><Field label="Дата" required><input type="date" name="workDate" required defaultValue={today} className={inputClass} /></Field></div>
 		<Field label="Этап работ" required><input name="stage" required className={inputClass} placeholder="Монтаж колонн, устройство фундамента…" /></Field>
-
-		<section className="rounded-[14px] border border-line bg-surface/80 p-[14px] shadow-sm"><div className="mb-[9px] flex items-center justify-between"><div><h2 className="text-[14px] font-semibold">Состав бригады</h2><p className="text-[11.5px] text-muted">Зарплата считается: дни × ставка</p></div><button type="button" onClick={() => setCrew((rows) => [...rows, { name: '', days: '1', rate: '0' }])} className="rounded-[8px] border border-line px-[11px] py-[6px] text-[11.5px] font-semibold transition hover:border-brand/40 hover:bg-brand-soft">+ Сотрудник</button></div>
-			<div className="overflow-x-auto rounded-[10px] border border-line"><table className="w-full min-w-[560px] text-[12px]"><thead><tr className="bg-raised text-left text-muted"><th className="p-[8px]">Имя</th><th className="p-[8px]">Дней</th><th className="p-[8px]">Ставка</th><th className="p-[8px] text-right">Итого</th><th></th></tr></thead><tbody>{crew.map((row, index) => <tr key={index} className="border-t border-line-soft"><td className="p-[6px]"><input value={row.name} onChange={(e) => updateCrew(index, 'name', e.target.value)} placeholder="ФИО" className={inputClass} /></td><td className="p-[6px]"><input value={row.days} onChange={(e) => updateCrew(index, 'days', e.target.value)} inputMode="decimal" className={inputClass} /></td><td className="p-[6px]"><input value={row.rate} onChange={(e) => updateCrew(index, 'rate', e.target.value)} inputMode="decimal" className={inputClass} /></td><td className="p-[8px] text-right font-semibold">{money(num(row.days) * num(row.rate))}</td><td className="p-[6px]"><button type="button" onClick={() => setCrew((rows) => rows.filter((_, i) => i !== index))} className="text-danger">×</button></td></tr>)}</tbody><tfoot><tr className="border-t border-line bg-raised"><td colSpan={3} className="p-[9px] font-semibold">Итого зарплата</td><td className="p-[9px] text-right font-bold text-brand-ink">{money(crewTotal)}</td><td></td></tr></tfoot></table></div>
-		</section>
-
-		<section className="rounded-[14px] border border-line bg-surface/80 p-[14px] shadow-sm"><div className="mb-[9px] flex items-center justify-between"><div><h2 className="text-[14px] font-semibold">Техника, материалы и прочее</h2><p className="text-[11.5px] text-muted">Сумма считается: количество × цена</p></div><button type="button" onClick={() => setCosts((rows) => [...rows, { category: 'MATERIAL', name: '', payment: 'CASHLESS', quantity: '1', unit: 'шт.', price: '0' }])} className="rounded-[8px] border border-line px-[11px] py-[6px] text-[11.5px] font-semibold transition hover:border-brand/40 hover:bg-brand-soft">+ Позиция</button></div>
-			<div className="flex flex-col gap-[7px]">{costs.map((row, index) => <div key={index} className="grid grid-cols-2 gap-[7px] rounded-[10px] border border-line p-[9px] md:grid-cols-[130px_1fr_110px_90px_90px_120px_28px]"><select value={row.category} onChange={(e) => updateCost(index, 'category', e.target.value as Cost['category'])} className={selectClass}><option value="EQUIPMENT">Техника</option><option value="MATERIAL">Материал</option><option value="OTHER">Прочее</option></select><input value={row.name} onChange={(e) => updateCost(index, 'name', e.target.value)} placeholder="Наименование" className={inputClass} /><select value={row.payment} onChange={(e) => updateCost(index, 'payment', e.target.value as Cost['payment'])} className={selectClass}><option value="CASHLESS">Безнал</option><option value="CASH">Наличные</option></select><input value={row.quantity} onChange={(e) => updateCost(index, 'quantity', e.target.value)} inputMode="decimal" placeholder="Кол-во" className={inputClass} /><input value={row.unit} onChange={(e) => updateCost(index, 'unit', e.target.value)} placeholder="ед." className={inputClass} /><input value={row.price} onChange={(e) => updateCost(index, 'price', e.target.value)} inputMode="decimal" placeholder="Цена" className={inputClass} /><button type="button" onClick={() => setCosts((rows) => rows.filter((_, i) => i !== index))} className="text-danger">×</button></div>)}</div>
-			<div className="mt-[9px] grid grid-cols-3 gap-[7px] text-center text-[11.5px]"><div className="rounded-[9px] bg-raised p-[8px]">Техника<br/><b>{money(costTotals.EQUIPMENT)}</b></div><div className="rounded-[9px] bg-raised p-[8px]">Материалы<br/><b>{money(costTotals.MATERIAL)}</b></div><div className="rounded-[9px] bg-raised p-[8px]">Прочее<br/><b>{money(costTotals.OTHER)}</b></div></div>
-		</section>
-
-		<Field label="Комментарий"><textarea name="comment" className={textareaClass} placeholder="Что выполнено, что мешало, важные детали" /></Field><label className="flex cursor-pointer items-start gap-3 rounded-[11px] border border-brand/20 bg-brand-soft/40 px-4 py-3 text-[12px]"><input type="checkbox" name="finishDirection" className="mt-0.5 h-4 w-4" /><span><b className="block text-ink">Монтаж этого направления завершён</b><span className="mt-0.5 block text-muted">После КЖ договор перейдёт на монтаж КМ. После КМ он закроется автоматически, только если исполнительная документация готова.</span></span></label><Field label="Фотоотчёт" hint="До 10 фотографий по 20 МБ"><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,image/heic" multiple className="block w-full rounded-[10px] border border-dashed border-line bg-raised px-[13px] py-[18px] text-[12.5px] text-muted" /></Field>
+		<Field label="Фотоотчёт" hint="До 10 фотографий по 20 МБ; перед отправкой большие JPG/PNG сжимаются на телефоне"><input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { void addPhotos(event.target.files); event.currentTarget.value = '' }} className="block min-h-[88px] w-full rounded-[10px] border border-dashed border-line bg-raised px-[13px] py-[18px] text-[13px] text-muted" /></Field>
+		{photos.length > 0 && <><div className="text-[12px] text-muted">Фото: {uploadedCount} из {photos.length} загружено</div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{photos.map((photo) => <div key={photo.id} className="relative overflow-hidden rounded-[10px] border border-line bg-raised"><img src={photo.preview} alt={photo.file.name} className="aspect-square w-full object-cover" /><div className="p-2 text-[11px]">{photo.state === 'uploading' ? 'Загрузка…' : photo.state === 'done' ? 'Готово' : photo.state === 'failed' ? <button type="button" onClick={() => reportId && void upload(photo, reportId)} className="text-danger underline">Повторить: {photo.error}</button> : 'Готово к отправке'}<button type="button" onClick={() => setPhotos((items) => { URL.revokeObjectURL(photo.preview); return items.filter((item) => item.id !== photo.id) })} className="float-right min-h-[28px] px-1 text-danger" aria-label={`Удалить ${photo.file.name}`}>×</button></div></div>)}</div></>}
+		<section className="rounded-[14px] border border-line bg-surface/80 p-[14px]"><div className="mb-2 flex items-center justify-between"><div><h2 className="text-[14px] font-semibold">Люди и затраты</h2><p className="text-[11.5px] text-muted">Дни × ставка</p></div><button type="button" onClick={() => setCrew((rows) => [...rows, { name: '', days: '1', rate: '0' }])} className="min-h-[44px] rounded-[8px] border border-line px-[11px] text-[12px] font-semibold">+ Сотрудник</button></div>{crew.map((row, index) => <div key={index} className="mb-2 grid grid-cols-[1fr_70px_90px_32px] gap-2"><input value={row.name} onChange={(e) => updateCrew(index, 'name', e.target.value)} placeholder="ФИО" className={inputClass} /><input value={row.days} onChange={(e) => updateCrew(index, 'days', e.target.value)} inputMode="decimal" aria-label="Дней" className={inputClass} /><input value={row.rate} onChange={(e) => updateCrew(index, 'rate', e.target.value)} inputMode="decimal" aria-label="Ставка" className={inputClass} /><button type="button" onClick={() => setCrew((rows) => rows.filter((_, i) => i !== index))} className="min-h-[44px] text-danger">×</button></div>)}<div className="text-right text-[12px] font-semibold">Зарплата: {money(crewTotal)}</div></section>
+		<section className="rounded-[14px] border border-line bg-surface/80 p-[14px]"><div className="mb-2 flex items-center justify-between"><h2 className="text-[14px] font-semibold">Затраты</h2><button type="button" onClick={() => setCosts((rows) => [...rows, { category: 'MATERIAL', name: '', payment: 'CASHLESS', quantity: '1', unit: 'шт.', price: '0' }])} className="min-h-[44px] rounded-[8px] border border-line px-[11px] text-[12px] font-semibold">+ Позиция</button></div>{costs.map((row, index) => <div key={index} className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-[130px_1fr_80px_100px_32px]"><select value={row.category} onChange={(e) => updateCost(index, 'category', e.target.value as Cost['category'])} className={selectClass}><option value="EQUIPMENT">Техника</option><option value="MATERIAL">Материал</option><option value="OTHER">Прочее</option></select><input value={row.name} onChange={(e) => updateCost(index, 'name', e.target.value)} placeholder="Наименование" className={inputClass} /><input value={row.quantity} onChange={(e) => updateCost(index, 'quantity', e.target.value)} inputMode="decimal" placeholder="Кол-во" className={inputClass} /><input value={row.price} onChange={(e) => updateCost(index, 'price', e.target.value)} inputMode="decimal" placeholder="Цена" className={inputClass} /><button type="button" onClick={() => setCosts((rows) => rows.filter((_, i) => i !== index))} className="min-h-[44px] text-danger">×</button></div>)}</section>
+		<Field label="Комментарий"><textarea name="comment" className={textareaClass} placeholder="Что выполнено, что мешало, важные детали" /></Field><label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-[11px] border border-brand/20 bg-brand-soft/40 px-4 py-3 text-[12px]"><input type="checkbox" name="finishDirection" className="mt-0.5 h-4 w-4" /><span><b className="block text-ink">Монтаж направления завершён</b><span className="mt-0.5 block text-muted">Стадия договора обновится по текущим правилам.</span></span></label>
 		<div className="rounded-[11px] bg-brand/10 p-[13px] text-right text-[14px] font-bold text-brand-ink">Итого за день: {money(crewTotal + costTotals.EQUIPMENT + costTotals.MATERIAL + costTotals.OTHER)}</div>
-		<div className="flex gap-[10px]"><button className="brand-gradient inline-flex h-[40px] items-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white">Сохранить отчёт</button><Link href={`/sites/${siteId}`} className="inline-flex h-[40px] items-center rounded-[10px] border border-line px-[18px] text-[13.5px] font-semibold">Отмена</Link></div>
+		<div className="sticky bottom-0 -mx-[14px] flex gap-[10px] border-t border-line bg-surface/95 px-[14px] py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0"><button disabled={submitting} className="brand-gradient inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[10px] px-[18px] text-[14px] font-semibold text-white disabled:opacity-60">{submitting ? 'Отправляем…' : reportId ? 'Продолжить загрузку' : 'Отправить отчёт'}</button><Link href={`/sites/${siteId}`} className="inline-flex min-h-[48px] items-center rounded-[10px] border border-line px-[18px] text-[13.5px] font-semibold">Отмена</Link></div>
 	</form></Card>
 }

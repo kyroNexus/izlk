@@ -1,14 +1,30 @@
 import { NextResponse } from 'next/server'
-import { getActiveUser, isAdmin } from '@/lib/access'
-import { scanInbox } from '@/lib/inbox-scanner'
+import { type SessionUser } from '@/lib/access'
+import { withApiAuth } from '@/lib/api-auth'
+import { machineRateLimitIdentity } from '@/lib/rate-limit'
+import { runRateLimitedInboxScan } from '@/lib/inbox-scan-runner'
 
 export const runtime = 'nodejs'
 
+async function scan(identity: string) {
+	try {
+		const operation = await runRateLimitedInboxScan(identity)
+		if (!operation.result) return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(operation.retryAfter) } })
+		return NextResponse.json(operation.result)
+	} catch (error) {
+		return NextResponse.json({ error: error instanceof Error ? error.message : 'Inbox scan failed' }, { status: 500 })
+	}
+}
+
+async function browserPost(_request: Request, { user }: { user: SessionUser }) {
+	return scan(`user:${user.id}`)
+}
+
+const browserPostWithAuth = withApiAuth(browserPost, { access: 'admin', csrf: true })
+
 export async function POST(request: Request) {
-	const user = await getActiveUser()
 	const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
 	const tokenAllowed = Boolean(process.env.INBOX_SCAN_TOKEN && token === process.env.INBOX_SCAN_TOKEN)
-	if ((!user || !isAdmin(user)) && !tokenAllowed) return NextResponse.json({ error: 'Нет доступа' }, { status: 403 })
-	try { return NextResponse.json(await scanInbox()) }
-	catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Ошибка сканирования' }, { status: 500 }) }
+	if (tokenAllowed && token) return scan(machineRateLimitIdentity(token))
+	return browserPostWithAuth(request)
 }

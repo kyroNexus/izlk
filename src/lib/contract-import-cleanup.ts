@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 
 /**
  * A contract import crosses the database and file storage.  If a failure occurs
@@ -29,5 +30,5 @@ export async function rollbackNewContractImport(contractId: string): Promise<voi
 export async function removeUnusedImportedContractor(contractorId: string | null): Promise<void> {
 	if (!contractorId) return
 	const stillUsed = await prisma.contract.count({ where: { contractorId } })
-	if (stillUsed === 0) await prisma.contractor.delete({ where: { id: contractorId } }).catch((error) => console.error('Не удалось очистить контрагента незавершённого импорта:', error))
+	if (stillUsed === 0) await prisma.contractor.delete({ where: { id: contractorId } }).catch((error) => logger.error('contract_import.contractor_cleanup_failed', { entityType: 'Contractor', entityId: contractorId, error }))
 }

@@ -4,7 +4,13 @@ import { canSeeAmounts as maySeeAmounts, canWrite, contractScope, requireUser } 
 import Topbar from '@/components/Topbar'
 import ContractFilters from '@/components/ContractFilters'
 import FilterSelect from '@/components/FilterSelect'
-import { Card } from '@/components/ui'
+import { Card, RichEmptyState } from '@/components/ui'
+import { Circle, Check, Folder, Minus } from 'lucide-react'
+import Icon from '@/components/Icon'
+import { FileText } from 'lucide-react'
+
+const FolderIcon = () => <Icon icon={Folder} size={15} />
+const DocumentsIcon = () => <Icon icon={FileText} size={15} />
 import { formatDate, formatMoney, initials, plural } from '@/lib/format'
 import type { ContractKind, ContractStatus, ContractWorkflowStage, Prisma, SectionCode } from '@prisma/client'
 import { WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
@@ -31,8 +37,6 @@ const DEPARTMENT_LABEL: Record<keyof typeof DEPARTMENT_STAGES, string> = { comme
 const ATTENTION_STAGES: ContractWorkflowStage[] = ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT']
 const FOCUS_LABEL = { working: 'В работе — показаны активные договоры', attention: 'Требуют внимания — показаны договоры, ожидающие решения или подтверждения', today: 'Создано сегодня — показаны новые договоры за текущий день' } as const
 
-function FolderIcon() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" /></svg> }
-function DocumentsIcon() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M9 8h6M9 12h6M9 16h4" /><path d="M4 7v12a2 2 0 0 0 2 2h8" /></svg> }
 function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
 	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
 	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold ring-1 ${tone}`}><i className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
@@ -63,7 +67,7 @@ function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queu
 	return <span className="mt-1 flex flex-wrap gap-1">{sections.filter((item) => ['KM', 'KZH', 'AR'].includes(item.code)).map((item) => {
 		const ready = item.queueStatus === 'DONE' || item.documents.length > 0
 		const working = item.queueStatus === 'IN_PROGRESS'
-		return <span key={item.code} className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${ready ? 'bg-ok-bg text-ok' : working ? 'bg-warn-bg text-warn' : 'bg-off-bg text-faint'}`}>{SECTION_FILTER_LABEL[item.code]} {ready ? '✓' : working ? '•' : '—'}</span>
+		return <span key={item.code} className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold ${ready ? 'bg-ok-bg text-ok' : working ? 'bg-warn-bg text-warn' : 'bg-off-bg text-faint'}`}>{SECTION_FILTER_LABEL[item.code]} <Icon icon={ready ? Check : working ? Circle : Minus} size={11} /></span>
 	})}</span>
 }
 
@@ -185,7 +189,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 						<div className="flex items-center gap-3"><div><div className="text-[14px] font-bold">{selectedYear ? `${selectedYear} год` : 'Все договоры'}{selectedKinds.length ? ` · ${selectedKinds.map((kind) => KIND_LABELS[kind]).join(', ')}` : ''}{selectedSections.length ? ` · ${selectedSections.map((section) => SECTION_FILTER_LABEL[section]).join(', ')}` : ''}</div><div className="mt-0.5 text-[10.5px] text-faint">Можно выбрать несколько типов и разделов одновременно</div></div><span className="ml-auto rounded-full bg-surface px-2.5 py-1 text-[10.5px] font-bold text-muted">{visibleContracts.length}</span></div>
 						<ContractFilters kinds={KINDS.map((kind) => ({ key: kind, label: KIND_LABELS[kind], count: kindCount(kind) }))} sections={SECTION_FILTERS.map((section) => ({ key: section, label: SECTION_FILTER_LABEL[section], count: sectionScope.filter((contract) => contract.projectSections.some((item) => item.code === section)).length }))} />
 					</div>
-					{visibleContracts.length === 0 ? <div className="py-20 text-center text-[13px] text-faint">В этом разделе договоров нет</div> : <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					{visibleContracts.length === 0 ? <RichEmptyState title={user.role === 'VIEWER' ? 'Нет назначенных договоров' : 'В этом разделе договоров нет'} description={user.role === 'VIEWER' ? 'Обратитесь к менеджеру или администратору, чтобы получить доступ к договору.' : 'Измените фильтры или создайте новый договор.'} icon={Folder} primaryAction={canWrite(user) ? <Link href="/contracts/new" className="brand-gradient rounded-lg px-3 py-2 text-[12px] font-semibold text-white">Создать договор</Link> : undefined} secondaryAction={<Link href="/contracts" className="rounded-lg border border-line px-3 py-2 text-[12px] font-semibold text-ink hover:bg-raised">Сбросить фильтры</Link>} /> : <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					<div className="min-w-[960px]"><div className="grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] gap-3 border-b border-line-soft bg-raised px-4 py-2 text-[9.5px] font-bold uppercase tracking-wide text-faint"><span>Номер / шифр</span><span>Тип</span><span>Контрагент</span><span>Объект</span><span>Дата</span><span>Этап работ</span><span>Файлы</span></div>
 						{visibleContracts.map((contract) => <Link key={contract.id} href={`/contracts/${contract.id}`} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-[11.5px] last:border-0">
 							<span className="min-w-0"><span className="block truncate text-[12.5px] font-bold group-hover:text-brand-ink">№ {contract.number}</span><span className="mt-0.5 block truncate text-[10.5px] text-faint">{contract.cipher ?? 'Без шифра'}</span><ProjectBadges sections={contract.projectSections} /></span>
