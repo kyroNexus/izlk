@@ -1,0 +1,753 @@
+// ==========================================================
+// ИЗЛК — схема базы данных
+// Система хранения договоров и проектной документации
+// для компании металлоконструкций
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// ПОЛЬЗОВАТЕЛИ И РОЛИ
+// ------------------------------------------------------------
+
+/// Роли пользователей системы.
+/// ADMIN   — видит все договоры, суммы, настройки
+/// MANAGER — видит только свои договоры, суммы видны, настройки закрыты
+/// VIEWER  — видит только назначенные договоры, суммы скрыты
+enum Role {
+  ADMIN
+  MANAGER
+  DESIGNER
+  VIEWER
+}
+
+/// Пользователь системы (сотрудник ИЗЛК)
+model User {
+  id           String    @id @default(cuid())
+  /// Unique sign-in identifier; it is independent from a shared department mailbox.
+  login        String    @unique
+  /// A department mailbox can be shared by several employee accounts.
+  email        String
+  passwordHash String
+  name         String
+  role         Role      @default(MANAGER)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  // Договоры, где этот пользователь — менеджер
+  managedContracts  Contract[]       @relation("ContractManager")
+  uploadedDocuments Document[]       @relation("DocumentUploader")
+    auditLogs         AuditLog[]
+    importEvents      ImportEvent[]
+  contractAccess    ContractAccess[]
+  responsibleFor    ProjectSection[] @relation("SectionResponsible")
+  assignedTasks     Task[]           @relation("TaskAssignee")
+  createdTasks      Task[]           @relation("TaskCreator")
+  taskComments      TaskComment[]
+  notifications     Notification[]
+  stageChanges      ContractStageHistory[] @relation("StageChangedBy")
+  pr1ConfirmedContracts Contract[] @relation("ContractPr1ConfirmedBy")
+
+  @@index([email])
+  @@index([role])
+}
+
+enum NotificationType {
+  INFO
+  ASSIGNMENT
+  DEADLINE
+  READY
+  WARNING
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(INFO)
+  title     String
+  message   String?
+  href      String?
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+}
+
+// ------------------------------------------------------------
+// КОНТРАГЕНТЫ
+// ------------------------------------------------------------
+
+/// Контрагент (заказчик). Хранит псевдонимы для дедупликации —
+/// в реальных папках одна и та же компания встречается под
+/// разными названиями (ИП Дегтярев / Дегтярев С.В. и т.п.)
+model Contractor {
+  id        String    @id @default(cuid())
+  name      String
+  inn       String?
+  address   String?
+  phone     String?
+  email     String?
+  aliases   String[]  @default([]) // альтернативные названия для поиска дублей
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  contracts Contract[]
+
+  @@index([inn])
+  @@index([name])
+}
+
+// ------------------------------------------------------------
+// ДОГОВОРЫ
+// ------------------------------------------------------------
+
+enum ContractStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum ContractKind {
+  SMR
+  MK
+  PROJECT
+}
+
+/// Рабочая стадия живёт отдельно от административного статуса договора.
+/// Это позволяет закрыть договор в архиве, не теряя ход фактических работ.
+enum ContractWorkflowStage {
+  CONTRACT_PREPARATION
+  AWAITING_CONTRACT_SIGNATURE
+  PR1_DEVELOPMENT
+  AWAITING_PR1_SIGNATURE
+  DESIGN
+  WAITING_PRODUCTION
+  PRODUCTION
+  AWAITING_SHIPMENT
+  INSTALL_KZH
+  INSTALL_KM
+  CLOSED
+}
+
+/// Договор — центральная сущность системы.
+/// number — деловой номер (напр. "509-ИЗЛКРус-МК-2026")
+/// cipher — технический шифр объекта (напр. "КБ-370.12.60.71.60"),
+///          встречается в названиях файлов и папок на сервере
+model Contract {
+  id            String         @id @default(cuid())
+  number        String         @unique
+  cipher        String?
+  contractorId  String
+  contractor    Contractor     @relation(fields: [contractorId], references: [id])
+  managerId     String?
+  manager       User?          @relation("ContractManager", fields: [managerId], references: [id])
+  date          DateTime
+  amount        Decimal        @db.Decimal(15, 2)
+  /// Разбивка общей стоимости для управленческой картины по договору.
+  smrAmount     Decimal?       @db.Decimal(15, 2)
+  mkAmount      Decimal?       @db.Decimal(15, 2)
+  deliveryAmount Decimal?      @db.Decimal(15, 2)
+  currency      String         @default("RUB")
+  status        ContractStatus @default(ACTIVE)
+  kind          ContractKind   @default(SMR)
+  workflowStage ContractWorkflowStage @default(CONTRACT_PREPARATION)
+  /// Срок по смете/договору в рабочих днях.
+  workingDays   Int?
+  /// Дата подписания Приложения №1 и рассчитанный общий дедлайн.
+  pr1SignedAt   DateTime?
+  pr1ConfirmedAt DateTime?
+  pr1ConfirmedById String?
+  pr1ConfirmedBy User? @relation("ContractPr1ConfirmedBy", fields: [pr1ConfirmedById], references: [id], onDelete: SetNull)
+  deadline      DateTime?
+  objectAddress String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime? // договоры не удаляются физически, только архивируются
+
+  agreements      Agreement[]
+  estimates       Estimate[]
+  documents       Document[]
+  sites           Site[]
+  projectSections ProjectSection[]
+  executiveDocs   ExecutiveDoc[]
+  invoices        Invoice[]
+  access          ContractAccess[]
+  tasks           Task[]
+  stageHistory    ContractStageHistory[]
+
+  @@index([contractorId])
+  @@index([managerId])
+  @@index([number])
+  @@index([cipher])
+  @@index([workflowStage])
+  @@index([pr1ConfirmedById])
+}
+
+/// Неизменяемый журнал переходов по рабочим стадиям договора.
+model ContractStageHistory {
+  id           String                @id @default(cuid())
+  contractId   String
+  contract     Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  fromStage    ContractWorkflowStage?
+  toStage      ContractWorkflowStage
+  changedById  String?
+  changedBy    User?                 @relation("StageChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  isAutomatic  Boolean               @default(false)
+  comment      String?
+  createdAt    DateTime              @default(now())
+
+  @@index([contractId, createdAt])
+  @@index([changedById])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Task {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  category    String?
+  dueDate     DateTime?
+  priority    TaskPriority  @default(MEDIUM)
+  status      TaskStatus    @default(TODO)
+  contractId  String?
+  contract    Contract?     @relation(fields: [contractId], references: [id])
+  assigneeId  String
+  assignee    User          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creatorId   String
+  creator     User          @relation("TaskCreator", fields: [creatorId], references: [id])
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+  comments    TaskComment[]
+
+  @@index([contractId])
+  @@index([assigneeId, status])
+  @@index([dueDate])
+  @@index([priority])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([authorId])
+}
+
+/// Доп. соглашение. parentId — ссылка на предыдущее ДС в цепочке
+/// (Договор → ДС1 → ДС2 → ...)
+model Agreement {
+  id         String      @id @default(cuid())
+  contractId String
+  contract   Contract    @relation(fields: [contractId], references: [id])
+  number     String
+  date       DateTime
+  parentId   String?
+  parent     Agreement?  @relation("AgreementChain", fields: [parentId], references: [id])
+  children   Agreement[] @relation("AgreementChain")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  deletedAt  DateTime?
+
+  estimates Estimate[]
+  documents Document[]
+
+  @@index([contractId])
+  @@index([parentId])
+  @@unique([contractId, number])
+}
+
+/// Смета. Может относиться к договору напрямую или к конкретному ДС.
+model Estimate {
+  id          String     @id @default(cuid())
+  contractId  String
+  contract    Contract   @relation(fields: [contractId], references: [id])
+  agreementId String?
+  agreement   Agreement? @relation(fields: [agreementId], references: [id])
+  number      String
+  date        DateTime
+  amount      Decimal?   @db.Decimal(15, 2)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  documents Document[]
+
+  @@index([contractId])
+  @@index([agreementId])
+  @@unique([contractId, number])
+}
+
+/// Счёт на оплату — отдельная бизнес-сущность (не просто файл),
+/// т.к. нужно отслеживать статус оплаты и строить отчёты "кто должен".
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  contractId String
+  contract   Contract      @relation(fields: [contractId], references: [id])
+  number     String
+  date       DateTime
+  amount     Decimal       @db.Decimal(15, 2)
+  status     InvoiceStatus @default(UNPAID)
+  dueDate    DateTime?
+  paidAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt  DateTime?
+
+  documents Document[]
+
+  @@index([contractId])
+  @@index([status])
+}
+
+// ------------------------------------------------------------
+// ДОКУМЕНТЫ (универсальная таблица файлов)
+// ------------------------------------------------------------
+
+/// Тип документа. COMMERCIAL_PROPOSAL — просто тег на файле (КП),
+/// без отдельной бизнес-логики, в отличие от Invoice.
+enum DocumentKind {
+  CONTRACT // сам договор
+  AGREEMENT // доп. соглашение
+  ESTIMATE // смета
+  INVOICE // счёт на оплату
+  COMMERCIAL_PROPOSAL // КП — коммерческое предложение
+  APPENDIX // приложение
+  PROJECT_PDF // проектная документация PDF (КМ/АР/КЖ)
+  PROJECT_DWG // проектная документация DWG/чертежи
+  EXECUTIVE // исполнительная документация
+  ACT // акт скрытых работ / приёмки
+  CERTIFICATE // сертификат
+  SIGNED_SCAN // подписанный скан ("Подписано" в исходных папках)
+  SOURCE_DATA // исходные данные от заказчика: ИГИ, ГПЗУ, топосъёмка и условия
+  OTHER
+}
+
+enum DocumentState {
+  SOURCE
+  SIGNED
+  ARCHIVE
+}
+
+/// Lifecycle of a commercial proposal.  It is stored on every document for a
+/// compact schema, but is only shown and edited when kind is COMMERCIAL_PROPOSAL.
+enum CommercialProposalStatus {
+  DRAFT
+  SENT
+  WAITING_RESPONSE
+  ACCEPTED
+  REJECTED
+}
+
+/// Универсальная таблица для всех файлов.
+/// Файл физически лежит на диске (storagePath), в БД — только путь.
+model Document {
+  id               String          @id @default(cuid())
+  contractId       String
+  contract         Contract        @relation(fields: [contractId], references: [id])
+  agreementId      String?
+  agreement        Agreement?      @relation(fields: [agreementId], references: [id])
+  estimateId       String?
+  estimate         Estimate?       @relation(fields: [estimateId], references: [id])
+  invoiceId        String?
+  invoice          Invoice?        @relation(fields: [invoiceId], references: [id])
+  projectSectionId String?
+  projectSection   ProjectSection? @relation(fields: [projectSectionId], references: [id])
+  executiveDocId   String?
+  executiveDoc     ExecutiveDoc?   @relation(fields: [executiveDocId], references: [id])
+
+  kind           DocumentKind
+  state          DocumentState @default(SOURCE)
+  version        Int           @default(1)
+  fileName       String
+  storagePath    String
+  mimeType       String?
+  sizeBytes      BigInt
+  // The same certificate or drawing can be attached to different contracts.
+  // Exact copies are rejected within one contract only.
+  sha256         String
+  signedAt       DateTime?
+  isConfidential Boolean      @default(false)
+  proposalStatus CommercialProposalStatus @default(DRAFT)
+  proposalSentAt DateTime?
+  proposalRespondedAt DateTime?
+  uploadedById   String?
+  uploadedBy     User?        @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([contractId])
+  @@index([agreementId])
+  @@index([estimateId])
+  @@index([invoiceId])
+  @@index([executiveDocId])
+  @@index([sha256])
+  @@unique([contractId, sha256])
+  @@index([kind])
+  @@index([kind, proposalStatus])
+  @@index([contractId, state])
+}
+
+// ------------------------------------------------------------
+// ПЛОЩАДКИ
+// ------------------------------------------------------------
+
+enum SiteStatus {
+  PREPARING
+  ISSUE
+  READY
+  BLOCKED
+}
+
+model Site {
+  id         String     @id @default(cuid())
+  contractId String
+  contract   Contract   @relation(fields: [contractId], references: [id])
+  address    String
+  status     SiteStatus @default(PREPARING)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+
+  events SiteEvent[]
+  works  SiteWork[]
+
+  @@index([contractId])
+  @@unique([contractId])
+}
+
+enum WorkDirection {
+  KJ
+  KM
+}
+
+model SiteWork {
+  id            String        @id @default(cuid())
+  siteId        String
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  direction     WorkDirection
+  workDate      DateTime
+  stage         String
+  crewCount     Int           @default(0)
+  crewCost      Decimal       @default(0) @db.Decimal(15, 2)
+  equipmentCost Decimal       @default(0) @db.Decimal(15, 2)
+  materialCost  Decimal       @default(0) @db.Decimal(15, 2)
+  otherCost     Decimal       @default(0) @db.Decimal(15, 2)
+  comment       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  photos      SitePhoto[]
+  crewEntries SiteCrewEntry[]
+  costItems   SiteCostItem[]
+
+  @@index([siteId, workDate])
+  @@index([direction])
+}
+
+enum SiteCostCategory {
+  EQUIPMENT
+  MATERIAL
+  OTHER
+}
+
+enum PaymentType {
+  CASH
+  CASHLESS
+}
+
+model SiteCrewEntry {
+  id         String   @id @default(cuid())
+  siteWorkId String
+  siteWork   SiteWork @relation(fields: [siteWorkId], references: [id], onDelete: Cascade)
+  name       String
+  workDays   Decimal  @default(1) @db.Decimal(8, 2)
+  rate       Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt  DateTime @default(now())
+
+  @@index([siteWorkId])
+}
+
+model SiteCostItem {
+  id          String           @id @default(cuid())
+  siteWorkId  String
+  siteWork    SiteWork         @relation(fields: [siteWorkId], references: [id], onDelete: Cascade)
+  category    SiteCostCategory
+  name        String
+  paymentType PaymentType      @default(CASHLESS)
+  quantity    Decimal          @default(1) @db.Decimal(15, 3)
+  unit        String?
+  unitPrice   Decimal          @default(0) @db.Decimal(15, 2)
+  createdAt   DateTime         @default(now())
+
+  @@index([siteWorkId, category])
+}
+
+model SitePhoto {
+  id          String   @id @default(cuid())
+  siteWorkId  String
+  siteWork    SiteWork @relation(fields: [siteWorkId], references: [id], onDelete: Cascade)
+  fileName    String
+  storagePath String
+  mimeType    String
+  sizeBytes   BigInt
+  sha256      String
+  createdAt   DateTime @default(now())
+
+  @@index([siteWorkId])
+  @@index([sha256])
+}
+
+enum SiteEventType {
+  INFO
+  WARNING
+  SUCCESS
+}
+
+/// Событие в таймлайне площадки. Каскадно удаляется при удалении Site.
+model SiteEvent {
+  id         String        @id @default(cuid())
+  siteId     String
+  site       Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type       SiteEventType
+  text       String
+  occurredAt DateTime      @default(now())
+  createdAt  DateTime      @default(now())
+
+  @@index([siteId])
+}
+
+// ------------------------------------------------------------
+// РАЗДЕЛЫ ПРОЕКТА (КМ / АР / КЖ)
+// ------------------------------------------------------------
+
+enum SectionCode {
+  KM // конструкции металлические
+  AR // архитектурные решения
+  KZH // конструкции железобетонные
+  OTHER
+}
+
+enum ProjectQueueStatus {
+  QUEUED
+  IN_PROGRESS
+  PAUSED
+  DONE
+}
+
+model ProjectSection {
+  id            String             @id @default(cuid())
+  contractId    String
+  contract      Contract           @relation(fields: [contractId], references: [id])
+  code          SectionCode
+  responsibleId String?
+  responsible   User?              @relation("SectionResponsible", fields: [responsibleId], references: [id])
+  dateFrom      DateTime?
+  dateTo        DateTime?
+  durationDays  Int                @default(5)
+  deadline      DateTime?
+  queuePosition Int                @default(0)
+  queueStatus   ProjectQueueStatus @default(QUEUED)
+  comment       String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?
+
+  documents Document[]
+
+  @@index([contractId])
+  @@index([code, responsibleId, queuePosition])
+  @@unique([contractId, code])
+}
+
+// ------------------------------------------------------------
+// ИСПОЛНИТЕЛЬНАЯ ДОКУМЕНТАЦИЯ
+// ------------------------------------------------------------
+
+enum ExecStatus {
+  READY
+  NOT_READY
+  IN_PROGRESS
+}
+
+model ExecutiveDoc {
+  id         String     @id @default(cuid())
+  contractId String
+  contract   Contract   @relation(fields: [contractId], references: [id])
+  name       String
+  status     ExecStatus @default(NOT_READY)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+  documents  Document[]
+
+  @@index([contractId])
+  @@unique([contractId, name])
+}
+
+// ------------------------------------------------------------
+// INBOX — полуавтоматический импорт файлов из сетевой папки
+// ------------------------------------------------------------
+
+enum InboxStatus {
+  PENDING // не обработан
+  SUGGESTED // скрипт предположил договор/тип, ждёт подтверждения человеком
+  MATCHED // подтверждено и перенесено в Document
+  IGNORED // мусор (Thumbs.db, ~$*, .bak и т.п.) или вручную отклонён
+  FAILED // ошибка при обработке
+}
+
+/// Файл, найденный сканером на сетевой папке, но ещё не привязанный
+/// к договору. sourcePath — путь на исходном сервере.
+/// parsedContractNumber/parsedCipher — то, что скрипт вытащил из пути
+/// регулярками (см. правила импорта). suggestedKind — предположение
+/// по типу документа на основе родительской папки.
+model InboxItem {
+  id                   String        @id @default(cuid())
+  sourcePath           String
+  fileName             String
+  sizeBytes            BigInt
+  sha256               String
+  status               InboxStatus   @default(PENDING)
+  parsedContractNumber String?
+  parsedCipher         String?
+  suggestedKind        DocumentKind?
+  matchedContractId    String?
+  errorMessage         String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([status])
+  @@index([sha256])
+  @@index([parsedContractNumber])
+  // One physical version is queued once; a replacement at the same path gets
+  // its own record because its checksum changes.
+  @@unique([sourcePath, sha256])
+}
+
+/// Immutable operational log for the import pipeline: it records automatic
+/// scanner activity as well as actions made by a person in the UI.
+model ImportEvent {
+  id          String     @id @default(cuid())
+  inboxItemId String?
+  fileName    String
+  event       String
+  outcome     String
+  message     String?
+  contractId  String?
+  actorId     String?
+  actor       User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+
+  @@index([inboxItemId, createdAt])
+  @@index([contractId, createdAt])
+  @@index([outcome, createdAt])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------------
+// АУДИТ И ПРАВА ДОСТУПА
+// ------------------------------------------------------------
+
+enum AuditAction {
+  VIEW
+  DOWNLOAD
+  UPLOAD
+  DELETE
+  CREATE
+  UPDATE
+  LOGIN
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String // напр. "Document", "Contract"
+  entityId   String
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+/// Ежедневный фактический срез нагрузки отделов. Он не пересчитывает
+/// прошлое задним числом: каждая строка — состояние системы на конкретный день.
+model DepartmentDailySnapshot {
+  id         String   @id @default(cuid())
+  date       DateTime
+  department String
+  working    Int      @default(0)
+  attention  Int      @default(0)
+  paused     Int      @default(0)
+  done       Int      @default(0)
+  total      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([date, department])
+  @@index([department, date])
+}
+
+enum AccessLevel {
+  READ
+  WRITE
+}
+
+/// Точечные права VIEWER'а на конкретный договор
+model ContractAccess {
+  id         String      @id @default(cuid())
+  contractId String
+  contract   Contract    @relation(fields: [contractId], references: [id])
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  level      AccessLevel @default(READ)
+  createdAt  DateTime    @default(now())
+
+  @@unique([contractId, userId])
+  @@index([contractId])
+  @@index([userId])
+}

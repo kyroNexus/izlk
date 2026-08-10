@@ -1,0 +1,66 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/scripts/node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/backups/
+/storage/
+/inbox/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+.inbox-watcher.json
+.env.production
+.deploy-izlk-key
+.deploy-izlk-key.pub
+.deploy-izlk-key2
+.deploy-izlk-key2.pub
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# agent patch archives and deploy bundles
+*.tgz
+*.tar.gz
+
+# runtime logs
+*.log
+.launcher-test*.log
+.server-*.log
+.watcher-*.log
+
+# temp QA artifacts
+/tmp/
+/docx_render/

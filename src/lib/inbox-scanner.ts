@@ -1,0 +1,378 @@
+import { createHash } from 'crypto'
+import { createReadStream } from 'fs'
+import type { Dirent } from 'fs'
+import { readFile, readdir, stat } from 'fs/promises'
+import path from 'path'
+import type { DocumentKind, DocumentState } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { importInboxFile, INBOX_PATH } from '@/lib/storage'
+import { parseContractFile, PARSABLE_EXTENSIONS } from '@/lib/contract-parser'
+import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
+import { writeImportEvent } from '@/lib/audit'
+import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath } from '@/lib/document-classifier'
+import { createVersionedDocument } from '@/lib/document-versioning'
+
+export { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
+
+const IGNORE = [/^thumbs\.db$/i, /^desktop\.ini$/i, /^~\$/, /\.bak$/i, /\.lnk$/i, /\.log$/i, /\.tmp$/i]
+const OCR_SOURCE_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg'])
+// Inbox can contain an entire historical archive. OCR is intentionally limited
+// per scan, otherwise 1,000 scanned PDFs could occupy the worker for hours.
+const MAX_INBOX_OCR_CANDIDATES = 16
+
+/** "_мусор/<employee>" is intentionally a private work area, not an import source. */
+function isPrivateTrashPath(filePath: string) {
+	const segments = path.relative(INBOX_PATH, filePath).split(path.sep).map((item) => item.toLocaleLowerCase('ru-RU'))
+	return segments.includes('_мусор') || segments.includes('мусор')
+}
+
+async function walk(dir: string): Promise<string[]> {
+	let entries: Dirent[]
+	try {
+		entries = await readdir(dir, { withFileTypes: true })
+	} catch (error) {
+		console.warn(`Не удалось прочитать папку Inbox ${dir}:`, error)
+		return []
+	}
+	const files: string[] = []
+	for (const entry of entries) {
+		const full = path.join(dir, entry.name)
+		if (entry.isDirectory() && !isPrivateTrashPath(full)) files.push(...await walk(full))
+		else files.push(full)
+	}
+	return files
+}
+
+function sha256File(filePath: string): Promise<string> {
+	const hash = createHash('sha256')
+	const stream = createReadStream(filePath)
+	return new Promise((resolve, reject) => {
+		stream.on('data', (chunk) => hash.update(chunk))
+		stream.on('end', () => resolve(hash.digest('hex')))
+		stream.on('error', reject)
+	})
+}
+
+function classifyDocumentPathLegacy(filePath: string): DocumentKind {
+	const lower = filePath.toLowerCase()
+	if (/доп.?\s*(соглаш|согл)|дс\s*[№_\d]/i.test(lower)) return 'AGREEMENT'
+	if (/смет|локальн.*расч[её]т/i.test(lower)) return 'ESTIMATE'
+	if (/сч[её]т(?!.*схем)/i.test(lower)) return 'INVOICE'
+	if (/коммерч|(^|[\\/_ -])кп([\\/_ .-]|$)/i.test(lower)) return 'COMMERCIAL_PROPOSAL'
+	if (/сертификат|паспорт.*материал|качест/i.test(lower)) return 'CERTIFICATE'
+	if (/акт.*скрыт|аоср|акт.*при[её]м/i.test(lower)) return 'ACT'
+	if (/исполн|ожр|журнал работ|схем/i.test(lower)) return 'EXECUTIVE'
+	if (/\b(км|кж|ар)\b|проект|черт[её]ж/i.test(lower)) return path.extname(lower) === '.dwg' ? 'PROJECT_DWG' : 'PROJECT_PDF'
+	if (/договор|контракт/i.test(lower)) return /подпис|скан|эдо/i.test(lower) ? 'SIGNED_SCAN' : 'CONTRACT'
+	if (/подпис|скан|эдо/i.test(lower)) return 'SIGNED_SCAN'
+	if (path.extname(lower) === '.dwg') return 'PROJECT_DWG'
+	return 'OTHER'
+}
+
+function documentStateForPathLegacy(filePath: string): DocumentState {
+	return /подпис|скан|эдо/i.test(filePath) ? 'SIGNED' : 'SOURCE'
+}
+
+/** Classification by readable Russian names in files and folders. */
+function classifyDocumentPathDeprecated(filePath: string): DocumentKind {
+	const lower = filePath.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
+	// A "смета к ДС" is still an estimate, not the agreement itself.
+	if (/(смет|локальн.*расч[её]т)/.test(lower)) return 'ESTIMATE'
+	if (/(доп\.?\s*соглаш|дс\s*[№_\d])/.test(lower)) return 'AGREEMENT'
+	if (/(счет|счёт)(?!.*схем)/.test(lower)) return 'INVOICE'
+	if (/(коммерческ|(^|[\\/_ -])кп([\\/_ .-]|$))/.test(lower)) return 'COMMERCIAL_PROPOSAL'
+	if (/(сертификат|паспорт.*материал|качеств)/.test(lower)) return 'CERTIFICATE'
+	if (/(акт.*скрыт|аоср|акт.*при[её]м)/.test(lower)) return 'ACT'
+	if (/(исполнит|ожр|журнал работ|схем)/.test(lower)) return 'EXECUTIVE'
+	if (/(^|[^а-яa-z])(км|кж|ар)([^а-яa-z]|$)|проект|черт[её]ж/.test(lower)) return path.extname(lower) === '.dwg' ? 'PROJECT_DWG' : 'PROJECT_PDF'
+	if (/(договор|контракт)/.test(lower)) return 'CONTRACT'
+	if (/(подпис|скан|эдо)/.test(lower)) return 'SIGNED_SCAN'
+	return path.extname(lower) === '.dwg' || path.extname(lower) === '.dxf' ? 'PROJECT_DWG' : 'OTHER'
+}
+
+function documentStateForPathDeprecated(filePath: string): DocumentState {
+	return /(подпис|скан|эдо)/i.test(filePath) ? 'SIGNED' : 'SOURCE'
+}
+
+function folderKey(filePath: string) {
+	return path.relative(INBOX_PATH, filePath).split(path.sep)[0] || '.'
+}
+
+function inboxOcrPriority(filePath: string) {
+	const lower = filePath.toLocaleLowerCase('ru-RU')
+	let score = classifyDocumentPath(filePath) === 'CONTRACT' ? 100 : 0
+	if (/договор|контракт/.test(lower)) score += 80
+	if (/подпис|приложен|смет|кп/.test(lower)) score += 20
+	// Stable tie-breaker: the result does not depend on the filesystem order.
+	return `${String(999 - score).padStart(3, '0')}:${lower}`
+}
+
+/** Exported for a deterministic regression test: OCR must stay bounded. */
+export function selectInboxOcrCandidates(files: string[]) {
+	return new Set(files
+		.filter((file) => OCR_SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase()))
+		.sort((a, b) => inboxOcrPriority(a).localeCompare(inboxOcrPriority(b), 'ru-RU'))
+		.slice(0, MAX_INBOX_OCR_CANDIDATES)
+		.map((file) => path.resolve(file)))
+}
+
+/**
+ * Failed records are deliberately re-checked on the next scan.  This makes a
+ * temporary network/share hiccup recoverable without creating a second queue
+ * record or requiring someone to re-upload the file by hand.
+ */
+async function retryFailedQueueItem(input: {
+	id: string
+	sourcePath: string
+	fileName: string
+	hint?: { number?: string; cipher?: string }
+	allowOcr?: boolean
+}) {
+	try {
+		const fileInfo = await stat(input.sourcePath)
+		if (!fileInfo.isFile()) throw new Error('По указанному пути находится не файл')
+		let parsedContractNumber = input.hint?.number
+		let parsedCipher = input.hint?.cipher
+		let parseError: string | null = null
+		if ((PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(input.fileName).toLowerCase())) {
+			try {
+				const parsed = await parseContractFile(input.fileName, await readFile(input.sourcePath), input.allowOcr ?? true)
+				if (classifyDocumentPath(input.sourcePath) === 'CONTRACT' || parsed.confidence >= 60) {
+					parsedContractNumber = parsed.contractNumber || parsedContractNumber
+					parsedCipher = parsed.cipher || parsedCipher
+				}
+			} catch (error) {
+				parseError = error instanceof Error ? error.message : 'Не удалось повторно прочитать документ'
+			}
+		}
+		await prisma.inboxItem.update({
+			where: { id: input.id },
+			data: {
+				sizeBytes: BigInt(fileInfo.size),
+				status: parseError ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'),
+				parsedContractNumber,
+				parsedCipher,
+				suggestedKind: classifyDocumentPath(input.sourcePath),
+				errorMessage: parseError,
+			},
+		})
+		return !parseError
+	} catch (error) {
+		await prisma.inboxItem.update({
+			where: { id: input.id },
+			data: {
+				status: 'FAILED',
+				errorMessage: error instanceof Error ? `Файл недоступен: ${error.message}` : 'Файл недоступен для повторной проверки',
+			},
+		})
+		return false
+	}
+}
+
+async function autoImportRecognizedItems() {
+	const items = await prisma.inboxItem.findMany({
+		where: { status: { in: ['PENDING', 'SUGGESTED'] }, OR: [{ parsedContractNumber: { not: null } }, { parsedCipher: { not: null } }] },
+		orderBy: { createdAt: 'asc' },
+	})
+	let imported = 0
+	for (const item of items) {
+		const contract = await prisma.contract.findFirst({
+			where: {
+				deletedAt: null,
+				OR: [
+					...(item.parsedContractNumber ? [{ number: { equals: item.parsedContractNumber, mode: 'insensitive' as const } }] : []),
+					...(item.parsedCipher ? [{ cipher: { equals: item.parsedCipher, mode: 'insensitive' as const } }] : []),
+				],
+			},
+			include: { projectSections: { where: { deletedAt: null } }, executiveDocs: { where: { deletedAt: null } } },
+		})
+		if (!contract) continue
+		let savedPath: string | null = null
+		try {
+			const saved = await importInboxFile({ contractId: contract.id, sourcePath: item.sourcePath, fileName: item.fileName, expectedSha256: item.sha256 })
+			savedPath = saved.storagePath
+			const searchable = `${item.sourcePath} ${item.fileName}`.toLocaleLowerCase('ru-RU')
+			const sectionCode = detectProjectSectionCode(`${item.sourcePath} ${item.fileName}`)
+			const projectSection = sectionCode
+				? contract.projectSections.find((section) => section.code === sectionCode)
+					?? await prisma.projectSection.upsert({
+						where: { contractId_code: { contractId: contract.id, code: sectionCode } },
+						create: { contractId: contract.id, code: sectionCode },
+						update: { deletedAt: null },
+						select: { id: true, code: true },
+					})
+				: null
+			const executiveDoc = item.suggestedKind && ['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(item.suggestedKind)
+				? contract.executiveDocs.find((doc) => {
+					const name = doc.name.toLowerCase()
+					return (/акт|аоср/i.test(searchable) && /акт|скрыт/i.test(name)) ||
+						(/сертификат|паспорт.*материал/i.test(searchable) && /сертификат/i.test(name)) ||
+						(/ожр|журнал/i.test(searchable) && /журнал/i.test(name)) ||
+						(/схем/i.test(searchable) && /схем/i.test(name)) ||
+						(/паспорт/i.test(searchable) && /паспорт/i.test(name))
+				})
+				: null
+			const documentKind = item.suggestedKind ?? 'OTHER'
+			const documentState = documentStateForPath(item.sourcePath)
+			await createVersionedDocument({
+				contractId: contract.id,
+				kind: documentKind,
+				state: documentState,
+				fileName: item.fileName,
+				storagePath: saved.storagePath,
+				mimeType: saved.mimeType,
+				sizeBytes: BigInt(saved.sizeBytes),
+				sha256: saved.sha256,
+				projectSectionId: projectSection?.id,
+				executiveDocId: executiveDoc?.id,
+			})
+			if (contract.managerId) await trySyncWorkflowAfterDocumentUpload({ contractId: contract.id, actorId: contract.managerId, kind: documentKind, state: documentState })
+			if (executiveDoc) await prisma.executiveDoc.update({ where: { id: executiveDoc.id }, data: { status: 'IN_PROGRESS' } })
+			await prisma.inboxItem.update({ where: { id: item.id }, data: { status: 'MATCHED', matchedContractId: contract.id } })
+			await writeImportEvent({ inboxItemId: item.id, fileName: item.fileName, event: 'AUTO_IMPORTED', outcome: 'SUCCESS', contractId: contract.id, message: `Автоматически привязан к договору № ${contract.number}` })
+			imported++
+		} catch (error) {
+			if (savedPath) {
+				const linked = await prisma.document.count({ where: { storagePath: savedPath } }).catch(() => 1)
+				if (linked === 0) console.warn(`Unlinked automatic Inbox file preserved for recovery: ${savedPath}`)
+			}
+			const duplicate = await prisma.document.findFirst({ where: { contractId: contract.id, sha256: item.sha256 }, select: { id: true } })
+			const message = error instanceof Error ? error.message : 'Ошибка автоматического импорта'
+			await prisma.inboxItem.update({ where: { id: item.id }, data: duplicate
+				? { status: 'IGNORED', matchedContractId: contract.id }
+				: { status: 'FAILED', errorMessage: message } })
+			await writeImportEvent({ inboxItemId: item.id, fileName: item.fileName, event: 'AUTO_IMPORT_FAILED', outcome: duplicate ? 'IGNORED' : 'FAILED', contractId: contract.id, message: duplicate ? 'Повтор файла: пропущен без создания дубля.' : message })
+		}
+	}
+	return imported
+}
+
+export async function scanInbox() {
+	const files = await walk(INBOX_PATH)
+	const result = { found: files.length, queued: 0, autoImported: 0, duplicates: 0, ignored: 0, parsed: 0, errors: 0, issues: [] as string[] }
+	const ocrCandidates = selectInboxOcrCandidates(files)
+	const parsedByPath = new Map<string, Awaited<ReturnType<typeof parseContractFile>>>()
+	if (files.filter((file) => OCR_SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase())).length > MAX_INBOX_OCR_CANDIDATES) {
+		result.issues.push(`OCR ограничен ${MAX_INBOX_OCR_CANDIDATES} наиболее вероятными сканами за один проход; остальные файлы добавлены без OCR.`)
+	}
+	const discoveredPaths = new Set(files.map((file) => path.resolve(file)))
+	const failedQueue = await prisma.inboxItem.findMany({
+		where: { status: 'FAILED' },
+		select: { id: true, sourcePath: true, fileName: true },
+	})
+	for (const item of failedQueue) {
+		if (discoveredPaths.has(path.resolve(item.sourcePath))) continue
+		await prisma.inboxItem.update({
+			where: { id: item.id },
+			data: { errorMessage: 'Файл больше не найден во входящей папке. Верните его в Inbox или отклоните эту запись.' },
+		})
+	}
+	const folderHints = new Map<string, { number?: string; cipher?: string; score: number }>()
+
+	// Сначала находим основной договор в каждой верхнеуровневой папке.
+	// Его номер и шифр наследуют все остальные вложения этой папки.
+	for (const sourcePath of files) {
+		const fileName = path.basename(sourcePath)
+		if (IGNORE.some((pattern) => pattern.test(fileName)) || !(PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(fileName).toLowerCase())) continue
+		try {
+			const parsed = await parseContractFile(fileName, await readFile(sourcePath), !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)))
+			parsedByPath.set(path.resolve(sourcePath), parsed)
+			const score = parsed.confidence + (classifyDocumentPath(sourcePath) === 'CONTRACT' ? 1 : 0)
+			const current = folderHints.get(folderKey(sourcePath))
+			if ((parsed.contractNumber || parsed.cipher) && (!current || score > current.score)) folderHints.set(folderKey(sourcePath), { number: parsed.contractNumber || undefined, cipher: parsed.cipher || undefined, score })
+		} catch { /* Одно повреждённое вложение не останавливает всю папку. */ }
+	}
+
+	for (const sourcePath of files) {
+		const fileName = path.basename(sourcePath)
+		if (IGNORE.some((pattern) => pattern.test(fileName))) { result.ignored++; continue }
+		try {
+			const sha256 = await sha256File(sourcePath)
+			const hint = folderHints.get(folderKey(sourcePath))
+			const target = hint?.number || hint?.cipher ? await prisma.contract.findFirst({
+				where: { deletedAt: null, OR: [
+					...(hint.number ? [{ number: { equals: hint.number, mode: 'insensitive' as const } }] : []),
+					...(hint.cipher ? [{ cipher: { equals: hint.cipher, mode: 'insensitive' as const } }] : []),
+				] },
+				select: { id: true },
+			}) : null
+			const duplicate = target ? await prisma.document.findFirst({ where: { contractId: target.id, sha256 }, select: { id: true } }) : null
+			// Content can be legitimately shared by different contract folders.
+			// A queue duplicate is the same source *version*: path + checksum.  A manager
+			// may replace `Смета.xlsx` in a network folder with an updated version; that
+			// replacement must be queued instead of being hidden by an old Inbox record.
+			const queued = await prisma.inboxItem.findFirst({ where: { sourcePath, sha256 }, select: { id: true, status: true } })
+			if (duplicate) {
+				// Record a duplicate once.  Otherwise it would disappear silently and the
+				// import journal could not explain why the manager does not see the file.
+				if (!queued) {
+					const info = await stat(sourcePath)
+					try {
+						const ignored = await prisma.inboxItem.create({ data: {
+							sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: 'IGNORED',
+							parsedContractNumber: hint?.number, parsedCipher: hint?.cipher,
+							suggestedKind: classifyDocumentPath(sourcePath), errorMessage: 'Точная копия уже прикреплена к этому договору.', matchedContractId: target?.id,
+						} })
+						await writeImportEvent({ inboxItemId: ignored.id, fileName, event: 'SCANNED', outcome: 'IGNORED', contractId: target?.id, message: 'Точная копия уже прикреплена к этому договору.' })
+					} catch (error) {
+						if ((error as { code?: string }).code !== 'P2002') throw error
+					}
+				}
+				result.duplicates++
+				continue
+			}
+			if (queued) {
+				if (queued.status === 'FAILED') {
+					const recovered = await retryFailedQueueItem({ id: queued.id, sourcePath, fileName, hint, allowOcr: !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)) })
+					if (recovered) result.parsed++
+					else result.errors++
+					continue
+				}
+				if (['PENDING', 'SUGGESTED', 'FAILED'].includes(queued.status) && (hint?.number || hint?.cipher)) {
+					await prisma.inboxItem.update({ where: { id: queued.id }, data: {
+						status: 'SUGGESTED',
+						parsedContractNumber: hint.number,
+						parsedCipher: hint.cipher,
+						suggestedKind: classifyDocumentPath(sourcePath),
+						errorMessage: null,
+					} })
+				}
+				result.duplicates++
+				continue
+			}
+			let parsedContractNumber = hint?.number
+			let parsedCipher = hint?.cipher
+			let errorMessage: string | undefined
+			if ((PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(fileName).toLowerCase())) {
+				try {
+					const parsed = parsedByPath.get(path.resolve(sourcePath)) ?? await parseContractFile(fileName, await readFile(sourcePath), !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)))
+					if (classifyDocumentPath(sourcePath) === 'CONTRACT' || parsed.confidence >= 60) {
+						parsedContractNumber = parsed.contractNumber || parsedContractNumber
+						parsedCipher = parsed.cipher || parsedCipher
+					}
+					result.parsed++
+				} catch (error) {
+					errorMessage = error instanceof Error ? error.message : 'Ошибка распознавания'
+					result.errors++
+					result.issues.push(`${fileName}: ${errorMessage}`)
+				}
+			}
+			const info = await stat(sourcePath)
+			try {
+				const created = await prisma.inboxItem.create({ data: { sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: errorMessage ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'), parsedContractNumber, parsedCipher, suggestedKind: classifyDocumentPath(sourcePath), errorMessage } })
+				await writeImportEvent({ inboxItemId: created.id, fileName, event: 'SCANNED', outcome: errorMessage ? 'FAILED' : 'QUEUED', message: errorMessage ?? (parsedContractNumber ? `Распознан договор № ${parsedContractNumber}` : 'Ожидает выбора договора') })
+				result.queued++
+			} catch (error) {
+				// The file may have been picked up by the watcher milliseconds earlier.
+				// The database constraint makes that race harmless and idempotent.
+				if ((error as { code?: string }).code === 'P2002') { result.duplicates++; continue }
+				throw error
+			}
+		} catch (error) {
+			result.errors++
+			result.issues.push(`${fileName}: ${error instanceof Error ? error.message : 'Ошибка обработки'}`)
+		}
+	}
+	result.autoImported = await autoImportRecognizedItems()
+	return result
+}

@@ -1,0 +1,142 @@
+import { redirect } from 'next/navigation'
+import type { Prisma } from '@prisma/client'
+import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
+
+/**
+ * Единая точка проверки прав.
+ *
+ * Раньше ролевые условия дублировались на каждой странице, а серверные
+ * действия (создание ДС, сметы, редактирование контрагента) проверяли
+ * только роль VIEWER. Из-за этого MANAGER мог подставить в URL чужой
+ * contractId и записать данные в договор, который ему не виден.
+ * Теперь любая запись проходит через assertContractAccess().
+ */
+
+export type Role = 'ADMIN' | 'MANAGER' | 'DESIGNER' | 'VIEWER'
+
+export type SessionUser = {
+	id: string
+	name?: string | null
+	email?: string | null
+	role: Role
+}
+
+/** Текущий пользователь. Без сессии — редирект на /login. */
+export async function getActiveUser(): Promise<SessionUser | null> {
+	const session = await auth()
+	if (!session?.user) return null
+	const user = session.user as Partial<SessionUser>
+	// A JWT can outlive a changed/deactivated account.  Resolving the principal
+	// from the database keeps server actions and Settings from running with a
+	// stale tab after another account signs in in the same browser profile.
+	const id = String(user.id ?? '')
+	if (!id) return null
+	const actual = await prisma.user.findFirst({ where: { id, isActive: true, deletedAt: null }, select: { id: true, name: true, email: true, role: true } })
+	if (!actual) return null
+	return {
+		id: actual.id,
+		name: actual.name,
+		email: actual.email,
+		role: actual.role as Role,
+	}
+}
+
+export async function requireUser(): Promise<SessionUser> {
+	const user = await getActiveUser()
+	if (!user) redirect('/login')
+	return user
+}
+
+/** VIEWER не видит суммы договоров, смет и счетов. */
+export function canSeeAmounts(user: SessionUser): boolean {
+	return user.role === 'ADMIN' || user.role === 'MANAGER'
+}
+
+/** VIEWER не может ничего создавать и изменять. */
+export function canWrite(user: SessionUser): boolean {
+	return user.role === 'ADMIN' || user.role === 'MANAGER'
+}
+
+/** Только администратор управляет пользователями и очередью импорта. */
+export function isAdmin(user: SessionUser): boolean {
+	return user.role === 'ADMIN'
+}
+
+/** Область видимости договоров для роли. */
+export function contractScope(user: SessionUser): Prisma.ContractWhereInput {
+	return {
+		deletedAt: null,
+		...(user.role === 'MANAGER' ? { managerId: user.id } : {}),
+		...(user.role === 'DESIGNER' ? { OR: [
+			{ access: { some: { userId: user.id } } },
+			{ projectSections: { some: { responsibleId: user.id, deletedAt: null } } },
+		] } : {}),
+		...(user.role === 'VIEWER' ? { access: { some: { userId: user.id } } } : {}),
+	}
+}
+
+/**
+ * Every newly created contract is visible to active designers immediately.
+ * This is an explicit per-contract grant rather than opening historical or
+ * unrelated contracts to the whole design department.
+ */
+export async function grantDesignReadAccess(contractId: string) {
+	const designers = await prisma.user.findMany({
+		where: { role: 'DESIGNER', isActive: true, deletedAt: null },
+		select: { id: true },
+	})
+	if (!designers.length) return 0
+	const created = await prisma.contractAccess.createMany({
+		data: designers.map((designer) => ({ contractId, userId: designer.id, level: 'READ' })),
+		skipDuplicates: true,
+	})
+	return created.count
+}
+
+/** Договор виден пользователю? Возвращает минимальные поля или null. */
+export async function findContractInScope(contractId: string, user: SessionUser) {
+	if (!contractId) return null
+	return prisma.contract.findFirst({
+		where: { id: contractId, ...contractScope(user) },
+		select: { id: true, number: true, managerId: true },
+	})
+}
+
+/**
+ * Проверка перед записью в договор.
+ * Если договор недоступен или роль только для чтения — редирект,
+ * а не молчаливая запись в чужие данные.
+ */
+export async function assertContractAccess(
+	contractId: string,
+	user: SessionUser,
+	options: { write?: boolean } = {},
+) {
+	if (options.write && !canWrite(user)) redirect('/contracts')
+	const contract = await findContractInScope(contractId, user)
+	if (!contract) redirect('/contracts')
+	return contract
+}
+
+/**
+ * Контрагент доступен, только если у пользователя есть хотя бы один
+ * видимый договор с ним. Иначе MANAGER мог править чужие карточки.
+ */
+export async function assertContractorAccess(
+	contractorId: string,
+	user: SessionUser,
+	options: { write?: boolean } = {},
+) {
+	if (options.write && !canWrite(user)) redirect('/contractors')
+	const contractor = await prisma.contractor.findFirst({
+		where: {
+			id: contractorId,
+			deletedAt: null,
+			...(user.role === 'ADMIN' ? {} : { contracts: { some: contractScope(user) } }),
+		},
+		select: { id: true, name: true },
+	})
+	if (!contractor) redirect('/contractors')
+	return contractor
+}

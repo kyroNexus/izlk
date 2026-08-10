@@ -1,0 +1,636 @@
+@import "tailwindcss";
+
+/* Тёмная тема переключается классом .dark на <html>, а не системной настройкой */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Светлая тема (по умолчанию, как на скриншотах) ---------- */
+:root {
+	/* Reusable visual scale. New UI should use these values rather than one-off pixels. */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--radius-control: 11px;
+	--radius-card: 18px;
+	--radius-panel: 24px;
+	--control-height: 40px;
+	--duration-fast: 180ms;
+	--duration-ui: 240ms;
+	--ease-ui: cubic-bezier(.2, .8, .2, 1);
+	--shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(43,31,102,.035);
+	--shadow-float: 0 18px 44px rgba(28,19,76,.18);
+	--canvas: #f7f7fb;
+	--sidebar: #ffffff;
+	--surface: #ffffff;
+	--raised: #f3f3f8;
+	--line: #e4e4ee;
+	--line-soft: #eef0f5;
+	--ink: #191825;
+	--muted: #69687b;
+	--faint: #9695a8;
+	--brand: #7357f5;
+	--brand-deep: #5d3ee1;
+	--brand-press: #4b2fc7;
+	--brand-soft: #f0edff;
+	--brand-ink: #5633cc;
+	--ok: #15803d;
+	--ok-bg: #e8f6ed;
+	--ok-bd: #c3e6d0;
+	--warn: #b45309;
+	--warn-bg: #fdf3e3;
+	--warn-bd: #f3ddb4;
+	--off: #6d6d80;
+	--off-bg: #f0f1f4;
+	--off-bd: #e2e4ea;
+	--danger: #b91c1c;
+	--danger-bg: #fdecec;
+	--danger-bd: #f6cfcf;
+}
+
+/* ---------- Тёмная тема (сайдбар #14141f из izlk_v3.html) ---------- */
+.dark {
+	--canvas: #0f0f17;
+	--sidebar: #14141f;
+	--surface: #1a1a27;
+	--raised: #22222f;
+	--line: #2a2a3a;
+	--line-soft: #242433;
+	--ink: #f2f2f7;
+	--muted: #9a9aad;
+	--faint: #6c6c80;
+	--brand-soft: rgba(123, 92, 250, 0.16);
+	--brand-ink: #b9a4ff;
+	--ok: #86d4a5;
+	--ok-bg: rgba(114, 188, 143, 0.14);
+	--ok-bd: rgba(114, 188, 143, 0.28);
+	--warn: #e5a774;
+	--warn-bg: rgba(222, 146, 85, 0.14);
+	--warn-bd: rgba(222, 146, 85, 0.28);
+	--off: #9a9aad;
+	--off-bg: rgba(255, 255, 255, 0.06);
+	--off-bd: rgba(255, 255, 255, 0.1);
+	--danger: #f3a2a2;
+	--danger-bg: rgba(220, 90, 90, 0.14);
+	--danger-bd: rgba(220, 90, 90, 0.28);
+}
+
+/* @theme inline — утилиты ссылаются на переменные, поэтому цвета
+   меняются на лету при добавлении .dark, без дублирования классов dark: */
+@theme inline {
+	--color-canvas: var(--canvas);
+	--color-sidebar: var(--sidebar);
+	--color-surface: var(--surface);
+	--color-raised: var(--raised);
+	--color-line: var(--line);
+	--color-line-soft: var(--line-soft);
+	--color-ink: var(--ink);
+	--color-muted: var(--muted);
+	--color-faint: var(--faint);
+	--color-brand: var(--brand);
+	--color-brand-deep: var(--brand-deep);
+	--color-brand-press: var(--brand-press);
+	--color-brand-soft: var(--brand-soft);
+	--color-brand-ink: var(--brand-ink);
+	--color-ok: var(--ok);
+	--color-ok-bg: var(--ok-bg);
+	--color-ok-bd: var(--ok-bd);
+	--color-warn: var(--warn);
+	--color-warn-bg: var(--warn-bg);
+	--color-warn-bd: var(--warn-bd);
+	--color-off: var(--off);
+	--color-off-bg: var(--off-bg);
+	--color-off-bd: var(--off-bd);
+	--color-danger: var(--danger);
+	--color-danger-bg: var(--danger-bg);
+	--color-danger-bd: var(--danger-bd);
+}
+
+html {
+	color-scheme: light;
+	scroll-behavior: smooth;
+}
+html.dark {
+	color-scheme: dark;
+}
+
+/* Section links on contracts, dashboards and long registers should land below
+   the fixed workspace header instead of hiding the destination heading. */
+[id] {
+	scroll-margin-top: 86px;
+}
+
+body {
+	background-color: var(--canvas);
+	background-image: radial-gradient(circle at 84% -10%, color-mix(in srgb, var(--brand) 7%, transparent), transparent 32rem), radial-gradient(circle at 14% 110%, color-mix(in srgb, var(--brand) 4%, transparent), transparent 28rem);
+	color: var(--ink);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	line-height: 1.45;
+}
+
+/* High-density displays make a fixed-pixel business UI look unnecessarily
+   small. Zoom the whole workspace only when there is ample room, keeping the
+   layout and all existing controls in the same proportion. */
+@media (min-width: 2200px) and (min-height: 1000px) {
+	body { zoom: 1.14; }
+	/* zoom scales 100vh too; compensate fixed navigation so its bottom card
+	   remains inside the physical viewport. */
+	.app-sidebar { bottom: auto; height: calc(100vh / 1.14); }
+}
+@media (min-width: 3000px) and (min-height: 1400px) {
+	body { zoom: 1.24; }
+	.app-sidebar { bottom: auto; height: calc(100vh / 1.24); }
+}
+
+/* One focus treatment across links, controls, summaries and custom buttons. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+	outline: 3px solid color-mix(in srgb, var(--brand) 42%, transparent);
+	outline-offset: 2px;
+}
+
+button, a, summary, input, select, textarea {
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* Native selects stay the most reliable choice for long operational forms.
+   Give their closed state one calm, recognisable treatment everywhere. */
+select {
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	appearance: none;
+	cursor: pointer;
+	padding-right: 40px !important;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237357f5' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 12px center;
+	background-size: 16px;
+}
+select:hover { border-color: color-mix(in srgb, var(--brand) 42%, var(--line)); }
+select:disabled { cursor: not-allowed; opacity: .6; }
+select option { background: var(--surface); color: var(--ink); }
+
+.filter-panel {
+	overflow: hidden;
+	border-color: color-mix(in srgb, var(--brand) 20%, var(--line));
+	box-shadow: 0 14px 34px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.filter-panel > div:first-child {
+	background: linear-gradient(110deg, color-mix(in srgb, var(--brand-soft) 72%, var(--surface)), var(--surface));
+}
+.filter-panel form {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--brand-soft)), var(--surface));
+}
+.filter-panel label > span { color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
+
+/* Common interaction timing: noticeable, but never slow. */
+:where(button, a, summary) {
+	transition-timing-function: var(--ease-ui);
+}
+
+::selection { background: color-mix(in srgb, var(--brand) 23%, transparent); }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--brand) 58%, var(--faint)) color-mix(in srgb, var(--raised) 72%, transparent); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { margin: 4px; border-radius: 999px; background: color-mix(in srgb, var(--raised) 72%, transparent); }
+::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 72%, var(--faint)), color-mix(in srgb, var(--brand) 46%, var(--faint))); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, var(--brand), color-mix(in srgb, var(--brand) 72%, var(--ok))); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+.app-scrollbar { scrollbar-width: thin; scrollbar-color: var(--brand) transparent; }
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(-5px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes department-panel-in {
+	from { opacity: 0; transform: translateY(16px) scale(.98); }
+	to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes workspace-enter {
+	from { opacity: 0; transform: translateY(7px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Deliberate, short motion: interfaces feel responsive without slowing work. */
+button, a, details, summary, input, select {
+	transition-duration: 180ms;
+	transition-timing-function: cubic-bezier(.2,.8,.2,1);
+}
+
+.workspace-surface {
+	background-image: linear-gradient(135deg, color-mix(in srgb, var(--surface) 96%, var(--brand-soft)) 0%, var(--surface) 48%, color-mix(in srgb, var(--surface) 98%, transparent) 100%);
+}
+
+main > div[class*="px-[26px]"] {
+	animation: workspace-enter 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+/* A photo report is a visual proof of work: make every thumbnail feel like a useful preview. */
+a[href^="/api/site-photos/"] {
+	position: relative;
+	box-shadow: 0 4px 12px color-mix(in srgb, var(--ink) 8%, transparent);
+	transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms cubic-bezier(.2,.8,.2,1), border-color 180ms cubic-bezier(.2,.8,.2,1);
+}
+a[href^="/api/site-photos/"]::after {
+	content: 'Открыть';
+	position: absolute;
+	inset: auto 5px 5px auto;
+	padding: 3px 6px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--ink) 72%, transparent);
+	color: white;
+	font-size: 9px;
+	font-weight: 700;
+	opacity: 0;
+	transform: translateY(3px);
+	transition: opacity 180ms cubic-bezier(.2,.8,.2,1), transform 180ms cubic-bezier(.2,.8,.2,1);
+}
+a[href^="/api/site-photos/"]:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in srgb, var(--brand) 48%, var(--line));
+	box-shadow: 0 12px 22px color-mix(in srgb, var(--ink) 15%, transparent);
+}
+a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+	main > div[class*="px-[26px]"], a[href^="/api/site-photos/"] { animation: none; transition: none; }
+}
+
+/* Reusable work-screen layers: dense registers stay calm and actionable. */
+.work-hero {
+	position: relative;
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--brand) 15%, var(--line));
+	border-radius: 18px;
+	background: linear-gradient(118deg, color-mix(in srgb, var(--brand-soft) 68%, var(--surface)), var(--surface) 58%);
+	box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.work-hero::after {
+	content: '';
+	position: absolute;
+	right: -58px;
+	top: -86px;
+	width: 240px;
+	height: 240px;
+	border-radius: 50%;
+	background: radial-gradient(circle, color-mix(in srgb, var(--brand) 14%, transparent), transparent 67%);
+	pointer-events: none;
+}
+.work-toolbar {
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--surface) 92%, var(--raised));
+	box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.interactive-row {
+	position: relative;
+	transition: background-color 180ms cubic-bezier(.2,.8,.2,1), transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms cubic-bezier(.2,.8,.2,1);
+}
+.interactive-row:hover {
+	transform: translateX(2px);
+	background: color-mix(in srgb, var(--brand-soft) 62%, var(--surface));
+	box-shadow: inset 3px 0 0 var(--brand);
+}
+
+/* The projects page reads as a route through the company, rather than one more table. */
+.project-flow-overview {
+	background-image:
+		linear-gradient(118deg, color-mix(in srgb, var(--brand-soft) 62%, var(--surface)), var(--surface) 58%),
+		radial-gradient(circle at 96% 5%, color-mix(in srgb, var(--ok) 14%, transparent), transparent 16rem);
+}
+.project-flow-lane,
+.project-production-bridge {
+	position: relative;
+	overflow: hidden;
+}
+.project-flow-lane::before,
+.project-production-bridge::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 2px;
+	background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--brand) 6%, transparent));
+	opacity: .72;
+}
+.project-flow-lane:hover::before { opacity: 1; }
+.project-production-bridge::before {
+	background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--brand) 72%, var(--ok)));
+}
+.project-queue-card {
+	background-image: linear-gradient(155deg, color-mix(in srgb, var(--surface) 98%, var(--brand-soft)), var(--surface) 46%);
+}
+.project-queue-card > div:first-child {
+	background: color-mix(in srgb, var(--surface) 82%, var(--brand-soft));
+}
+
+/* Upload is a short guided action: the file zone stays visually dominant. */
+.smart-upload-form > :first-child {
+	box-shadow: 0 10px 26px color-mix(in srgb, var(--brand) 7%, transparent);
+}
+.smart-upload-dropzone {
+	position: relative;
+	isolation: isolate;
+}
+.smart-upload-dropzone::before {
+	content: '';
+	position: absolute;
+	inset: 8px;
+	z-index: -1;
+	border-radius: 10px;
+	background: radial-gradient(circle at 50% 10%, color-mix(in srgb, var(--brand) 9%, transparent), transparent 60%);
+	opacity: 0;
+	transition: opacity 180ms cubic-bezier(.2,.8,.2,1);
+}
+.smart-upload-dropzone:hover::before { opacity: 1; }
+
+/* In the document register the catalogue, work list and filters have distinct visual roles. */
+.documents-responsive-shell > div > :first-child > div:first-child,
+.documents-responsive-shell > div > :last-child > div:first-child {
+	background: color-mix(in srgb, var(--surface) 82%, var(--brand-soft));
+}
+.documents-responsive-shell > div > :nth-child(2) {
+	box-shadow: 0 12px 34px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.documents-responsive-shell > div > :nth-child(2) > div:not(:first-child) > div:not(:first-child) {
+	transition: background-color 160ms cubic-bezier(.2,.8,.2,1), box-shadow 160ms cubic-bezier(.2,.8,.2,1);
+}
+.documents-responsive-shell > div > :nth-child(2) > div:not(:first-child) > div:not(:first-child):hover {
+	background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface));
+	box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.contract-filter-group {
+	min-height: 34px;
+	padding: 3px 4px;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--surface) 58%, var(--raised));
+}
+.contract-filter-button {
+	min-width: 54px;
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.contract-filter-button[aria-pressed="true"] {
+	box-shadow: 0 7px 14px color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+/* Shared chrome: restrained depth makes the workspace feel intentional on every page. */
+.topbar-shell {
+	background-image: linear-gradient(100deg, color-mix(in srgb, var(--surface) 94%, var(--brand-soft)), var(--surface) 44%, color-mix(in srgb, var(--surface) 94%, var(--brand-soft)));
+}
+.topbar-shell::after {
+	content: '';
+	position: absolute;
+	bottom: -1px;
+	left: 12%;
+	right: 12%;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--brand) 34%, transparent), transparent);
+	pointer-events: none;
+}
+.app-sidebar::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto;
+	height: 154px;
+	background: radial-gradient(ellipse at 28% -18%, color-mix(in srgb, var(--brand) 17%, transparent), transparent 72%);
+	pointer-events: none;
+}
+.app-sidebar > header,
+.app-sidebar > nav,
+.app-sidebar > a { position: relative; z-index: 1; }
+.app-sidebar > button {
+	position: absolute;
+	z-index: 3;
+	width: 32px;
+	height: 40px;
+	right: -16px;
+	border-radius: 0 12px 12px 0;
+	box-shadow: 8px 6px 20px rgba(73, 47, 175, .16);
+}
+.app-sidebar nav {
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--brand) 38%, transparent) transparent;
+}
+.app-sidebar header img {
+	filter: saturate(1.06) contrast(1.04);
+}
+
+.ui-empty-state {
+	background: linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 70%, transparent), transparent 68%);
+}
+.ui-skeleton {
+	background: linear-gradient(90deg, var(--raised) 25%, color-mix(in srgb, var(--surface) 66%, var(--raised)) 48%, var(--raised) 72%);
+	background-size: 220% 100%;
+	animation: ui-shimmer 1.25s ease-in-out infinite;
+}
+@keyframes ui-shimmer { to { background-position: -220% 0; } }
+
+
+/* The long contract screen stays navigable without a second side panel. */
+.contract-section-nav {
+	position: sticky;
+	top: 76px;
+	z-index: 20;
+	backdrop-filter: blur(14px);
+	background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+.contract-section-link {
+	position: relative;
+	border: 1px solid transparent;
+}
+.contract-section-link:hover {
+	border-color: color-mix(in srgb, var(--brand) 22%, var(--line));
+	box-shadow: 0 5px 12px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+.contract-section-link:focus-visible {
+	background: var(--brand-soft);
+	color: var(--brand-ink);
+}
+.micro-label {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .075em;
+	text-transform: uppercase;
+	color: var(--faint);
+}
+
+/* A visible keyboard focus is especially important in a data-heavy system:
+   the active control stays obvious without making the interface noisy. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--brand) 72%, transparent);
+	outline-offset: 2px;
+}
+
+/* A dense desktop layout must not lose its breathing room on a phone. */
+@media (max-width: 639px) {
+	main > div[class*="px-[26px]"] {
+		padding-left: 14px;
+		padding-right: 14px;
+	}
+}
+
+@media (max-width: 767px) {
+	/* Drawer is a true overlay on phones; its collapsed rail never steals content width. */
+	.workspace-surface { padding-left: 0; }
+	.app-sidebar { box-shadow: 10px 0 36px rgba(15, 12, 40, .16); }
+	.app-sidebar.w-16 { width: 0; border-right-color: transparent; box-shadow: none; }
+	.app-sidebar.w-16 > :not(button) { pointer-events: none; opacity: 0; }
+	.app-sidebar.w-16 > button { right: -48px; top: 31px; transform: none; }
+}
+
+/* Use native details collapsing: it removes the entire section instead of
+   leaving an empty container. The brief entry animation keeps opening gentle. */
+details.dashboard-disclosure > summary::-webkit-details-marker { display: none; }
+details.dashboard-disclosure:not([open]) { min-height: 0 !important; }
+details.dashboard-disclosure:not([open]) > div { display: none; }
+details.dashboard-disclosure[open] > div { animation: dashboard-content-in 180ms cubic-bezier(.2,.8,.2,1); }
+details.dashboard-disclosure > summary > span:last-child > span:last-child {
+	font-size: 0;
+	border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+	background: var(--brand-soft);
+	transform: none !important;
+}
+details.dashboard-disclosure > summary > span:last-child > span:last-child::after {
+	content: '+';
+	font-size: 18px;
+	font-weight: 400;
+	line-height: 1;
+}
+details.dashboard-disclosure[open] > summary > span:last-child > span:last-child::after { content: '−'; }
+.department-panel-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--brand) 55%, transparent) transparent; }
+.department-panel-scroll::-webkit-scrollbar { width: 8px; }
+.department-panel-scroll::-webkit-scrollbar-track { margin: 14px 0; background: transparent; }
+.department-panel-scroll::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: color-mix(in srgb, var(--brand) 52%, transparent); background-clip: padding-box; }
+.department-panel-scroll::-webkit-scrollbar-thumb:hover { background: var(--brand); background-clip: padding-box; }
+@keyframes dashboard-content-in {
+	from { opacity: 0; transform: translateY(-5px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Documents stay useful on a regular laptop: the file list gets priority,
+   while the catalog and filters move below it before there is room for all
+   three columns. */
+.documents-responsive-shell > div {
+	grid-template-columns: minmax(0, 1fr) !important;
+}
+.documents-responsive-shell > div > :first-child {
+	min-height: 0;
+}
+.documents-responsive-shell > div > :nth-child(2) {
+	min-height: 0;
+	overflow-x: auto;
+}
+.documents-responsive-shell > div > :last-child {
+	grid-column: 1 / -1;
+}
+@media (min-width: 1280px) {
+	.documents-responsive-shell > div {
+		grid-template-columns: 220px minmax(0, 1fr) !important;
+	}
+}
+@media (min-width: 1536px) {
+	.documents-responsive-shell > div {
+		grid-template-columns: 250px minmax(0, 1fr) 250px !important;
+	}
+	.documents-responsive-shell > div > :last-child {
+		grid-column: auto;
+	}
+}
+
+/* Fixed administrative side columns should not compress a table on a laptop.
+   They stack below the main content until the wide desktop breakpoint. */
+@media (max-width: 1279px) {
+	div[class*="grid-cols-[minmax(0,1fr)_360px]"] {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+	div[class*="grid-cols-[minmax(0,1fr)_360px]"] > :first-child {
+		overflow-x: auto !important;
+	}
+	div[class*="grid-cols-[minmax(0,1fr)_360px]"] > :first-child > div[class*="grid-cols-[1fr_1.2fr_120px"] {
+		min-width: 650px;
+	}
+}
+
+/* Catalog + table + filters is excellent on a 4K display, but too dense on a
+   normal workstation. Use two clear columns first, then a single work flow. */
+@media (max-width: 1535px) {
+	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] {
+		grid-template-columns: 220px minmax(0, 1fr) !important;
+	}
+	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] > :last-child {
+		grid-column: 1 / -1;
+	}
+}
+@media (max-width: 1279px) {
+	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] > :nth-child(2) {
+		overflow-x: auto;
+	}
+}
+
+/* The quick task editor opens from a compact header. On a phone it must stay
+   inside the viewport instead of inheriting the desktop-width popover. */
+@media (max-width: 639px) {
+	/* The bell sits beside the profile button, so an anchored desktop popover
+	   can be clipped off-screen. On a phone it becomes a bounded top sheet. */
+	.notification-menu > div.absolute {
+		position: fixed;
+		top: 70px;
+		left: 12px;
+		right: 12px;
+		width: auto;
+	}
+
+	main details.group > div[class*="w-[520px]"][class*="absolute"] {
+		right: 14px !important;
+		width: calc(100vw - 28px) !important;
+		max-width: 520px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+
+/* Акцентный градиент #7B5CFA -> #6A3FE0, на hover уходит в #4b2fc7 */
+.brand-gradient {
+	background-image: linear-gradient(135deg, #7b5cfa, #6a3fe0);
+}
+.brand-gradient:hover {
+	background-image: linear-gradient(135deg, #6a3fe0, #4b2fc7);
+}
+
+/* Фиолетовое свечение на экране логина */
+.brand-glow {
+	background: radial-gradient(closest-side, rgba(123, 92, 250, 0.16), transparent);
+}
+
+/* Цифры одинаковой ширины — для сумм и дат в таблицах */
+.tnum {
+	font-variant-numeric: tabular-nums;
+}
+
+/* A damaged legacy photo must look intentional instead of exposing a garbled
+   filename. The link remains available so the original can still be opened. */
+.photo-load-failed { display: none !important; }
+.site-photo-fallback {
+	display: flex;
+	aspect-ratio: 1;
+	align-items: end;
+	padding: 10px;
+	background: radial-gradient(circle at 78% 20%, rgba(139, 92, 246, .24), transparent 40%), var(--raised);
+	color: var(--muted);
+	font-size: 10px;
+	line-height: 1.35;
+}

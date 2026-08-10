@@ -1,0 +1,239 @@
+// =====================================================================
+// ДОПОЛНЕНИЯ К schema.prisma под 10 новых функций.
+// Скопируйте нужные блоки в prisma/schema.prisma, затем:
+//   npx prisma migrate dev --name features-v2
+// Поля, помеченные (ADD), нужно дописать в СУЩЕСТВУЮЩИЕ модели.
+// =====================================================================
+
+// ---------- 1. Пароли (проверка хеширования) ----------
+// model User {
+//   passwordHash String   // (ADD) только bcrypt-хеш, НИКОГДА не открытый пароль
+//   ...
+// }
+
+// ---------- 2. Сроки и дедлайны + 3. Прогресс ----------
+// model Contract {
+//   workingDays      Int?      // (ADD) кол-во рабочих дней по договору
+//   pr1SignedAt      DateTime? // (ADD) дата подписания ПР1
+//   deadline         DateTime? // (ADD) вычисляется: ПР1 + рабочие дни + 1
+//   productionDoneAt DateTime? // (ADD) производство завершено
+//   stage            ContractStage @default(CREATED) // (ADD)
+//   costItems        CostItem[]
+//   tasks            Task[]
+//   activities       Activity[]
+// }
+
+enum ContractStage {
+  CREATED
+  PR1_SIGNED
+  DESIGN
+  DESIGN_DONE
+  PRODUCTION
+  SITE_PREP
+  INSTALL
+  EXEC_DOCS
+  CLOSED
+}
+
+// ---------- 4. Разбивка суммы ----------
+enum CostKind {
+  SMR
+  MK
+  DELIVERY
+  DESIGN
+  MATERIALS
+  OTHER
+}
+
+model CostItem {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  kind       CostKind
+  planned    Decimal  @db.Decimal(14, 2)
+  actual     Decimal? @db.Decimal(14, 2)
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([contractId])
+}
+
+// ---------- 5. Карточка контрагента + 6. Поиск дублей ----------
+// model Contractor {
+//   inn         String?  @unique // (ADD) точное совпадение = дубль
+//   kpp         String?  // (ADD)
+//   email       String?  // (ADD)
+//   phone       String?  // (ADD)
+//   address     String?  // (ADD)
+//   website     String?  // (ADD)
+//   contacts    ContractorContact[]
+//   mergedIntoId String? // (ADD) если карточка объединена с другой
+// }
+
+model ContractorContact {
+  id           String     @id @default(cuid())
+  contractorId String
+  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  name         String
+  role         String?
+  email        String?
+  phone        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([contractorId])
+}
+
+// ---------- 7. Статусы КМ/КЖ/АР + 8. График проектирования ----------
+enum SectionStatus {
+  QUEUED
+  ASSIGNED
+  IN_PROGRESS
+  REVIEW
+  READY
+  PAUSED
+}
+
+// model ProjectSection {
+//   status        SectionStatus @default(QUEUED) // (ADD)
+//   planFrom      DateTime?  // (ADD) план по графику
+//   planTo        DateTime?  // (ADD)
+//   factFrom      DateTime?  // (ADD) фактические даты
+//   factTo        DateTime?  // (ADD)
+//   confirmedAt   DateTime?  // (ADD) проектировщик подтвердил готовность
+//   sourceFileId  String?    // (ADD) исходник DWG
+//   resultFileId  String?    // (ADD) готовый PDF
+//   history       SectionStatusLog[]
+// }
+
+model SectionStatusLog {
+  id        String         @id @default(cuid())
+  sectionId String
+  section   ProjectSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  fromStatus SectionStatus?
+  toStatus   SectionStatus
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id])
+  comment    String?
+  createdAt  DateTime       @default(now())
+
+  @@index([sectionId])
+}
+
+// ---------- 9. Площадки и отчёты СМР ----------
+// model Site {
+//   installKmStatus SectionStatus @default(QUEUED) // (ADD) монтаж КМ
+//   installKzStatus SectionStatus @default(QUEUED) // (ADD) монтаж КЖ
+//   installDoneAt   DateTime?                      // (ADD)
+//   latitude        Float?                         // (ADD) точка на карте
+//   longitude       Float?                         // (ADD)
+//   works           SiteWork[]
+//   photos          SitePhoto[]
+// }
+
+model SiteWork {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  date      DateTime
+  kind      String
+  note      String?
+  cost      Decimal? @db.Decimal(14, 2)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([siteId, date])
+}
+
+model SitePhoto {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  fileId    String
+  caption   String?
+  takenAt   DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([siteId])
+}
+
+// ---------- 10. Загрузка документов (версии) ----------
+// model Document {
+//   size       Int?      // (ADD)
+//   mimeType   String?   // (ADD)
+//   checksum   String?   // (ADD) защита от повторной загрузки того же файла
+//   version    Int       @default(1) // (ADD)
+//   signedAt   DateTime? // (ADD) дата подписания
+//   confidential Boolean @default(false) // (ADD)
+//   uploadedById String? // (ADD)
+// }
+
+// ---------- 11. Задачи и уведомления ----------
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Task {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  status       TaskStatus   @default(OPEN)
+  priority     TaskPriority @default(NORMAL)
+  dueAt        DateTime?
+  assigneeId   String?
+  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdById  String?
+  createdBy    User?        @relation("TaskAuthor", fields: [createdById], references: [id])
+  contractId   String?
+  contract     Contract?    @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractorId String?
+  contractor   Contractor?  @relation(fields: [contractorId], references: [id])
+  siteId       String?
+  site         Site?        @relation(fields: [siteId], references: [id])
+  autoRule     String?
+  doneAt       DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([assigneeId, status])
+  @@index([contractId])
+  @@index([dueAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+}
+
+// ---------- Общий журнал событий ----------
+model Activity {
+  id         String   @id @default(cuid())
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  kind       String
+  text       String
+  createdAt  DateTime  @default(now())
+
+  @@index([contractId, createdAt])
+}

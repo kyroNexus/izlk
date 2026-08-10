@@ -1,0 +1,14 @@
+services:
+  db-test:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: izlk_test
+      POSTGRES_PASSWORD: izlk_test
+      POSTGRES_DB: izlk_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U izlk_test -d izlk_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
