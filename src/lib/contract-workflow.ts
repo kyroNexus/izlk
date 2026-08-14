@@ -7,6 +7,23 @@ import { canTransitionWorkflowStage, getNextWorkflowStages } from './workflow-ru
 
 export { canTransitionWorkflowStage, getNextWorkflowStages } from './workflow-rules'
 
+/** Порядок стадий для степпера на карточке договора. INSTALL_KZH иногда пропускается
+ *  (переход возможен сразу в INSTALL_KM) — в линейном степпере он в этом случае просто
+ *  считается пройденным вместе с остальными более ранними стадиями. */
+export const WORKFLOW_STAGE_ORDER: ContractWorkflowStage[] = [
+	'CONTRACT_PREPARATION',
+	'AWAITING_CONTRACT_SIGNATURE',
+	'PR1_DEVELOPMENT',
+	'AWAITING_PR1_SIGNATURE',
+	'DESIGN',
+	'WAITING_PRODUCTION',
+	'PRODUCTION',
+	'AWAITING_SHIPMENT',
+	'INSTALL_KZH',
+	'INSTALL_KM',
+	'CLOSED',
+]
+
 export const WORKFLOW_STAGE_LABEL: Record<ContractWorkflowStage, string> = {
 	CONTRACT_PREPARATION: 'Подготовка договора',
 	AWAITING_CONTRACT_SIGNATURE: 'Ожидание подписания договора и оплаты',

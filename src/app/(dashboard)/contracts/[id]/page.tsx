@@ -20,7 +20,7 @@ import {
 } from '@/lib/format'
 import type { ContractWorkflowStage, DocumentKind, DocumentState, SectionCode, SiteStatus } from '@prisma/client'
 import { writeAudit } from '@/lib/audit'
-import { addMissingProjectSection, confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, sectionsForKind, transitionContractStage, WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
+import { addMissingProjectSection, confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, sectionsForKind, transitionContractStage, WORKFLOW_STAGE_LABEL, WORKFLOW_STAGE_ORDER } from '@/lib/contract-workflow'
 import { getDeadlineInfo } from '@/lib/deadline'
 
 
@@ -339,6 +339,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const overdueProjects = projectSections.filter((item) => item.deadline && item.deadline < new Date() && item.queueStatus !== 'DONE' && !item.dateTo)
 	const overdueTasks = openTasks.filter((item) => item.dueDate && item.dueDate < new Date())
 	const workflowTone: 'ok' | 'warn' | 'off' | 'brand' = contract.workflowStage === 'CLOSED' ? 'ok' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(contract.workflowStage) ? 'warn' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'
+	const workflowStageIndex = WORKFLOW_STAGE_ORDER.indexOf(contract.workflowStage)
 	const workflowError = searchParams.workflowError === 'km-final-file-required'
 
 	return (
@@ -365,6 +366,12 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							{' \u00b7 \u043e\u0442 '}
 							{formatDate(contract.date)}
 							{contract.manager?.name ? ` \u00b7 \u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440: ${contract.manager.name}` : ''}
+						</div>
+						<div className="mt-[12px] max-w-[520px]">
+							<div className="flex items-center gap-[3px]" role="img" aria-label={`\u0421\u0442\u0430\u0434\u0438\u044f ${workflowStageIndex + 1} \u0438\u0437 ${WORKFLOW_STAGE_ORDER.length}: ${WORKFLOW_STAGE_LABEL[contract.workflowStage]}`}>
+								{WORKFLOW_STAGE_ORDER.map((stage, index) => <span key={stage} title={WORKFLOW_STAGE_LABEL[stage]} className={`h-[6px] flex-1 rounded-full transition-colors ${index < workflowStageIndex ? 'bg-brand/55' : index === workflowStageIndex ? 'bg-brand ring-2 ring-brand/25' : 'bg-line'}`} />)}
+							</div>
+							<div className="mt-[6px] text-[11px] text-faint">\u042d\u0442\u0430\u043f {workflowStageIndex + 1} \u0438\u0437 {WORKFLOW_STAGE_ORDER.length}</div>
 						</div>
 					</div>
 
