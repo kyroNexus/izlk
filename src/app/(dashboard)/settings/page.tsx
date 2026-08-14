@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { writeAudit } from '@/lib/audit'
 import { getSystemHealth } from '@/lib/system-health'
 import { formatBytes } from '@/lib/format'
+import TableDensityToggle from '@/components/TableDensityToggle'
 
 export default async function SettingsPage({ searchParams }: { searchParams: { error?: string; success?: string } }) {
 	const user = await requireUser()
@@ -86,6 +87,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: { e
 				<div className="flex flex-wrap items-center gap-4 px-[18px] py-[16px]">
 					<div className="min-w-0 flex-1"><div className="text-[14px] font-bold">Режим презентации</div><div className="mt-1 text-[11.5px] leading-5 text-muted">Создаёт или обновляет четыре демонстрационных договора: новый, подписанный, в работе и почти закрытый. Остальные договоры не удаляются.</div></div>
 					<form action={prepareDemo}><button className="brand-gradient h-[38px] rounded-[9px] px-[16px] text-[12.5px] font-semibold text-white">Подготовить демо-данные</button></form>
+				</div>
+			</Card>
+			<Card className="mb-[14px] overflow-hidden">
+				<div className="flex flex-wrap items-center gap-4 px-[18px] py-[16px]">
+					<div className="min-w-0 flex-1"><div className="text-[14px] font-bold">Плотность таблиц</div><div className="mt-1 text-[11.5px] leading-5 text-muted">Применяется сразу ко всем реестрам: договорам, документам, задачам и площадкам.</div></div>
+					<TableDensityToggle />
 				</div>
 			</Card>
 			<div className="grid items-start gap-[14px] lg:grid-cols-[minmax(0,1fr)_360px]"><Card className="overflow-x-auto"><div className="grid grid-cols-[1fr_1.2fr_120px_110px_100px] gap-3 bg-raised px-[16px] py-[10px] text-[10.5px] font-semibold uppercase tracking-wide text-faint"><span>Имя</span><span>Email</span><span>Роль</span><span>Статус</span><span></span></div>{users.map((item) => <div key={item.id} className="grid grid-cols-[1fr_1.2fr_120px_110px_100px] items-center gap-3 border-t border-line-soft px-[16px] py-[12px]"><span className="truncate text-[13px] font-semibold">{item.name}{item.id === user.id ? ' · вы' : ''}</span><span className="truncate text-[12px] text-muted">{item.email}</span><span className="text-[12px]">{ROLE_LABELS[item.role]}</span><Chip tone={item.isActive ? 'ok' : 'off'}>{item.isActive ? 'Активен' : 'Отключён'}</Chip><form action={toggleUser}><input type="hidden" name="id" value={item.id} /><button disabled={item.id === user.id} className="w-full rounded-[7px] border border-line px-[7px] py-[5px] text-[10.5px] font-semibold disabled:opacity-30">{item.isActive ? 'Отключить' : 'Включить'}</button></form><details className="col-span-5"><summary className="cursor-pointer text-[10.5px] text-brand-ink">Сменить пароль</summary><form action={resetPassword} className="mt-[7px] flex max-w-[360px] gap-[7px]"><input type="hidden" name="id" value={item.id} /><input type="password" name="password" required minLength={8} placeholder="Новый пароль" className={`${inputClass} h-[34px]`} /><button className="rounded-[7px] bg-brand px-[10px] text-[10.5px] font-semibold text-white">Сохранить</button></form></details></div>)}</Card>
