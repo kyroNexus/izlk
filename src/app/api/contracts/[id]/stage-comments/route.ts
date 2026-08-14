@@ -12,13 +12,11 @@ async function post(request: Request, { user }: { user: SessionUser }, { params 
 	await assertContractAccess(params.id, user, { write: true })
 	const parsed = input.safeParse(await request.json().catch(() => null))
 	if (!parsed.success) return NextResponse.json({ error: 'Введите комментарий до 1000 символов' }, { status: 400 })
-	const comment = await prisma.contractStageComment.upsert({
-		where: { contractId_stage: { contractId: params.id, stage: parsed.data.stage } },
-		create: { contractId: params.id, stage: parsed.data.stage, text: parsed.data.text, updatedById: user.id },
-		update: { text: parsed.data.text, updatedById: user.id },
+	const comment = await prisma.stageComment.create({
+		data: { contractId: params.id, stage: parsed.data.stage, text: parsed.data.text, authorId: user.id },
 	})
-	await writeAudit({ userId: user.id, action: 'UPDATE', entityType: 'ContractStageComment', entityId: comment.id })
-	return NextResponse.json({ stage: comment.stage, text: comment.text, updatedAt: comment.updatedAt })
+	await writeAudit({ userId: user.id, action: 'CREATE', entityType: 'StageComment', entityId: comment.id })
+	return NextResponse.json({ id: comment.id, stage: comment.stage, text: comment.text, createdAt: comment.createdAt, authorName: user.name ?? null })
 }
 
 export const POST = withApiAuth(post, { access: 'write', csrf: true })

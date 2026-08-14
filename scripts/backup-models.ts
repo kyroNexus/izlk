@@ -19,6 +19,7 @@ export const restoreOrder = [
   'user',
   'contractor',
   'contract',
+  'productionPlan',
   'agreement',
   'estimate',
   'invoice',
@@ -38,8 +39,14 @@ export const restoreOrder = [
   'importEvent',
   'auditLog',
   'contractStageHistory',
+  'contractStageComment',
+  'stageComment',
+  'chatThread',
+  'chatMessage',
   'departmentDailySnapshot',
   'contractAccess',
+  'backgroundJob',
+  'rateLimitBucket',
 ] as const
 
 export function assertBackupModelCoverage() {

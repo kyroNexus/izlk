@@ -61,6 +61,7 @@ async function transitionInTx(tx: Tx, input: StageTransitionInput) {
 		throw new Error(`Нельзя перевести договор из стадии «${WORKFLOW_STAGE_LABEL[contract.workflowStage]}» в «${WORKFLOW_STAGE_LABEL[input.toStage]}»`)
 	}
 	await tx.contract.update({ where: { id: contract.id }, data: { workflowStage: input.toStage, ...(input.toStage === 'CLOSED' ? { status: 'CLOSED' } : {}) } })
+	const comment = input.comment?.trim() || null
 	await tx.contractStageHistory.create({
 		data: {
 			contractId: contract.id,
@@ -68,9 +69,15 @@ async function transitionInTx(tx: Tx, input: StageTransitionInput) {
 			toStage: input.toStage,
 			changedById: input.actorId ?? null,
 			isAutomatic: input.isAutomatic ?? false,
-			comment: input.comment?.trim() || null,
+			comment,
 		},
 	})
+	// Зеркалим в единый тред обсуждения этапа (StageComment), чтобы реальный переход
+	// засчитывался как "зелёный" в светофоре так же, как ручное сообщение — без этого
+	// объединение моделей в A1 переставало бы работать для всех переходов после миграции.
+	if (comment) {
+		await tx.stageComment.create({ data: { contractId: contract.id, stage: input.toStage, authorId: input.actorId ?? null, text: comment } })
+	}
 	return { changed: true, fromStage: contract.workflowStage, contract }
 }
 

@@ -55,6 +55,7 @@ model User {
   taskComments      TaskComment[]
   notifications     Notification[]
   stageChanges      ContractStageHistory[] @relation("StageChangedBy")
+  stageComments     StageComment[]         @relation("StageCommentAuthor")
   pr1ConfirmedContracts Contract[] @relation("ContractPr1ConfirmedBy")
   chatMessages      ChatMessage[]
 
@@ -225,6 +226,7 @@ model Contract {
   tasks           Task[]
   stageHistory    ContractStageHistory[]
   stageComments   ContractStageComment[]
+  stageCommentLog StageComment[]
   chatThreads     ChatThread[]
   productionPlan  ProductionPlan?
 
@@ -254,6 +256,9 @@ model ContractStageHistory {
   @@index([changedById])
 }
 
+/// Устаревшая модель — одна перезаписываемая заметка на этап.
+/// Замещена StageComment (тред из нескольких сообщений). Таблица оставлена
+/// как страховочная копия на один цикл деплоя; новый код в неё не пишет.
 model ContractStageComment {
   id         String                @id @default(cuid())
   contractId String
@@ -266,6 +271,24 @@ model ContractStageComment {
 
   @@unique([contractId, stage])
   @@index([contractId])
+}
+
+/// Обсуждение этапа договора — несколько сообщений на этап, не одна
+/// перезаписываемая заметка. "Светофор" этапа зелёный, если по (contractId,
+/// stage) есть хотя бы одна запись с deletedAt IS NULL.
+model StageComment {
+  id         String                @id @default(cuid())
+  contractId String
+  contract   Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  stage      ContractWorkflowStage
+  authorId   String?
+  author     User?                 @relation("StageCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  text       String                @db.VarChar(1000)
+  createdAt  DateTime              @default(now())
+  deletedAt  DateTime?
+
+  @@index([contractId, stage, createdAt])
+  @@index([authorId])
 }
 
 enum ChatScope {
