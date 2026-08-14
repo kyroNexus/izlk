@@ -70,7 +70,7 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 			</div>
 			{groupKey ? (
 				<div className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-ui)] ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
-					<div className={`overflow-hidden transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100 delay-100'}`}>
+					<div className={`min-h-0 overflow-hidden transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100 delay-100'}`}>
 						<div className="space-y-1 pb-0.5 pt-0.5">{entries.map(item)}</div>
 					</div>
 				</div>
