@@ -66,9 +66,15 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		const collapsed = Boolean(groupKey && isOpen && collapsedGroups[groupKey])
 		return <>
 			<div className={`mb-2 px-2 ${nested ? 'mt-4' : ''} ${textMotion}`}>
-				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="flex w-full items-center justify-between gap-1 text-[9px] font-bold uppercase tracking-[.14em] text-faint transition hover:text-brand-ink"><span>{label}</span><svg className={`h-3 w-3 flex-none transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5" /></svg></button> : <span className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">{label}</span>}
+				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="-mx-1 flex w-[calc(100%+8px)] items-center justify-between gap-1 rounded-[8px] px-1 py-1 text-[9px] font-bold uppercase tracking-[.14em] text-faint transition-colors duration-200 hover:bg-raised/70 hover:text-brand-ink"><span>{label}</span><svg className={`h-3 w-3 flex-none transition-transform duration-300 ease-[var(--ease-ui)] ${collapsed ? '-rotate-90' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5" /></svg></button> : <span className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">{label}</span>}
 			</div>
-			{!collapsed && <div className="space-y-1">{entries.map(item)}</div>}
+			{groupKey ? (
+				<div className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-ui)] ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+					<div className={`overflow-hidden transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100 delay-100'}`}>
+						<div className="space-y-1 pb-0.5 pt-0.5">{entries.map(item)}</div>
+					</div>
+				</div>
+			) : <div className="space-y-1">{entries.map(item)}</div>}
 		</>
 	}
 
