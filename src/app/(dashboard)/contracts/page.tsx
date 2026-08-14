@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { canSeeAmounts as maySeeAmounts, canWrite, contractScope, requireUser } from '@/lib/access'
 import Topbar from '@/components/Topbar'
 import ContractFilters from '@/components/ContractFilters'
+import StageCommentEditor from '@/components/StageCommentEditor'
 import FilterSelect from '@/components/FilterSelect'
 import { Card, RichEmptyState } from '@/components/ui'
 import { Circle, Check, Folder, Minus } from 'lucide-react'
@@ -25,6 +26,15 @@ const TABS: { key: string; label: string; status?: ContractStatus }[] = [
 const KIND_LABELS: Record<ContractKind, string> = { SMR: 'СМР', MK: 'МК', PROJECT: 'П' }
 const KINDS: ContractKind[] = ['SMR', 'MK', 'PROJECT']
 const WORKFLOW_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
+const COMMENT_STAGES: Array<{ key: ContractWorkflowStage; label: string }> = [
+	{ key: 'CONTRACT_PREPARATION', label: 'Договор' },
+	{ key: 'AWAITING_CONTRACT_SIGNATURE', label: 'Подписание' },
+	{ key: 'AWAITING_PR1_SIGNATURE', label: 'ПР1' },
+	{ key: 'DESIGN', label: 'Проект' },
+	{ key: 'WAITING_PRODUCTION', label: 'Производство' },
+	{ key: 'AWAITING_SHIPMENT', label: 'Отгрузка' },
+	{ key: 'INSTALL_KM', label: 'Монтаж' },
+]
 const SECTION_FILTERS: SectionCode[] = ['KM', 'KZH', 'AR']
 const SECTION_FILTER_LABEL: Record<string, string> = { KM: 'КМ', KZH: 'КЖ', AR: 'АР' }
 const DEPARTMENT_STAGES = {
@@ -40,27 +50,6 @@ const FOCUS_LABEL = { working: 'В работе — показаны актив�
 function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
 	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
 	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold ring-1 ${tone}`}><i className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
-}
-const WORKFLOW_TRAFFIC: Array<{ label: string; stages: ContractWorkflowStage[] }> = [
-	{ label: 'Договор', stages: ['CONTRACT_PREPARATION'] },
-	{ label: 'Подписание', stages: ['AWAITING_CONTRACT_SIGNATURE'] },
-	{ label: 'ПР1', stages: ['PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'] },
-	{ label: 'Проект', stages: ['DESIGN'] },
-	{ label: 'Цех', stages: ['WAITING_PRODUCTION', 'PRODUCTION'] },
-	{ label: 'Отгрузка', stages: ['AWAITING_SHIPMENT'] },
-	{ label: 'Монтаж', stages: ['INSTALL_KZH', 'INSTALL_KM', 'CLOSED'] },
-]
-function WorkflowTraffic({ stage }: { stage: ContractWorkflowStage }) {
-	const current = Math.max(0, WORKFLOW_TRAFFIC.findIndex((item) => item.stages.includes(stage)))
-	const needsAttention = ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage)
-	return <span className="mt-1.5 flex items-center" role="img" aria-label={`Прогресс договора: этап ${current + 1} из ${WORKFLOW_TRAFFIC.length}, ${WORKFLOW_TRAFFIC[current]?.label ?? 'Монтаж'}`}>
-		{WORKFLOW_TRAFFIC.map((item, index) => {
-			const done = stage === 'CLOSED' || index < current
-			const active = index === current && stage !== 'CLOSED'
-			const color = done ? 'bg-ok' : active ? (needsAttention ? 'bg-warn ring-2 ring-warn/20' : 'bg-brand ring-2 ring-brand/15') : 'bg-line'
-			return <span key={item.label} className="flex items-center"><span title={`${item.label}${done ? ' — завершено' : active ? needsAttention ? ' — ожидает действия' : ' — текущий этап' : ' — впереди'}`} className={`h-2 w-2 rounded-full transition ${color}`} />{index < WORKFLOW_TRAFFIC.length - 1 && <span className={`mx-[2px] h-px w-[10px] ${done ? 'bg-ok/60' : 'bg-line'}`} />}</span>
-		})}
-	</span>
 }
 function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queueStatus: string; documents: Array<{ id: string }> }> }) {
 	if (sections.length === 0) return <span className="mt-1 block text-[9.5px] text-faint">Разделы ещё не созданы</span>
@@ -110,6 +99,8 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 		include: {
 			contractor: { select: { name: true, inn: true } },
 			manager: { select: { name: true } },
+			stageHistory: { orderBy: { createdAt: 'desc' }, take: 5, select: { toStage: true, comment: true } },
+			stageComments: { select: { stage: true, text: true } },
 			projectSections: { where: { deletedAt: null }, select: { code: true, queueStatus: true, documents: { where: { deletedAt: null, kind: 'PROJECT_PDF' }, select: { id: true }, take: 1 } } },
 			_count: { select: { documents: true } },
 		},
@@ -154,9 +145,9 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Договоры' }]} userName={name.split(' ')[0]} initials={initials(name)} notifications={0} />
 		<div className="px-[26px] py-[22px]">
-			<div className="work-hero mb-[18px] flex items-start gap-4 px-5 py-4">
+			<div className="mb-[18px] flex items-start gap-4">
 				<div><h1 className="text-[26px] font-bold tracking-[-0.02em]">Договоры</h1><div className="mt-1 text-[13px] text-muted">{plural(visibleContracts.length, 'договор', 'договора', 'договоров')} в выбранном разделе</div></div>
-				{canWrite(user) && <div className="ml-auto flex gap-2"><Link href="/contracts/import" className="inline-flex h-[38px] items-center rounded-[10px] border border-brand/30 bg-brand/10 px-[15px] text-[13px] font-semibold text-brand-ink">Загрузить договор</Link><Link href="/contracts/new" className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13px] font-semibold text-white">+ Новый договор</Link></div>}
+				{canWrite(user) && <div className="ml-auto flex gap-2"><Link href="/contracts/import" className="inline-flex h-[38px] items-center rounded-[10px] px-[12px] text-[12px] font-semibold text-muted hover:bg-raised hover:text-ink">Загрузить</Link><Link href="/contracts/new" className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13px] font-semibold text-white">+ Новый договор</Link></div>}
 			</div>
 			{(focus || selectedDepartment) && <div className="mb-[14px] flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/20 bg-brand-soft/55 px-4 py-3"><div><b className="block text-[12.5px] text-brand-ink">Показаны договоры: {focus ? FOCUS_LABEL[focus] : `${DEPARTMENT_LABEL[selectedDepartment!]} отдел`}</b><span className="mt-0.5 block text-[11px] text-muted">Фильтр применён с главной страницы. Его можно изменить или сбросить ниже.</span></div><Link href="/contracts" className="rounded-lg border border-brand/20 bg-surface px-3 py-1.5 text-[11px] font-semibold text-brand-ink hover:bg-brand-soft">Сбросить</Link></div>}
 
@@ -167,12 +158,15 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 					<input name="q" defaultValue={q} placeholder="Номер, шифр или контрагент" className="h-[38px] w-full rounded-[10px] border border-line bg-surface pl-9 pr-3 text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-brand/20" />
 				</form>
 				<div className="inline-flex gap-1 rounded-[10px] border border-line bg-raised p-[3px]">{TABS.map((item) => <Link key={item.key} href={href({ tab: item.key })} className={`rounded-[7px] px-3 py-1.5 text-[12px] font-semibold ${item.key === tabKey ? 'brand-gradient text-white' : 'text-muted hover:text-ink'}`}>{item.label}</Link>)}</div>
-				<form method="get" className="flex items-center gap-2">
+				<details className="relative">
+					<summary className="flex h-[38px] cursor-pointer list-none items-center rounded-[10px] border border-line bg-surface px-3 text-[12px] font-semibold text-muted hover:bg-raised">Фильтры</summary>
+					<form method="get" className="absolute right-0 z-20 mt-2 flex min-w-[280px] items-center gap-2 rounded-[var(--radius-control)] border border-line bg-surface p-2 shadow-[var(--shadow-float)]">
 					{q && <input type="hidden" name="q" value={q} />}{tabKey !== 'all' && <input type="hidden" name="tab" value={tabKey} />}{selectedYear && <input type="hidden" name="year" value={selectedYear} />}{selectedKinds.length > 0 && <input type="hidden" name="kind" value={selectedKinds.join(',')} />}{selectedSections.length > 0 && <input type="hidden" name="section" value={selectedSections.join(',')} />}{selectedDepartment && <input type="hidden" name="department" value={selectedDepartment} />}{focus && <input type="hidden" name="focus" value={focus} />}
 					<FilterSelect name="stage" defaultValue={selectedStage ?? ''} placeholder="Все стадии работ" options={[{ value: '', label: 'Все стадии работ' }, ...WORKFLOW_STAGES.map((stage) => ({ value: stage, label: WORKFLOW_STAGE_LABEL[stage] }))]} />
 					<button className="h-[38px] rounded-[10px] border border-line bg-surface px-3 text-[12px] font-semibold hover:bg-raised">Применить</button>
-				</form>
-				{(selectedYear || selectedKinds.length || selectedSections.length || selectedStage || q) && <Link href={href({ year: null, kind: null, section: null, keepFolder: false })} className="text-[12px] font-medium text-brand-ink hover:underline">Сбросить фильтры</Link>}
+					</form>
+				</details>
+				{(selectedYear || selectedKinds.length || selectedSections.length || selectedStage || q) && <Link href={href({ year: null, kind: null, section: null, keepFolder: false })} className="text-[12px] font-medium text-brand-ink hover:underline">Сбросить</Link>}
 			</div>
 
 			<div className="grid items-start gap-[14px] 2xl:grid-cols-[220px_minmax(0,1fr)]">
@@ -191,14 +185,14 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 					</div>
 					{visibleContracts.length === 0 ? <RichEmptyState title={user.role === 'VIEWER' ? 'Нет назначенных договоров' : 'В этом разделе договоров нет'} description={user.role === 'VIEWER' ? 'Обратитесь к менеджеру или администратору, чтобы получить доступ к договору.' : 'Измените фильтры или создайте новый договор.'} icon={Folder} primaryAction={canWrite(user) ? <Link href="/contracts/new" className="brand-gradient rounded-lg px-3 py-2 text-[12px] font-semibold text-white">Создать договор</Link> : undefined} secondaryAction={<Link href="/contracts" className="rounded-lg border border-line px-3 py-2 text-[12px] font-semibold text-ink hover:bg-raised">Сбросить фильтры</Link>} /> : <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					<div className="min-w-[960px]"><div className="grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] gap-3 border-b border-line-soft bg-raised px-4 py-2 text-[9.5px] font-bold uppercase tracking-wide text-faint"><span>Номер / шифр</span><span>Тип</span><span>Контрагент</span><span>Объект</span><span>Дата</span><span>Этап работ</span><span>Файлы</span></div>
-						{visibleContracts.map((contract) => <Link key={contract.id} href={`/contracts/${contract.id}`} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-[11.5px] last:border-0">
-							<span className="min-w-0"><span className="block truncate text-[12.5px] font-bold group-hover:text-brand-ink">№ {contract.number}</span><span className="mt-0.5 block truncate text-[10.5px] text-faint">{contract.cipher ?? 'Без шифра'}</span><ProjectBadges sections={contract.projectSections} /></span>
+						{visibleContracts.map((contract) => { const stageComment = contract.stageComments.find((item) => item.stage === contract.workflowStage)?.text ?? contract.stageHistory.find((item) => item.toStage === contract.workflowStage && item.comment)?.comment; return <div key={contract.id} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-[11.5px] last:border-0">
+							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate text-[12.5px] font-bold group-hover:text-brand-ink">№ {contract.number}</span><span className="mt-0.5 block truncate text-[10.5px] text-faint">{contract.cipher ?? 'Без шифра'}</span><ProjectBadges sections={contract.projectSections} /></Link>
 							<span><span className="rounded-md bg-raised px-2 py-1 text-[10.5px] font-bold">{KIND_LABELS[contract.kind]}</span></span>
-							<span className="min-w-0"><span className="block truncate font-semibold">{contract.contractor.name}</span><span className="block truncate text-[10px] text-faint">ИНН {contract.contractor.inn}</span></span>
-							<span className="min-w-0"><span className="block truncate">{contract.objectAddress ?? 'Адрес не указан'}</span>{canSeeAmounts && <span className="mt-0.5 block truncate text-[10px] font-semibold text-muted">{formatMoney(contract.amount, contract.currency)}</span>}</span>
-							<span className="tnum text-muted">{formatDate(contract.date)}</span><span><WorkflowChip stage={contract.workflowStage} /><WorkflowTraffic stage={contract.workflowStage} /><span className="mt-1 block text-[9.5px] text-faint">{contract.status === 'ARCHIVED' ? 'В архиве' : contract.status === 'CLOSED' ? 'Договор закрыт' : 'Рабочий договор'}</span></span>
+							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate font-semibold">{contract.contractor.name}</span><span className="block truncate text-[10px] text-faint">ИНН {contract.contractor.inn}</span></Link>
+							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate">{contract.objectAddress ?? 'Адрес не указан'}</span>{canSeeAmounts && <span className="mt-0.5 block truncate text-[10px] font-semibold text-muted">{formatMoney(contract.amount, contract.currency)}</span>}</Link>
+							<Link href={`/contracts/${contract.id}`} className="tnum text-muted">{formatDate(contract.date)}</Link><span><WorkflowChip stage={contract.workflowStage} /><StageCommentEditor contractId={contract.id} stages={COMMENT_STAGES} comments={Object.fromEntries(contract.stageComments.map((item) => [item.stage, item.text]))} canWrite={canWrite(user)} />{stageComment ? <span title={stageComment} className="mt-1 block truncate text-[9.5px] text-muted">{stageComment}</span> : <span className="mt-1 block text-[9.5px] text-faint">Нажмите на этап для комментария</span>}</span>
 							<span className="flex items-center gap-1.5 text-muted"><span className="text-faint"><DocumentsIcon /></span><span className="font-semibold">{contract._count.documents}</span></span>
-						</Link>)}</div>
+						</div> })}</div>
 					</div>}
 				</Card>
 			</div>

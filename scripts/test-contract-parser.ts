@@ -37,5 +37,6 @@ assert.equal(legacyWordStyle.cipher, 'ИЗЛК Рус КБ-300.18.36.64.60')
 
 assert.equal(classifyDocumentPath('Заказчик/Исходные данные/ГПЗУ участка.pdf'), 'SOURCE_DATA')
 assert.equal(classifyDocumentPath('ИГИ/инженерно-геологические изыскания.pdf'), 'SOURCE_DATA')
+assert.equal(classifyDocumentPath('Заказчик/Геоподоснова участка.pdf'), 'SOURCE_DATA')
 
 console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%`)

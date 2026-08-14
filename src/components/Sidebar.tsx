@@ -16,6 +16,8 @@ const primary: Item[] = [
 
 const work: Item[] = [
 	{ href: '/projects', label: 'Проектирование и графики', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2', nested: true },
+	{ href: '/production-schedule', label: 'График производства', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2', nested: true },
+	{ href: '/departments/production', label: 'Рабочие зоны и чаты', icon: 'M4 5h16v11H8l-4 4V5zM8 10h.01M12 10h.01M16 10h.01', nested: true },
 	{ href: '/tasks', label: 'Задачи', icon: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8 12l2.5 2.5L16 9', nested: true },
 	{ href: '/sites', label: 'Площадки', icon: 'M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11zm0-8.4a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2z', nested: true },
 	{ href: '/executive', label: 'Исполнительная документация', icon: 'M7 3h7l4 4v14H7zM14 3v4h4M10 13h5M10 17h5', nested: true },

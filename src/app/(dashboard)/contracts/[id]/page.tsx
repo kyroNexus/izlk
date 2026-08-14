@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { canSeeAmounts as canSeeAmountsFor, canWrite, contractScope, isAdmin, requireUser } from '@/lib/access'
 import Topbar from '@/components/Topbar'
+import ContractSectionNav from '@/components/ContractSectionNav'
+import ContractHierarchy, { type ContractHierarchyNode } from '@/components/ContractHierarchy'
+import ChatPanel from '@/components/ChatPanel'
 import CopyValue, { CopyContractorDetails } from '@/components/CopyValue'
 import { Card, CardHeader, Chip, EmptyState, ExecStatusChip, FileIcon, ProgressBar, StatusChip } from '@/components/ui'
 import {
@@ -75,13 +78,15 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		include: {
     contractor: true,
     manager: { select: { name: true } },
-    agreements: { orderBy: { date: 'asc' }, include: { estimates: true } },
+		estimates: { where: { deletedAt: null }, orderBy: { date: 'asc' } },
+    agreements: { where: { deletedAt: null }, orderBy: { date: 'asc' }, include: { estimates: { where: { deletedAt: null } } } },
+			invoices: { where: { deletedAt: null }, orderBy: { date: 'asc' } },
     documents: { where: { deletedAt: null }, orderBy: { signedAt: 'desc' } },
     sites: { include: { events: { orderBy: { occurredAt: 'asc' } }, works: { select: { direction: true, crewCost: true, equipmentCost: true, materialCost: true, otherCost: true } } } },
     executiveDocs: { orderBy: { name: 'asc' } },
 			projectSections: { orderBy: { code: 'asc' }, include: { responsible: { select: { name: true } }, documents: { where: { deletedAt: null, kind: { in: ['PROJECT_PDF', 'PROJECT_DWG'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, fileName: true, kind: true } } } },
     tasks: { where: { deletedAt: null, status: { notIn: ['DONE', 'CANCELLED'] } }, orderBy: [{ dueDate: 'asc' }, { priority: 'desc' }], include: { assignee: { select: { name: true } } }, take: 5 },
-			stageHistory: { orderBy: { createdAt: 'desc' }, include: { changedBy: { select: { name: true } } }, take: 12 },
+			stageHistory: { orderBy: { createdAt: 'desc' }, include: { changedBy: { select: { name: true } } } },
 },
 	})
 
@@ -205,6 +210,27 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		take: 30,
 	})
 	const documentNameById = new Map(contract.documents.map((document) => [document.id, document.fileName]))
+	const documentNodes = (documents: typeof contract.documents) => documents.map((document) => ({
+		id: `document-${document.id}`,
+		label: document.fileName,
+		date: formatDate(document.signedAt ?? document.createdAt),
+		detail: `${DOCUMENT_KIND_LABELS[document.kind]} · ${document.state === 'SIGNED' ? 'подписан' : document.state === 'ARCHIVE' ? 'в архиве' : 'актуальная версия'}`,
+	}))
+	const hierarchyTasks = await prisma.task.findMany({
+		where: { contractId: contract.id, deletedAt: null },
+		orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
+		include: { assignee: { select: { name: true } } },
+	})
+	const hierarchyNodes: ContractHierarchyNode[] = [
+		...contract.stageHistory.map((entry) => ({ id: `stage-${entry.id}`, label: WORKFLOW_STAGE_LABEL[entry.toStage], date: formatDate(entry.createdAt), detail: `${entry.isAutomatic ? 'Автоматический переход' : entry.changedBy?.name ?? 'Переход этапа'}${entry.comment ? ` · ${entry.comment}` : ''}` })),
+		...contract.agreements.map((agreement) => ({ id: `agreement-${agreement.id}`, label: agreementTitle(agreement.number), date: formatDate(agreement.date), children: [...agreement.estimates.map((estimate) => ({ id: `estimate-${estimate.id}`, label: estimateTitle(estimate.number), date: formatDate(estimate.date), detail: canSeeAmounts && estimate.amount != null ? formatMoney(estimate.amount) : undefined })), ...documentNodes(contract.documents.filter((document) => document.agreementId === agreement.id))] })),
+		...contract.estimates.filter((estimate) => !estimate.agreementId && !estimate.deletedAt).map((estimate) => ({ id: `estimate-${estimate.id}`, label: estimateTitle(estimate.number), date: formatDate(estimate.date), detail: canSeeAmounts && estimate.amount != null ? formatMoney(estimate.amount) : undefined, children: documentNodes(contract.documents.filter((document) => document.estimateId === estimate.id)) })),
+		...contract.invoices.map((invoice) => ({ id: `invoice-${invoice.id}`, label: `Счёт №${invoice.number}`, date: formatDate(invoice.date), detail: canSeeAmounts ? formatMoney(invoice.amount, contract.currency) : undefined, children: documentNodes(contract.documents.filter((document) => document.invoiceId === invoice.id)) })),
+		...contract.projectSections.map((section) => ({ id: `project-${section.id}`, label: `Раздел ${PROJECT_SECTION_LABEL[section.code] ?? section.code}`, date: section.dateTo ? formatDate(section.dateTo) : section.deadline ? formatDate(section.deadline) : undefined, detail: `${section.responsible?.name ?? 'Ответственный не назначен'} · ${section.comment ?? 'без комментария'}`, children: documentNodes(contract.documents.filter((document) => document.projectSectionId === section.id)) })),
+		...contract.executiveDocs.map((entry) => ({ id: `executive-${entry.id}`, label: entry.name, date: formatDate(entry.createdAt), detail: entry.status === 'READY' ? 'Готово' : entry.status === 'IN_PROGRESS' ? 'В работе' : 'Не готово', children: documentNodes(contract.documents.filter((document) => document.executiveDocId === entry.id)) })),
+		...hierarchyTasks.map((task) => ({ id: `task-${task.id}`, label: task.title, date: task.dueDate ? formatDate(task.dueDate) : undefined, detail: `${task.assignee.name} · ${task.status === 'DONE' ? 'готово' : task.status === 'IN_PROGRESS' ? 'в работе' : 'не начато'}` })),
+		...documentNodes(contract.documents.filter((document) => !document.agreementId && !document.estimateId && !document.invoiceId && !document.projectSectionId && !document.executiveDocId)),
+	]
 
 	const FOLDERS = [
 		{ key: 'legal', label: 'Договоры' }, { key: 'estimate', label: 'Сметы' }, { key: 'source-data', label: 'Исходные данные' }, { key: 'KM', label: 'КМ' }, { key: 'KZH', label: 'КЖ' }, { key: 'AR', label: 'АР' }, { key: 'executive', label: 'Исполнительная' }, { key: 'other', label: 'Прочее' },
@@ -234,6 +260,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		{ label: 'ИГИ', hint: 'инженерно-геологические изыскания', match: /(?:\bиги\b|инженерн(?:о|ые)[ -]?геолог)/i },
 		{ label: 'ГПЗУ', hint: 'градостроительный план', match: /(?:\bгпзу\b|градостроительн)/i },
 		{ label: 'Топосъёмка', hint: 'топографическая съёмка', match: /(?:топос[ъь]ем|топограф)/i },
+		{ label: 'Геоподоснова', hint: 'геодезическая или топографическая основа', match: /(?:геоподоснов|геодезическ(?:ая|ий)?\s+основ)/i },
 		{ label: 'Стеснённые условия', hint: 'сведения об ограничениях на площадке', match: /стеснен/i },
 	].map((item) => ({ ...item, document: sourceDataDocuments.find((document) => item.match.test(document.fileName)) }))
 	// Защищаем страницу от старых записей/Prisma Client, где новые связи ещё не возвращаются.
@@ -323,6 +350,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 
 					{canEdit && (
 						<div className="flex flex-wrap gap-[9px] sm:ml-auto sm:justify-end">
+							<ContractHierarchy nodes={hierarchyNodes} />
 							<a href={`/api/contracts/${contract.id}/download`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">Скачать всё</a>
 							<Link
 								href={`/contracts/${contract.id}/edit`}
@@ -364,33 +392,28 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							</div>
 						</Card>
 
-						<nav aria-label="Разделы договора" className="contract-section-nav sticky top-[72px] z-10 flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-line bg-surface/95 p-2 shadow-[0_8px_22px_rgba(25,22,45,.07)] backdrop-blur-xl">
-							<a href="#workflow" className="whitespace-nowrap rounded-[8px] bg-brand-soft px-3 py-2 text-[11px] font-bold text-brand-ink transition hover:bg-brand hover:text-white">Ход договора</a>
-							<a href="#documents" className="contract-section-link whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">Документы</a>
-							<a href="#project" className="contract-section-link whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">Проект</a>
-							{site && <a href="#site" className="contract-section-link whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">Площадка</a>}
-							{needsExecutive && <a href="#executive" className="contract-section-link whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">Исполнительная</a>}
-							<a href="#tasks" className="whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">Задачи</a>
-							<a href="#history" className="contract-section-link whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] font-semibold text-muted transition hover:bg-raised hover:text-ink">История</a>
-						</nav>
+						<ContractSectionNav sections={[
+							{ id: 'workflow', label: 'Ход договора' },
+							{ id: 'agreements', label: 'Соглашения' },
+							{ id: 'documents', label: 'Документы' },
+							{ id: 'project', label: 'Проект' },
+							...(site ? [{ id: 'site', label: 'Площадка' }] : []),
+							...(needsExecutive ? [{ id: 'executive', label: 'Исполнительная' }] : []),
+							{ id: 'tasks', label: 'Задачи' },
+							{ id: 'history', label: 'История' },
+						]} />
 
 						{/* Дополнительные соглашения */}
 						<Card id="workflow">
 							<CardHeader title="Ход договора" extra={<Chip tone={contract.workflowStage === 'CLOSED' ? 'ok' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'}>{WORKFLOW_STAGE_LABEL[contract.workflowStage]}</Chip>} />
 							<div className="p-[18px]">
-								<div className="grid gap-[9px] rounded-[11px] bg-raised/60 p-[12px] text-[12px] sm:grid-cols-3">
-									<div><div className="text-faint">ПР1</div><div className="mt-1 font-semibold">{contract.pr1SignedAt ? formatDate(contract.pr1SignedAt) : 'Не подтверждено'}</div></div>
-									<div><div className="text-faint">Рабочих дней</div><div className="mt-1 font-semibold">{contract.workingDays ?? '—'}</div></div>
-									<div><div className="text-faint">Общий срок</div><div className={`mt-1 font-semibold ${deadlineInfo.tone === 'danger' ? 'text-danger' : deadlineInfo.tone === 'warn' ? 'text-warn' : ''}`}>{contract.deadline ? `${formatDate(contract.deadline)} · ${deadlineInfo.label}` : 'Не рассчитан'}</div></div>
-								</div>
-
 								{!contract.pr1ConfirmedAt && (latestPr1 ? (
-									<form action={confirmPr1} className="mt-[12px] rounded-[11px] border border-brand/25 bg-brand/5 p-[12px]">
+									<form action={confirmPr1} className="rounded-[11px] border border-brand/25 bg-brand/5 p-[12px]">
 										<div className="text-[12.5px] font-bold">Подтвердить подписанное Приложение №1</div>
 										<div className="mt-1 text-[11.5px] leading-5 text-muted">Система создаст нужные разделы, задачи и площадку для СМР.</div>
 										<div className="mt-3 grid gap-[8px] sm:grid-cols-[1fr_140px_auto]"><input name="signedAt" type="date" defaultValue={(latestPr1.signedAt ?? new Date()).toISOString().slice(0, 10)} className="h-[35px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><input name="workingDays" type="number" min="1" max="730" defaultValue={contract.workingDays ?? ''} placeholder="Рабочих дней" className="h-[35px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><button className="brand-gradient rounded-[8px] px-[12px] text-[12px] font-semibold text-white">Подтвердить ПР1</button></div>
 									</form>
-								) : <div className="mt-[12px] flex flex-wrap items-center justify-between gap-[10px] rounded-[11px] border border-warn/25 bg-warn-bg p-[12px]"><div><div className="text-[12.5px] font-bold">Нужен подписанный файл ПР1</div><div className="mt-1 text-[11.5px] text-muted">Откройте отдельную зону, перетащите файл и подтвердите дату.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?pr1=1`} className="rounded-[8px] border border-line bg-surface px-[11px] py-[7px] text-[11.5px] font-semibold">Загрузить ПР1</Link>}</div>)}
+								) : <div className="flex flex-wrap items-center justify-between gap-[10px] rounded-[11px] border border-warn/25 bg-warn-bg p-[12px]"><div><div className="text-[12.5px] font-bold">Нужен подписанный файл ПР1</div><div className="mt-1 text-[11.5px] text-muted">Откройте отдельную зону, перетащите файл и подтвердите дату.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?pr1=1`} className="rounded-[8px] border border-line bg-surface px-[11px] py-[7px] text-[11.5px] font-semibold">Загрузить ПР1</Link>}</div>)}
 
 								{isAdmin(user) && contract.pr1ConfirmedAt && <form action={revokePr1} className="mt-[12px] flex flex-wrap items-center gap-[8px] border-t border-line-soft pt-[12px]"><span className="text-[11.5px] text-faint">Админ: отмена ошибочного ПР1</span><input name="reason" required placeholder="Причина отмены" className="h-[34px] min-w-[180px] flex-1 rounded-[8px] border border-danger/25 bg-surface px-[9px] text-[12px]" /><button className="h-[34px] rounded-[8px] border border-danger/30 bg-danger/10 px-[11px] text-[12px] font-semibold text-danger">Отменить ПР1</button></form>}
 								{canEdit && nextWorkflowStages.length > 0 && <form action={moveWorkflowStage} className="mt-[12px] flex flex-wrap items-center gap-[8px] border-t border-line-soft pt-[12px]"><span className="text-[11.5px] text-muted">Следующий шаг:</span><select name="toStage" className="h-[34px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]">{nextWorkflowStages.map((stage) => <option key={stage} value={stage}>{WORKFLOW_STAGE_LABEL[stage]}</option>)}</select><input name="comment" placeholder="Комментарий (необязательно)" className="h-[34px] min-w-[180px] flex-1 rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><button className="h-[34px] rounded-[8px] border border-brand/30 bg-brand/10 px-[11px] text-[12px] font-semibold text-brand-ink">Перевести</button></form>}
@@ -696,6 +719,8 @@ export default async function ContractPage({ params, searchParams }: { params: {
 								</div>
 							</Card>
 						)}
+
+						<ChatPanel title="Чат по договору" endpoint={`/api/chats/contract/${contract.id}`} />
 
 						<Card>
 							<CardHeader title="Быстрые действия" />

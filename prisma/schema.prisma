@@ -56,6 +56,7 @@ model User {
   notifications     Notification[]
   stageChanges      ContractStageHistory[] @relation("StageChangedBy")
   pr1ConfirmedContracts Contract[] @relation("ContractPr1ConfirmedBy")
+  chatMessages      ChatMessage[]
 
   @@index([email])
   @@index([role])
@@ -209,6 +210,9 @@ model Contract {
   access          ContractAccess[]
   tasks           Task[]
   stageHistory    ContractStageHistory[]
+  stageComments   ContractStageComment[]
+  chatThreads     ChatThread[]
+  productionPlan  ProductionPlan?
 
   @@index([contractorId])
   @@index([managerId])
@@ -233,6 +237,94 @@ model ContractStageHistory {
 
   @@index([contractId, createdAt])
   @@index([changedById])
+}
+
+model ContractStageComment {
+  id         String                @id @default(cuid())
+  contractId String
+  contract   Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  stage      ContractWorkflowStage
+  text       String                @db.VarChar(1000)
+  updatedById String?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([contractId, stage])
+  @@index([contractId])
+}
+
+enum ChatScope {
+  DEPARTMENT
+  CONTRACT
+}
+
+model ChatThread {
+  id         String    @id @default(cuid())
+  key        String    @unique
+  scope      ChatScope
+  department String?
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  messages   ChatMessage[]
+
+  @@index([scope, department])
+  @@index([contractId])
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User       @relation(fields: [authorId], references: [id])
+  text      String     @db.VarChar(4000)
+  createdAt DateTime   @default(now())
+  deletedAt DateTime?
+
+  @@index([threadId, createdAt])
+  @@index([authorId])
+}
+
+enum ProductionPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+/// Производственный паспорт договора. Технические характеристики временно
+/// вносятся вручную, пока проект не отдаёт их в CRM структурированно.
+model ProductionPlan {
+  id                    String             @id @default(cuid())
+  contractId            String             @unique
+  contract              Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  buildingDimensions    String?
+  requestNumber         String?
+  frameMaterial         String?
+  columnsSpec           String?
+  roofSpec              String?
+  ral                   String?
+  frameWeight           Decimal?           @db.Decimal(15, 2)
+  reinforcedConcreteWeight Decimal?         @db.Decimal(15, 2)
+  galvanizedWeight      Decimal?           @db.Decimal(15, 2)
+  blackMetalWeight      Decimal?           @db.Decimal(15, 2)
+  locationOverride      String?
+  note                  String?
+  priority              ProductionPriority @default(NORMAL)
+  pipeCutAt             DateTime?
+  assemblyWeldingAt     DateTime?
+  laserCutAt            DateTime?
+  rollingAt             DateTime?
+  paintingAt            DateTime?
+  columnsPouringAt      DateTime?
+  plannedShipmentAt     DateTime?
+  actualShipmentAt      DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([priority, plannedShipmentAt])
 }
 
 enum TaskStatus {

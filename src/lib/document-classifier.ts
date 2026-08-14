@@ -33,7 +33,7 @@ export function detectProjectSectionCode(filePath: string): SectionCode | null {
 export function classifyDocumentPath(filePath: string): DocumentKind {
 	const lower = normalizeDocumentPath(filePath)
 	const ext = path.extname(lower)
-	if (/(?:\bиги\b|инженерн(?:о|ые)[ -]?геолог|\bгпзу\b|градостроительн|топос[ъь]ем|топограф|стеснен|исходн(?:ые)?[ -]?данн)/u.test(lower)) return 'SOURCE_DATA'
+	if (/(?:\bиги\b|инженерн(?:о|ые)[ -]?геолог|\bгпзу\b|градостроительн|топос[ъь]ем|топограф|геоподоснов|геодезическ(?:ая|ий)?\s+основ|стеснен|исходн(?:ые)?[ -]?данн)/u.test(lower)) return 'SOURCE_DATA'
 	if (/(смет|локальн.*расч[ее]т)/u.test(lower)) return 'ESTIMATE'
 	if (/(доп\.?\s*соглаш|дс\s*[№_\d])/u.test(lower)) return 'AGREEMENT'
 	if (/(счет|счёт)(?!.*схем)/u.test(lower)) return 'INVOICE'

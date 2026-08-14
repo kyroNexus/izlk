@@ -49,8 +49,8 @@ type DesignProject = {
 }
 
 export default async function ProjectsPage({ searchParams }: { searchParams: PageParams }) {
+	if (searchParams.view === 'production') redirect('/production-schedule')
 	const user = await requireUser()
-	const view = searchParams.view === 'production' ? 'production' : 'design'
 	const section = searchParams.section === 'KZH' || searchParams.section === 'AR' ? searchParams.section : 'KM'
 	const query = searchParams.q?.trim().slice(0, 80) ?? ''
 
@@ -300,18 +300,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 		<div className="px-[26px] py-[22px]">
 			<div className="work-hero mb-[16px] flex flex-wrap items-end justify-between gap-[12px] px-5 py-4">
 				<div>
-					<div className="mb-2 inline-flex rounded-full border border-brand/20 bg-brand/5 p-1">
-						<Link href="/projects" className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${view === 'design' ? 'brand-gradient text-white shadow-sm' : 'text-muted hover:bg-surface'}`}>Проектирование</Link>
-						<Link href="/projects?view=production" className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${view === 'production' ? 'brand-gradient text-white shadow-sm' : 'text-muted hover:bg-surface'}`}>Производство</Link>
-					</div>
-					<h1 className="text-[26px] font-bold">{view === 'production' ? 'Очередь производства' : 'Очередь проектирования'}</h1>
-					<p className="mt-[5px] text-[13px] text-muted">{view === 'production' ? 'В буфер попадают договоры с готовым итоговым разделом КМ' : 'Прогноз по рабочим дням, исполнителям и дедлайнам'}</p>
+					<h1 className="text-[26px] font-bold">Очередь проектирования</h1>
+					<p className="mt-[5px] text-[13px] text-muted">Прогноз по рабочим дням, исполнителям и дедлайнам</p>
 				</div>
-				{canWrite(user) && view === 'design' && <Link href="/projects/new" className="brand-gradient inline-flex h-[40px] items-center rounded-[10px] px-[17px] text-[13.5px] font-semibold text-white">+ Добавить проект</Link>}
+				{canWrite(user) && <Link href="/projects/new" className="brand-gradient inline-flex h-[40px] items-center rounded-[10px] px-[17px] text-[13.5px] font-semibold text-white">+ Добавить проект</Link>}
 			</div>
 			<ProjectFlowOverview sections={graphSummary} readyForProduction={waitingProduction.length} blocked={blockedBeforeProduction.length} inProduction={inProduction.length} />
 
-			{view === 'production' ? <ProductionQueue contracts={productionBuffer} blocked={blockedBeforeProduction} waitingCount={waitingProduction.length} activeCount={inProduction.length} canWrite={canWrite(user)} action={updateProduction} /> : <DesignQueue
+			<DesignQueue
 				section={section}
 				projects={projects}
 				designers={designers}
@@ -324,7 +320,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 				userRole={user.role}
 				canWrite={canWrite(user)}
 				action={updateProject}
-			/>}
+			/>
 		</div>
 	</>
 }
@@ -338,7 +334,7 @@ function ProjectFlowOverview({ sections, readyForProduction, blocked, inProducti
 	return <Card className="project-flow-overview mb-[14px] overflow-hidden border-brand/15 bg-gradient-to-br from-brand-soft/55 via-surface to-surface shadow-[0_14px_34px_rgba(25,22,45,.055)]">
 		<div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-[16px] py-[13px]">
 			<div><h2 className="text-[14px] font-bold">Карта потока работ</h2><p className="mt-0.5 text-[12px] text-muted">Нажмите на раздел — откроется его живая очередь</p></div>
-			<Link href="/projects?view=production" className="rounded-full border border-brand/25 bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink transition hover:-translate-y-px hover:border-brand/45">Буфер цеха →</Link>
+			<Link href="/production-schedule" className="rounded-full border border-brand/25 bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-brand-ink transition hover:-translate-y-px hover:border-brand/45">График производства →</Link>
 		</div>
 		<div className="grid gap-3 p-[14px] lg:grid-cols-[minmax(0,1fr)_minmax(250px,.8fr)]">
 			<div className="grid gap-2 sm:grid-cols-3">{sections.map((item) => {
@@ -350,7 +346,7 @@ function ProjectFlowOverview({ sections, readyForProduction, blocked, inProducti
 					<div className="mt-2 grid grid-cols-3 gap-1 text-[10.5px]"><span className="text-brand">● {item.working} раб.</span><span className="text-warn">● {item.paused} пауза</span><span className="text-ok">● {item.ready} готово</span></div>
 				</Link>
 			})}</div>
-			<div className="project-production-bridge rounded-[12px] border border-line bg-surface/90 p-3"><div className="flex items-center justify-between"><b className="text-[13px]">КМ → цех</b><span className="text-[11px] text-muted">передача</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-center"><Link href="/projects?view=production" className="rounded-[9px] bg-ok-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-ok">{readyForProduction}</b><span className="text-[10px] text-muted">готово</span></Link><Link href="/projects?view=production" className="rounded-[9px] bg-warn-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-warn">{blocked}</b><span className="text-[10px] text-muted">нужен PDF</span></Link><Link href="/projects?view=production" className="rounded-[9px] bg-brand-soft px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-brand">{inProduction}</b><span className="text-[10px] text-muted">в цехе</span></Link></div></div>
+			<div className="project-production-bridge rounded-[12px] border border-line bg-surface/90 p-3"><div className="flex items-center justify-between"><b className="text-[13px]">КМ → цех</b><span className="text-[11px] text-muted">передача</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-center"><Link href="/production-schedule" className="rounded-[9px] bg-ok-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-ok">{readyForProduction}</b><span className="text-[10px] text-muted">готово</span></Link><Link href="/production-schedule" className="rounded-[9px] bg-warn-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-warn">{blocked}</b><span className="text-[10px] text-muted">нужен PDF</span></Link><Link href="/production-schedule" className="rounded-[9px] bg-brand-soft px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-brand">{inProduction}</b><span className="text-[10px] text-muted">в цехе</span></Link></div></div>
 		</div>
 	</Card>
 }
