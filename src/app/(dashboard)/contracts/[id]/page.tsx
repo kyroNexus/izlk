@@ -371,7 +371,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							<div className="flex items-center gap-[3px]" role="img" aria-label={`\u0421\u0442\u0430\u0434\u0438\u044f ${workflowStageIndex + 1} \u0438\u0437 ${WORKFLOW_STAGE_ORDER.length}: ${WORKFLOW_STAGE_LABEL[contract.workflowStage]}`}>
 								{WORKFLOW_STAGE_ORDER.map((stage, index) => <span key={stage} title={WORKFLOW_STAGE_LABEL[stage]} className={`h-[6px] flex-1 rounded-full transition-colors ${index < workflowStageIndex ? 'bg-brand/55' : index === workflowStageIndex ? 'bg-brand ring-2 ring-brand/25' : 'bg-line'}`} />)}
 							</div>
-							<div className="mt-[6px] text-[11px] text-faint">\u042d\u0442\u0430\u043f {workflowStageIndex + 1} \u0438\u0437 {WORKFLOW_STAGE_ORDER.length}</div>
+							<div className="mt-[6px] text-[11px] text-faint">{`\u042d\u0442\u0430\u043f ${workflowStageIndex + 1} \u0438\u0437 ${WORKFLOW_STAGE_ORDER.length}`}</div>
 						</div>
 					</div>
 
