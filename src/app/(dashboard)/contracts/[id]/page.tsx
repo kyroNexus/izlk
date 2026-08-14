@@ -18,9 +18,9 @@ import {
 	initials,
 	plural,
 } from '@/lib/format'
-import type { ContractWorkflowStage, DocumentKind, DocumentState, SiteStatus } from '@prisma/client'
+import type { ContractWorkflowStage, DocumentKind, DocumentState, SectionCode, SiteStatus } from '@prisma/client'
 import { writeAudit } from '@/lib/audit'
-import { confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, transitionContractStage, WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
+import { addMissingProjectSection, confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, sectionsForKind, transitionContractStage, WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
 import { getDeadlineInfo } from '@/lib/deadline'
 
 
@@ -184,6 +184,18 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		redirect(`/contracts/${params.id}#workflow`)
 	}
 
+	async function addProjectSection(formData: FormData) {
+		'use server'
+		const acting = await requireUser()
+		if (!canWrite(acting)) redirect(`/contracts/${params.id}`)
+		const code = String(formData.get('code') ?? '') as SectionCode
+		const contract = await prisma.contract.findFirst({ where: { id: params.id, ...contractScope(acting) }, select: { id: true } })
+		if (!contract || !(['KM', 'KZH', 'AR', 'OTHER'] as SectionCode[]).includes(code)) redirect(`/contracts/${params.id}#project`)
+		await addMissingProjectSection({ contractId: params.id, code, actorId: acting.id })
+		await writeAudit({ userId: acting.id, action: 'CREATE', entityType: 'ProjectSection', entityId: params.id })
+		redirect(`/contracts/${params.id}#project`)
+	}
+
 	async function applyDemoStep(formData: FormData) {
 		'use server'
 		const acting = await requireUser()
@@ -232,8 +244,9 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		...documentNodes(contract.documents.filter((document) => !document.agreementId && !document.estimateId && !document.invoiceId && !document.projectSectionId && !document.executiveDocId)),
 	]
 
+	// КМ/КЖ/АР показываются только на карточке «Проект» — здесь для них отдельных папок нет.
 	const FOLDERS = [
-		{ key: 'legal', label: 'Договоры' }, { key: 'estimate', label: 'Сметы' }, { key: 'source-data', label: 'Исходные данные' }, { key: 'KM', label: 'КМ' }, { key: 'KZH', label: 'КЖ' }, { key: 'AR', label: 'АР' }, { key: 'executive', label: 'Исполнительная' }, { key: 'other', label: 'Прочее' },
+		{ key: 'legal', label: 'Договоры' }, { key: 'estimate', label: 'Сметы' }, { key: 'source-data', label: 'Исходные данные' }, { key: 'executive', label: 'Исполнительная' }, { key: 'other', label: 'Прочее' },
 	]
 	const folderFor = (document: typeof contract.documents[number]) => {
 		if (document.projectSectionId) return contract.projectSections.find((section) => section.id === document.projectSectionId)?.code ?? 'other'
@@ -243,8 +256,10 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		if (['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(document.kind)) return 'executive'
 		return 'other'
 	}
+	// Файлы КМ/КЖ/АР (PROJECT_PDF/PROJECT_DWG) видны только на карточке «Проект» — без дублирования в общем реестре.
+	const documentsForRegistry = contract.documents.filter((document) => document.kind !== 'PROJECT_PDF' && document.kind !== 'PROJECT_DWG')
 	const selectedFolder = FOLDERS.some((folder) => folder.key === searchParams.folder) ? searchParams.folder! : null
-	const shownDocuments = selectedFolder ? contract.documents.filter((document) => folderFor(document) === selectedFolder) : contract.documents
+	const shownDocuments = selectedFolder ? documentsForRegistry.filter((document) => folderFor(document) === selectedFolder) : documentsForRegistry
 	const documentSections = DOCUMENT_STATES.map((section) => {
 		const documents = shownDocuments.filter((document) => document.state === section.key)
 		const byKind = new Map<DocumentKind, typeof contract.documents>()
@@ -266,7 +281,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	// Защищаем страницу от старых записей/Prisma Client, где новые связи ещё не возвращаются.
 	const sites = contract.sites ?? []
 	const executiveDocs = contract.executiveDocs ?? []
-	const projectSections = contract.projectSections ?? []
+	// Порядок карточек «Проект» повторяет реальный ход работ: КЖ → КМ → АР.
+	const SECTION_DISPLAY_ORDER: Record<string, number> = { KZH: 0, KM: 1, AR: 2, OTHER: 3 }
+	const projectSections = (contract.projectSections ?? []).slice().sort((a, b) => (SECTION_DISPLAY_ORDER[a.code] ?? 9) - (SECTION_DISPLAY_ORDER[b.code] ?? 9))
+	// Раздел мог появиться в правилах позже, чем договору подтвердили ПР1 — даём добавить его вручную.
+	const missingProjectSections = contract.pr1ConfirmedAt ? sectionsForKind(contract.kind).filter((code) => !projectSections.some((section) => section.code === code)) : []
 	const openTasks = contract.tasks ?? []
 	const site = sites[0]
 	const siteWorks = sites.flatMap((item) => item.works ?? [])
@@ -476,11 +495,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						<Card id="documents">
 							<CardHeader
 								title={'\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b'}
-								extra={plural(contract.documents.length, '\u0444\u0430\u0439\u043b', '\u0444\u0430\u0439\u043b\u0430', '\u0444\u0430\u0439\u043b\u043e\u0432')}
+								extra={plural(documentsForRegistry.length, '\u0444\u0430\u0439\u043b', '\u0444\u0430\u0439\u043b\u0430', '\u0444\u0430\u0439\u043b\u043e\u0432')}
 							/>
 							<div className="flex gap-1 overflow-x-auto border-b border-line-soft px-3 py-2.5">
-								<Link href={`/contracts/${contract.id}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${!selectedFolder ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>Все · {contract.documents.length}</Link>
-								{FOLDERS.map((folder) => { const count = contract.documents.filter((document) => folderFor(document) === folder.key).length; return <Link key={folder.key} href={`/contracts/${contract.id}?folder=${folder.key}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${selectedFolder === folder.key ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>{folder.label} · {count}</Link> })}
+								<Link href={`/contracts/${contract.id}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${!selectedFolder ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>Все · {documentsForRegistry.length}</Link>
+								{FOLDERS.map((folder) => { const count = documentsForRegistry.filter((document) => folderFor(document) === folder.key).length; return <Link key={folder.key} href={`/contracts/${contract.id}?folder=${folder.key}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${selectedFolder === folder.key ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>{folder.label} · {count}</Link> })}
 							</div>
 							{(!selectedFolder || selectedFolder === 'source-data') && <div className="mx-[11px] mt-[11px] rounded-[11px] border border-brand/15 bg-brand/5 p-3">
 								<div className="flex flex-wrap items-start gap-3"><div className="min-w-0 flex-1"><div className="text-[12.5px] font-bold">Исходные данные от заказчика</div><div className="mt-1 text-[10.5px] text-muted">ИГИ, ГПЗУ, топосъёмка и сведения о стеснённых условиях хранятся отдельно от смет и проектов.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?kind=SOURCE_DATA`} className="rounded-[8px] border border-brand/25 bg-surface px-2.5 py-1.5 text-[10.5px] font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить</Link>}</div>
@@ -491,7 +510,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 								<div className="min-w-0 flex-1"><div className="text-[12px] font-bold">{`\u041f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u043d\u043e\u0435 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u21161`}</div>{latestPr1 ? <Link href={`/documents/${latestPr1.id}`} className="mt-[2px] block truncate text-[11px] font-semibold text-brand-ink hover:underline">{latestPr1.fileName}</Link> : <div className="mt-[2px] text-[11px] text-muted">{`\u0424\u0430\u0439\u043b \u0435\u0449\u0451 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d`}</div>}</div>
 								{latestPr1 ? <a href="#workflow" className={`rounded-[8px] px-[10px] py-[6px] text-[11px] font-semibold ${contract.pr1ConfirmedAt ? 'bg-ok/10 text-ok' : 'bg-warn/15 text-warn'}`}>{contract.pr1ConfirmedAt ? `\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e` : `\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c`}</a> : canEdit && <Link href={`/contracts/${contract.id}/upload?pr1=1`} className="rounded-[8px] border border-line bg-surface px-[10px] py-[6px] text-[11px] font-semibold">{`\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u041f\u04201`}</Link>}
 							</div>
-							{contract.documents.length === 0 ? (
+							{documentsForRegistry.length === 0 ? (
 								<EmptyState text={'\u0424\u0430\u0439\u043b\u043e\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442'} />
 							) : (
 								<div className="space-y-[9px] p-[11px]">
@@ -571,11 +590,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						{/* Проект */}
 						<Card id="project">
 							<CardHeader title={'\u041f\u0440\u043e\u0435\u043a\u0442'} extra={projectSections.length || undefined} />
-							{projectSections.length === 0 ? (
+							{projectSections.length === 0 && missingProjectSections.length === 0 ? (
 								<EmptyState text={'\u0420\u0430\u0437\u0434\u0435\u043b\u044b \u043f\u0440\u043e\u0435\u043a\u0442\u0430 \u043d\u0435 \u0437\u0430\u0432\u0435\u0434\u0435\u043d\u044b'} />
 							) : (
 								<div className="grid grid-cols-1 gap-[12px] p-[18px] sm:grid-cols-2 xl:grid-cols-3">
-									{projectSections.map((s) => (
+									{projectSections.map((s) => { const sourceDocs = s.documents.filter((document) => document.kind === 'PROJECT_DWG'); const finalDocs = s.documents.filter((document) => document.kind === 'PROJECT_PDF'); return (
 										<div key={s.id} className="rounded-[12px] border border-line bg-raised/40 p-[14px]">
 											<div className="inline-flex items-center rounded-[7px] bg-brand-soft px-[9px] py-[3px] text-[11.5px] font-bold text-brand-ink">
 												{PROJECT_SECTION_LABEL[s.code] ?? s.code}
@@ -588,8 +607,29 @@ export default async function ContractPage({ params, searchParams }: { params: {
 												{' \u2013 '}
 												{s.dateTo ? formatDate(s.dateTo) : '\u2014'}
 											</div>
-											<div className="mt-3 flex flex-wrap gap-1.5">{s.documents.length ? s.documents.map((document) => <a key={document.id} href={`/api/documents/${document.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 text-[10px] font-bold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">↓ {document.kind === 'PROJECT_PDF' ? 'PDF' : 'DWG'}</a>) : <span className="text-[10px] text-warn">Итоговые PDF/DWG ещё не загружены</span>}</div>
+											<div className="mt-3">
+												<div className="micro-label">Исходники (DWG)</div>
+												<div className="mt-1 flex flex-wrap gap-1.5">
+													{sourceDocs.map((document) => <a key={document.id} href={`/api/documents/${document.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 text-[10px] font-bold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">↓ DWG</a>)}
+													{sourceDocs.length === 0 && <span className="text-[10px] text-faint">Пока не загружены</span>}
+													{canEdit && <Link href={`/contracts/${contract.id}/upload?project=${s.id}`} className="rounded-lg border border-dashed border-line px-2 py-1 text-[10px] font-semibold text-muted hover:border-brand/40 hover:text-brand-ink">+ Добавить</Link>}
+												</div>
+											</div>
+											<div className="mt-3">
+												<div className="micro-label">Итоговый файл (PDF)</div>
+												<div className="mt-1 flex flex-wrap gap-1.5">
+													{finalDocs.map((document) => <a key={document.id} href={`/api/documents/${document.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 text-[10px] font-bold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">↓ PDF</a>)}
+													{finalDocs.length === 0 && <span className="text-[10px] text-warn">Ещё не загружен</span>}
+												</div>
+											</div>
 										</div>
+									)})}
+									{canEdit && missingProjectSections.map((code) => (
+										<form key={code} action={addProjectSection} className="flex flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-line p-[14px] text-center">
+											<input type="hidden" name="code" value={code} />
+											<span className="text-[11.5px] text-muted">Раздел {PROJECT_SECTION_LABEL[code] ?? code} ещё не заведён</span>
+											<button className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить раздел {PROJECT_SECTION_LABEL[code] ?? code}</button>
+										</form>
 									))}
 								</div>
 							)}

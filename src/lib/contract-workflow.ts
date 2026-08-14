@@ -110,10 +110,10 @@ export async function trySyncWorkflowAfterDocumentUpload(input: { contractId: st
 	}
 }
 
-function sectionsForKind(kind: ContractKind): SectionCode[] {
-	if (kind === 'MK') return ['KM']
-	if (kind === 'PROJECT') return ['KM', 'KZH', 'AR']
-	return ['KM', 'KZH']
+/** АР входит в разделы проекта для любого типа договора, не только «Проектирование». */
+export function sectionsForKind(kind: ContractKind): SectionCode[] {
+	if (kind === 'MK') return ['KM', 'AR']
+	return ['KM', 'KZH', 'AR']
 }
 
 function needsSite(kind: ContractKind): boolean {
@@ -223,6 +223,27 @@ export async function confirmSignedPr1Workflow(input: ConfirmPr1Input) {
 /** Обратная совместимость для уже существующей точки загрузки. */
 export async function activateSignedPr1Workflow(contractId: string, fallbackResponsibleId: string) {
 	return confirmSignedPr1Workflow({ contractId, actorId: fallbackResponsibleId, signedAt: new Date() })
+}
+
+/**
+ * Добавляет один недостающий раздел проекта договору, у которого ПР1 уже было
+ * подтверждено раньше — до того, как этот раздел стал частью sectionsForKind().
+ * Идемпотентна: для уже существующего раздела ничего не создаёт.
+ */
+export async function addMissingProjectSection(input: { contractId: string; code: SectionCode; actorId: string }) {
+	return prisma.$transaction(async (tx) => {
+		const contract = await tx.contract.findUnique({ where: { id: input.contractId }, select: { id: true, kind: true, managerId: true, pr1ConfirmedAt: true } })
+		if (!contract || !contract.pr1ConfirmedAt || !sectionsForKind(contract.kind).includes(input.code)) return null
+		const existing = await tx.projectSection.findUnique({ where: { contractId_code: { contractId: input.contractId, code: input.code } }, select: { id: true } })
+		if (existing) return null
+		const designer = await tx.user.findFirst({ where: { role: 'DESIGNER', isActive: true, deletedAt: null }, orderBy: { name: 'asc' }, select: { id: true } })
+		const responsibleId = designer?.id ?? contract.managerId ?? input.actorId
+		const last = await tx.projectSection.aggregate({ where: { code: input.code, responsibleId, deletedAt: null }, _max: { queuePosition: true } })
+		return tx.projectSection.create({
+			data: { contractId: contract.id, code: input.code, responsibleId, durationDays: 5, deadline: addWorkingDays(new Date(), 7), queuePosition: (last._max.queuePosition ?? 0) + 10, comment: 'Добавлено вручную' },
+			select: { id: true },
+		})
+	})
 }
 
 /** Переводит договор в ожидание производства, когда все созданные проектные разделы завершены. */
