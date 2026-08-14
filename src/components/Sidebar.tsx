@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 type Item = { href: string; label: string; icon: string; nested?: boolean }
 
@@ -55,6 +55,18 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		try { window.localStorage.setItem(GROUPS_KEY, JSON.stringify(next)) } catch { /* игнорируем */ }
 		return next
 	})
+	// grid-template-rows: 0fr не схлопывается внутри overflow-y:auto контейнера (особенность браузера),
+	// поэтому высоту меряем сами и анимируем max-height — надёжно в любом контексте.
+	const groupContentRefs = useRef<Partial<Record<GroupKey, HTMLDivElement | null>>>({})
+	const [groupHeights, setGroupHeights] = useState<Partial<Record<GroupKey, number>>>({})
+	useLayoutEffect(() => {
+		const next: Partial<Record<GroupKey, number>> = {}
+		for (const key of ['work', 'resources', 'admin'] as GroupKey[]) {
+			const el = groupContentRefs.current[key]
+			if (el) next[key] = el.scrollHeight
+		}
+		setGroupHeights(next)
+	}, [])
 	const active = (href: string) => href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
 	const textMotion = `origin-left overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-out ${isOpen ? 'max-w-[188px] translate-x-0 opacity-100' : 'max-w-0 -translate-x-1 opacity-0'}`
 	const closeMobileDrawer = () => {
@@ -69,10 +81,11 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="-mx-1 flex w-[calc(100%+8px)] items-center justify-between gap-1 rounded-[8px] px-1 py-1 text-[9px] font-bold uppercase tracking-[.14em] text-faint transition-colors duration-200 hover:bg-raised/70 hover:text-brand-ink"><span>{label}</span><svg className={`h-3 w-3 flex-none transition-transform duration-300 ease-[var(--ease-ui)] ${collapsed ? '-rotate-90' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m7 10 5 5 5-5" /></svg></button> : <span className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">{label}</span>}
 			</div>
 			{groupKey ? (
-				<div className={`grid transition-[grid-template-rows] duration-300 ease-[var(--ease-ui)] ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
-					<div className={`min-h-0 overflow-hidden transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100 delay-100'}`}>
-						<div className="space-y-1 pb-0.5 pt-0.5">{entries.map(item)}</div>
-					</div>
+				<div
+					style={{ maxHeight: collapsed ? '0px' : groupHeights[groupKey] != null ? `${groupHeights[groupKey]}px` : 'none' }}
+					className="overflow-hidden transition-[max-height] duration-300 ease-[var(--ease-ui)]"
+				>
+					<div ref={(el) => { groupContentRefs.current[groupKey] = el }} className={`space-y-1 pb-0.5 pt-0.5 transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100 delay-100'}`}>{entries.map(item)}</div>
 				</div>
 			) : <div className="space-y-1">{entries.map(item)}</div>}
 		</>
