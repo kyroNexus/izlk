@@ -7,8 +7,7 @@ import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { formatDate, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { notify } from '@/lib/notifications'
-import { advanceAfterProjectSectionsReady, transitionContractStage, WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
-import { writeAudit } from '@/lib/audit'
+import { advanceAfterProjectSectionsReady } from '@/lib/contract-workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,22 +19,6 @@ const STATUS = {
 } as const
 
 type PageParams = { section?: string; view?: string; q?: string }
-
-type ProductionContract = {
-	id: string
-	number: string
-	cipher: string | null
-	workflowStage: string
-	deadline: Date | null
-	objectAddress: string | null
-	contractor: { name: string }
-	projectSections: Array<{
-		id: string
-		queueStatus: string
-		responsible: { name: string } | null
-		documents: Array<{ id: string; fileName: string; kind: string }>
-	}>
-}
 
 type DesignProject = {
 	id: string
@@ -213,41 +196,6 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 		redirect(`/projects?section=${current.code}`)
 	}
 
-	async function updateProduction(formData: FormData) {
-		'use server'
-		const actingUser = await requireUser()
-		if (!canWrite(actingUser)) redirect('/projects?view=production')
-		const contractId = String(formData.get('contractId') ?? '')
-		const action = String(formData.get('action') ?? '')
-		const contract = await prisma.contract.findFirst({
-			where: { id: contractId, ...contractScope(actingUser) },
-			select: {
-				id: true,
-				workflowStage: true,
-				projectSections: {
-					where: { deletedAt: null, code: 'KM' },
-					select: {
-						queueStatus: true,
-						documents: { where: { deletedAt: null, kind: 'PROJECT_PDF' }, select: { id: true }, take: 1 },
-					},
-				},
-			},
-		})
-		if (!contract) redirect('/projects?view=production')
-		const toStage = action === 'start' ? 'PRODUCTION' : action === 'shipment' ? 'AWAITING_SHIPMENT' : null
-		if (!toStage || (toStage === 'PRODUCTION' && contract.workflowStage !== 'WAITING_PRODUCTION') || (toStage === 'AWAITING_SHIPMENT' && contract.workflowStage !== 'PRODUCTION')) redirect('/projects?view=production')
-		const km = contract.projectSections[0]
-		if (toStage === 'PRODUCTION' && (!km || km.queueStatus !== 'DONE' || km.documents.length === 0)) redirect('/projects?view=production&error=km-final-file-required')
-		await transitionContractStage({
-			contractId,
-			toStage,
-			actorId: actingUser.id,
-			comment: toStage === 'PRODUCTION' ? 'Передано в производство из очереди КМ' : 'Производство завершено: ожидается отгрузка',
-		})
-		await writeAudit({ userId: actingUser.id, action: 'UPDATE', entityType: 'ContractWorkflowStage', entityId: contractId })
-		redirect('/projects?view=production')
-	}
-
 	const today = new Date()
 	today.setHours(0, 0, 0, 0)
 	const byDesigner = new Map<string, typeof projects>()
@@ -349,58 +297,6 @@ function ProjectFlowOverview({ sections, readyForProduction, blocked, inProducti
 			<div className="project-production-bridge rounded-[12px] border border-line bg-surface/90 p-3"><div className="flex items-center justify-between"><b className="text-[13px]">КМ → цех</b><span className="text-[11px] text-muted">передача</span></div><div className="mt-2 grid grid-cols-3 gap-2 text-center"><Link href="/production-schedule" className="rounded-[9px] bg-ok-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-ok">{readyForProduction}</b><span className="text-[10px] text-muted">готово</span></Link><Link href="/production-schedule" className="rounded-[9px] bg-warn-bg px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-warn">{blocked}</b><span className="text-[10px] text-muted">нужен PDF</span></Link><Link href="/production-schedule" className="rounded-[9px] bg-brand-soft px-2 py-2 transition hover:-translate-y-px"><b className="block text-[18px] text-brand">{inProduction}</b><span className="text-[10px] text-muted">в цехе</span></Link></div></div>
 		</div>
 	</Card>
-}
-
-function ProductionQueue({ contracts, blocked, waitingCount, activeCount, canWrite: editable, action }: {
-	contracts: ProductionContract[]
-	blocked: ProductionContract[]
-	waitingCount: number
-	activeCount: number
-	canWrite: boolean
-	action: (formData: FormData) => void | Promise<void>
-}) {
-	return <>
-		<div className="mb-[14px] grid grid-cols-2 gap-[10px] lg:grid-cols-4">
-			<StatTile label="Ожидают запуска" value={waitingCount} tone="warn" />
-			<StatTile label="В производстве" value={activeCount} tone="brand" />
-			<StatTile label="Всего в буфере" value={contracts.length} tone="neutral" />
-			<StatTile label={blocked.length ? 'Требуют PDF КМ' : 'С дедлайном'} value={blocked.length || contracts.filter((item) => item.deadline).length} tone={blocked.length ? 'danger' : 'ok'} />
-		</div>
-		<Card className="project-queue-card">
-			<CardHeader title="Производственный буфер" extra="КМ → производство → отгрузка" />
-			{contracts.length === 0 ? <EmptyState text="Буфер пока пуст. Договор появится здесь после готовности итогового PDF по КМ." /> : <div className="divide-y divide-line-soft">{contracts.map((contract) => {
-				const km = contract.projectSections[0]
-				const pdf = km?.documents.find((document) => document.kind === 'PROJECT_PDF')
-				const dwg = km?.documents.find((document) => document.kind === 'PROJECT_DWG')
-				const isWaiting = contract.workflowStage === 'WAITING_PRODUCTION'
-				return <div key={contract.id} className="grid gap-3 p-[16px] transition-colors hover:bg-raised/70 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-					<div className="min-w-0">
-						<div className="flex flex-wrap items-center gap-2"><Link href={`/contracts/${contract.id}`} className="font-bold text-brand-ink hover:underline">№ {contract.number}</Link><Chip tone={isWaiting ? 'warn' : 'brand'}>{WORKFLOW_STAGE_LABEL[contract.workflowStage as keyof typeof WORKFLOW_STAGE_LABEL]}</Chip></div>
-						<div className="mt-1 truncate text-[12px] text-muted">{contract.contractor.name}{contract.cipher ? ` · ${contract.cipher}` : ''}{contract.objectAddress ? ` · ${contract.objectAddress}` : ''}</div>
-						<div className="mt-2 flex flex-wrap gap-1.5 text-[11.5px]">
-							{pdf ? <a href={`/api/documents/${pdf.id}`} className="rounded-lg border border-ok-bd bg-ok-bg px-2 py-1 font-semibold text-ok hover:brightness-95">↓ Итоговый PDF КМ</a> : <span className="rounded-lg border border-danger-bd bg-danger-bg px-2 py-1 font-medium text-danger">PDF КМ не найден</span>}
-							{dwg && <a href={`/api/documents/${dwg.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 font-semibold text-brand-ink hover:bg-brand-soft">↓ DWG</a>}
-							<span className="rounded-lg border border-line bg-surface px-2 py-1 text-muted">Конструктор: {km?.responsible?.name ?? 'не назначен'}</span>
-						</div>
-					</div>
-					<div className="text-[11.5px] text-muted"><span className="block text-faint">Дедлайн договора</span><b className="text-ink">{formatDate(contract.deadline)}</b></div>
-					{editable && <form action={action} className="flex items-center"><input type="hidden" name="contractId" value={contract.id} /><button name="action" value={isWaiting ? 'start' : 'shipment'} className={`h-9 rounded-[9px] px-3 text-[12px] font-semibold text-white transition hover:-translate-y-px ${isWaiting ? 'bg-warn hover:brightness-95' : 'bg-brand hover:brightness-110'}`}>{isWaiting ? 'Взять в производство' : 'Передать на отгрузку'}</button></form>}
-				</div>
-			})}</div>}
-		</Card>
-		{blocked.length > 0 && <Card className="mt-[14px] overflow-hidden border-warn/30">
-			<CardHeader title="Проверка перед передачей в цех" extra={`${blocked.length} ${blocked.length === 1 ? 'договор' : 'договора'}`} />
-			<div className="divide-y divide-line-soft">{blocked.map((contract) => {
-				const km = contract.projectSections[0]
-				const hasDoneKm = km?.queueStatus === 'DONE'
-				return <div key={contract.id} className="flex flex-wrap items-center justify-between gap-3 p-[14px] transition-colors hover:bg-warn-bg/40">
-					<div className="min-w-0"><Link href={`/contracts/${contract.id}`} className="font-bold text-brand-ink hover:underline">№ {contract.number}</Link><p className="mt-0.5 text-[12px] text-muted">{contract.contractor.name} · {hasDoneKm ? 'КМ отмечен готовым, но нет итогового PDF' : 'Раздел КМ ещё не подтверждён как готовый'}</p></div>
-					<Link href={`/contracts/${contract.id}/upload${km ? `?project=${km.id}` : ''}`} className="rounded-[9px] border border-warn/35 bg-warn-bg px-3 py-2 text-[12px] font-semibold text-warn transition hover:-translate-y-px">Добавить PDF КМ</Link>
-				</div>
-			})}</div>
-		</Card>}
-		<p className="mt-3 text-[12px] text-faint">Правило буфера: в цех попадает только договор с готовым КМ и итоговым PDF. КЖ и АР остаются в проектной очереди и не блокируют производство.</p>
-	</>
 }
 
 function DesignQueue({ section, projects, designers, byDesigner, forecasts, done, atRisk, late, query, userRole, canWrite: editable, action }: {
