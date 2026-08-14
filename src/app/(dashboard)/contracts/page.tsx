@@ -33,6 +33,7 @@ const COMMENT_STAGES: Array<{ key: ContractWorkflowStage; label: string }> = [
 	{ key: 'DESIGN', label: 'Проект' },
 	{ key: 'WAITING_PRODUCTION', label: 'Производство' },
 	{ key: 'AWAITING_SHIPMENT', label: 'Отгрузка' },
+	{ key: 'SHIPPED', label: 'В пути' },
 	{ key: 'INSTALL_KM', label: 'Монтаж' },
 ]
 const SECTION_FILTERS: SectionCode[] = ['KM', 'KZH', 'AR']
@@ -40,7 +41,7 @@ const SECTION_FILTER_LABEL: Record<string, string> = { KM: 'КМ', KZH: 'КЖ', 
 const DEPARTMENT_STAGES = {
 	commercial: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'],
 	engineering: ['DESIGN'],
-	production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT'],
+	production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'],
 	construction: ['INSTALL_KZH', 'INSTALL_KM'],
 } as const satisfies Record<string, ContractWorkflowStage[]>
 const DEPARTMENT_LABEL: Record<keyof typeof DEPARTMENT_STAGES, string> = { commercial: 'Коммерческий', engineering: 'Конструкторский', production: 'Производственный', construction: 'Строительный' }

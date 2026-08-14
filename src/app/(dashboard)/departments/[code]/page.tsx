@@ -30,7 +30,7 @@ export default async function DepartmentPage({ params }: { params: { code: strin
 	// График стройотдела — не отдельная ручная таблица, а срез того, что уже есть
 	// по договору: площадка, последние отчёты монтажа КЖ/КМ, дедлайн. Ничего не дублирует.
 	const constructionContracts = params.code === 'construction' ? await prisma.contract.findMany({
-		where: { ...contractScope(user), workflowStage: { in: ['AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM'] } },
+		where: { ...contractScope(user), workflowStage: { in: ['AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM'] } },
 		select: {
 			id: true, number: true, cipher: true, deadline: true, workflowStage: true,
 			contractor: { select: { name: true } },

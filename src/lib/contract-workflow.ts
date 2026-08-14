@@ -19,6 +19,7 @@ export const WORKFLOW_STAGE_ORDER: ContractWorkflowStage[] = [
 	'WAITING_PRODUCTION',
 	'PRODUCTION',
 	'AWAITING_SHIPMENT',
+	'SHIPPED',
 	'INSTALL_KZH',
 	'INSTALL_KM',
 	'CLOSED',
@@ -33,6 +34,7 @@ export const WORKFLOW_STAGE_LABEL: Record<ContractWorkflowStage, string> = {
 	WAITING_PRODUCTION: 'Ожидает производства',
 	PRODUCTION: 'Производство',
 	AWAITING_SHIPMENT: 'Ожидание отгрузки',
+	SHIPPED: 'Отгружен',
 	INSTALL_KZH: 'Монтаж КЖ',
 	INSTALL_KM: 'Монтаж МК',
 	CLOSED: 'Закрыт',
@@ -304,14 +306,29 @@ export async function advanceAfterProjectSectionsReady(contractId: string, actor
 	return result.changed
 }
 
+/**
+ * Дата фактической отгрузки проставлена в графике производства — договор
+ * переходит из "Ожидание отгрузки" в "Отгружен". Первый монтажный отчёт
+ * (ниже) всё равно принимает и AWAITING_SHIPMENT как запасной путь — если
+ * отгрузку не отметили явно, монтаж на площадке всё равно бесспорное
+ * доказательство, что она случилась.
+ */
+export async function advanceAfterShipmentRecorded(input: { contractId: string; actorId?: string | null }) {
+	return prisma.$transaction(async (tx) => {
+		const contract = await tx.contract.findUnique({ where: { id: input.contractId }, select: { workflowStage: true } })
+		if (!contract || contract.workflowStage !== 'AWAITING_SHIPMENT') return false
+		return (await transitionInTx(tx, { contractId: input.contractId, toStage: 'SHIPPED', actorId: input.actorId ?? null, isAutomatic: true, comment: 'Проставлена фактическая дата отгрузки в графике производства' })).changed
+	})
+}
+
 /** Первый монтажный отчёт — фактическое подтверждение начала монтажа. */
 export async function advanceAfterSiteReport(input: { contractId: string; actorId: string; direction: 'KJ' | 'KM' }) {
 	return prisma.$transaction(async (tx) => {
 		const contract = await tx.contract.findUnique({ where: { id: input.contractId }, select: { workflowStage: true } })
 		if (!contract) return false
 		const next = input.direction === 'KJ'
-			? (contract.workflowStage === 'AWAITING_SHIPMENT' ? 'INSTALL_KZH' : null)
-			: (['AWAITING_SHIPMENT', 'INSTALL_KZH'].includes(contract.workflowStage) ? 'INSTALL_KM' : null)
+			? (['AWAITING_SHIPMENT', 'SHIPPED'].includes(contract.workflowStage) ? 'INSTALL_KZH' : null)
+			: (['AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH'].includes(contract.workflowStage) ? 'INSTALL_KM' : null)
 		if (!next) return false
 		return (await transitionInTx(tx, { contractId: input.contractId, toStage: next, actorId: input.actorId, isAutomatic: true, comment: `Добавлен первый дневной отчёт по монтажу ${input.direction === 'KJ' ? 'КЖ' : 'КМ'}` })).changed
 	})

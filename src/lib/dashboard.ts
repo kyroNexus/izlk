@@ -69,7 +69,7 @@ export type DepartmentFlow = {
 	handoff: { label: string; count: number }
 }
 
-const WORKFLOW_FUNNEL_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
+const WORKFLOW_FUNNEL_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
 
 export type DesignRow = {
 	id: string
@@ -309,7 +309,7 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 			departmentRows.commercial.push({ id: contract.id, number: contract.number, contractorName: contract.contractor.name, stage: WORKFLOW_STAGE_LABEL[contract.workflowStage], responsible: contract.manager?.name ?? null, attention: needsAttention, href: `/contracts/${contract.id}` })
 			addWorkload('commercial', contract.manager?.name ?? null)
 		}
-		if (['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT'].includes(contract.workflowStage)) {
+		if (['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'].includes(contract.workflowStage)) {
 			departmentRows.production.push({ id: contract.id, number: contract.number, contractorName: contract.contractor.name, stage: WORKFLOW_STAGE_LABEL[contract.workflowStage], responsible: null, attention: contract.workflowStage !== 'PRODUCTION', href: `/contracts/${contract.id}` })
 			addWorkload('production', 'Производственный участок')
 		}
@@ -413,9 +413,9 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 			}
 		}
 
-		if (isActive && ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(contract.workflowStage)) {
+		if (isActive && ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(contract.workflowStage)) {
 			productionTotal += 1
-			if (['PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(contract.workflowStage)) productionReady += 1
+			if (['PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(contract.workflowStage)) productionReady += 1
 		}
 
 		/* ---------- Финансы ---------- */
@@ -580,7 +580,7 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 					{ key: 'working', label: 'В работе', count: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'].reduce((n, key) => n + (funnelCounts.get(key as ContractWorkflowStage)?.count ?? 0), 0), tone: 'brand' },
 					{ key: 'attention', label: 'Требует внимания', count: departmentRows.commercial.filter((row) => row.attention).length, tone: 'warn' },
 					{ key: 'paused', label: 'Приостановлено', count: contracts.filter((item) => item.status === 'ARCHIVED').length, tone: 'muted' },
-					{ key: 'done', label: 'Передано дальше', count: contracts.filter((item) => ['DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(item.workflowStage)).length, tone: 'ok' },
+					{ key: 'done', label: 'Передано дальше', count: contracts.filter((item) => ['DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(item.workflowStage)).length, tone: 'ok' },
 				],
 			},
 			{
@@ -598,7 +598,7 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 					{ key: 'working', label: 'В работе', count: funnelCounts.get('PRODUCTION')?.count ?? 0, tone: 'brand' },
 					{ key: 'attention', label: 'Ожидает запуска', count: departmentRows.production.filter((row) => row.attention).length, tone: 'warn' },
 					{ key: 'paused', label: 'Приостановлено', count: 0, tone: 'muted' },
-					{ key: 'done', label: 'Передано на монтаж', count: ['AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].reduce((n, key) => n + (funnelCounts.get(key as ContractWorkflowStage)?.count ?? 0), 0), tone: 'ok' },
+					{ key: 'done', label: 'Передано на монтаж', count: ['AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].reduce((n, key) => n + (funnelCounts.get(key as ContractWorkflowStage)?.count ?? 0), 0), tone: 'ok' },
 				],
 			},
 			{
@@ -614,7 +614,7 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 	const departmentStageGroups: Record<DepartmentKey, ContractWorkflowStage[]> = {
 		commercial: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'],
 		engineering: ['DESIGN'],
-		production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT'],
+		production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'],
 		construction: ['INSTALL_KZH', 'INSTALL_KM', 'CLOSED'],
 	}
 	const handoffLabel: Record<DepartmentKey, string> = { commercial: 'Передано в проектирование', engineering: 'Передано в производство', production: 'Передано на монтаж', construction: 'Передано в исполнительную документацию' }

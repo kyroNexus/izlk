@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ContractWorkflowStage" ADD VALUE 'SHIPPED' AFTER 'AWAITING_SHIPMENT';
