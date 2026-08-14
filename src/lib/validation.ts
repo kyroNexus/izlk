@@ -73,24 +73,39 @@ export const contractSchema = z.object({
 	objectAddress: z.string().trim().max(500).optional(),
 })
 
-export const contractorSchema = z.object({
-	aliases: z.string().trim().max(1000).optional(),
-	name: z.string().trim().min(1, 'Укажите название контрагента').max(300),
-	inn: z
-		.string()
-		.trim()
-		.max(12)
-		.optional()
-		.refine((v) => !v || /^\d{10}$|^\d{12}$/.test(v), 'ИНН должен содержать 10 или 12 цифр'),
-	address: z.string().trim().max(500).optional(),
-	phone: z.string().trim().max(50).optional(),
-	email: z
-		.string()
-		.trim()
-		.max(200)
-		.optional()
-		.refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Некорректный email'),
-})
+export const contractorSchema = z
+	.object({
+		aliases: z.string().trim().max(1000).optional(),
+		name: z.string().trim().min(1, 'Укажите название контрагента').max(300),
+		type: z.enum(['LEGAL', 'INDIVIDUAL']).default('LEGAL'),
+		inn: z
+			.string()
+			.trim()
+			.max(12)
+			.optional()
+			.refine((v) => !v || /^\d{10}$|^\d{12}$/.test(v), 'ИНН должен содержать 10 или 12 цифр'),
+		address: z.string().trim().max(500).optional(),
+		phone: z.string().trim().max(50).optional(),
+		email: z
+			.string()
+			.trim()
+			.max(200)
+			.optional()
+			.refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Некорректный email'),
+		// Обязательны только для физ. лица (type = INDIVIDUAL) — см. superRefine ниже.
+		snils: z.string().trim().max(20).optional(),
+		passportSeries: z.string().trim().max(10).optional(),
+		passportNumber: z.string().trim().max(20).optional(),
+		passportIssuedBy: z.string().trim().max(300).optional(),
+		passportIssuedAt: z.string().trim().optional(),
+		passportDeptCode: z.string().trim().max(20).optional(),
+	})
+	.superRefine((data, ctx) => {
+		if (data.type !== 'INDIVIDUAL') return
+		if (!data.snils) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите СНИЛС', path: ['snils'] })
+		if (!data.passportSeries || !data.passportNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите серию и номер паспорта', path: ['passportNumber'] })
+		if (!data.passportIssuedBy) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите, кем выдан паспорт', path: ['passportIssuedBy'] })
+	})
 
 export const agreementSchema = z.object({
 	number: z.string().trim().min(1, 'Укажите номер доп. соглашения').max(120),

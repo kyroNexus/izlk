@@ -112,17 +112,31 @@ model BackgroundJob {
 // КОНТРАГЕНТЫ
 // ------------------------------------------------------------
 
+/// Юр. лицо или физ. лицо — от этого зависит, какие реквизиты нужны контрагенту.
+enum ContractorType {
+  LEGAL
+  INDIVIDUAL
+}
+
 /// Контрагент (заказчик). Хранит псевдонимы для дедупликации —
 /// в реальных папках одна и та же компания встречается под
 /// разными названиями (ИП Дегтярев / Дегтярев С.В. и т.п.)
 model Contractor {
-  id        String    @id @default(cuid())
+  id        String         @id @default(cuid())
   name      String
+  type      ContractorType @default(LEGAL)
   inn       String?
   address   String?
   phone     String?
   email     String?
-  aliases   String[]  @default([]) // альтернативные названия для поиска дублей
+  aliases   String[]       @default([]) // альтернативные названия для поиска дублей
+  /// Реквизиты физ. лица — заполняются только когда type = INDIVIDUAL.
+  snils              String?
+  passportSeries     String?
+  passportNumber     String?
+  passportIssuedBy   String?
+  passportIssuedAt   DateTime?
+  passportDeptCode   String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -218,6 +232,7 @@ model Contract {
   @@index([managerId])
   @@index([number])
   @@index([cipher])
+  @@index([kind])
   @@index([workflowStage])
   @@index([pr1ConfirmedById])
 }

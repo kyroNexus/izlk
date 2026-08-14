@@ -93,6 +93,12 @@ export const DOCUMENT_KIND_ORDER: DocumentKind[] = [
 	'OTHER',
 ]
 
+/** Русские подписи для enum ContractorType из schema.prisma */
+export const CONTRACTOR_TYPE_LABELS: Record<string, string> = {
+	LEGAL: 'Юр. лицо',
+	INDIVIDUAL: 'Физ. лицо',
+}
+
 /** Русские подписи для enum Role из schema.prisma */
 export const ROLE_LABELS: Record<string, string> = {
 	ADMIN: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440',

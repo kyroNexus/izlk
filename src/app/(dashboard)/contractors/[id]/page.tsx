@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Topbar from '@/components/Topbar'
 import { Card, CardHeader, Chip, EmptyState, KeyValue, StatusChip } from '@/components/ui'
 import { canSeeAmounts, canWrite, contractScope, requireUser } from '@/lib/access'
-import { formatDate, formatMoney, initials } from '@/lib/format'
+import { CONTRACTOR_TYPE_LABELS, formatDate, formatMoney, initials } from '@/lib/format'
 import { WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
 import { prisma } from '@/lib/prisma'
 
@@ -26,7 +26,8 @@ export default async function ContractorPage({ params, searchParams }: { params:
 	const contractor = await prisma.contractor.findFirst({
 		where: { id: params.id, deletedAt: null, ...(user.role === 'ADMIN' ? {} : { contracts: { some: contractScope(user) } }) },
 		select: {
-			id: true, name: true, aliases: true, inn: true, address: true, phone: true, email: true,
+			id: true, name: true, aliases: true, type: true, inn: true, address: true, phone: true, email: true,
+			snils: true, passportSeries: true, passportNumber: true, passportIssuedBy: true, passportIssuedAt: true, passportDeptCode: true,
 			contracts: {
 				where: contractScope(user), orderBy: { date: 'desc' }, take: 100,
 				select: { id: true, number: true, cipher: true, date: true, amount: true, currency: true, status: true, workflowStage: true, objectAddress: true },
@@ -34,6 +35,11 @@ export default async function ContractorPage({ params, searchParams }: { params:
 		},
 	})
 	if (!contractor) redirect('/contractors')
+	// Ссылка "назад к договору" должна называть договор по номеру, а не общей фразой —
+	// иначе на карточке контрагента непонятно, куда именно вернёшься.
+	const fromContract = searchParams.from
+		? await prisma.contract.findFirst({ where: { id: searchParams.from, ...contractScope(user) }, select: { id: true, number: true } })
+		: null
 	const active = contractor.contracts.filter((contract) => contract.status === 'ACTIVE')
 	const completed = contractor.contracts.filter((contract) => contract.status !== 'ACTIVE')
 	const name = user.name ?? user.email ?? ''
@@ -71,8 +77,8 @@ export default async function ContractorPage({ params, searchParams }: { params:
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Контрагенты', href: '/contractors' }, { label: contractor.name }]} userName={name.split(' ')[0]} initials={initials(name)} />
 		<div className="px-[26px] py-[22px]">
-			<div className="mb-[18px] flex flex-wrap items-end justify-between gap-[12px]"><div><div className="mb-[6px] flex items-center gap-[9px]"><h1 className="text-[26px] font-bold tracking-[-0.02em]">{contractor.name}</h1><Chip tone="brand" dot={false}>{active.length} активных</Chip></div><p className="text-[13px] text-muted">Карточка заказчика и история договоров</p></div><div className="flex flex-wrap gap-[9px]">{searchParams.from && <Link href={`/contracts/${searchParams.from}`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">← К договору</Link>}{canWrite(user) && <><Link href={`/contracts/new?contractor=${contractor.id}`} className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13.5px] font-semibold text-white">+ Новый договор</Link><Link href={`/contractors/${contractor.id}/edit`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">Редактировать</Link></>}</div></div>
-			<div className="grid grid-cols-1 gap-[14px] xl:grid-cols-3"><Card><CardHeader title="Реквизиты" /><div className="px-[18px] py-[8px]"><KeyValue label="ИНН" value={contractor.inn ?? '—'} mono /><KeyValue label="Телефон" value={contractor.phone ?? '—'} /><KeyValue label="Email" value={contractor.email ? <a href={`mailto:${contractor.email}`} className="text-brand-ink hover:underline">{contractor.email}</a> : '—'} /><KeyValue label="Адрес" value={contractor.address ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contractor.address)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contractor.address}</a> : '—'} /></div></Card><Card className="xl:col-span-2"><CardHeader title="Варианты названия" extra="используются в поиске" /><div className="flex flex-wrap gap-[7px] p-[18px]">{contractor.aliases.length ? contractor.aliases.map((alias) => <Chip key={alias} tone="off">{alias}</Chip>) : <span className="text-[13px] text-faint">Альтернативные названия не добавлены</span>}</div></Card></div>
+			<div className="mb-[18px] flex flex-wrap items-end justify-between gap-[12px]"><div><div className="mb-[6px] flex items-center gap-[9px]"><h1 className="text-[26px] font-bold tracking-[-0.02em]">{contractor.name}</h1><Chip tone={contractor.type === 'INDIVIDUAL' ? 'off' : 'brand'} dot={false}>{CONTRACTOR_TYPE_LABELS[contractor.type]}</Chip><Chip tone="brand" dot={false}>{active.length} активных</Chip></div><p className="text-[13px] text-muted">Карточка заказчика и история договоров</p></div><div className="flex flex-wrap gap-[9px]">{fromContract && <Link href={`/contracts/${fromContract.id}`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">← К договору №{fromContract.number}</Link>}{canWrite(user) && <><Link href={`/contracts/new?contractor=${contractor.id}`} className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13.5px] font-semibold text-white">+ Новый договор</Link><Link href={`/contractors/${contractor.id}/edit`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">Редактировать</Link></>}</div></div>
+			<div className="grid grid-cols-1 gap-[14px] xl:grid-cols-3"><Card><CardHeader title="Реквизиты" /><div className="px-[18px] py-[8px]"><KeyValue label="ИНН" value={contractor.inn ?? '—'} mono /><KeyValue label="Телефон" value={contractor.phone ?? '—'} /><KeyValue label="Email" value={contractor.email ? <a href={`mailto:${contractor.email}`} className="text-brand-ink hover:underline">{contractor.email}</a> : '—'} /><KeyValue label="Адрес" value={contractor.address ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contractor.address)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contractor.address}</a> : '—'} />{contractor.type === 'INDIVIDUAL' && <><KeyValue label="СНИЛС" value={contractor.snils ?? '—'} mono /><KeyValue label="Паспорт" value={contractor.passportSeries || contractor.passportNumber ? `${contractor.passportSeries ?? ''} ${contractor.passportNumber ?? ''}`.trim() : '—'} mono /><KeyValue label="Кем выдан" value={contractor.passportIssuedBy ?? '—'} /><KeyValue label="Дата выдачи" value={contractor.passportIssuedAt ? formatDate(contractor.passportIssuedAt) : '—'} /><KeyValue label="Код подразделения" value={contractor.passportDeptCode ?? '—'} mono /></>}</div></Card><Card className="xl:col-span-2"><CardHeader title="Варианты названия" extra="используются в поиске" /><div className="flex flex-wrap gap-[7px] p-[18px]">{contractor.aliases.length ? contractor.aliases.map((alias) => <Chip key={alias} tone="off">{alias}</Chip>) : <span className="text-[13px] text-faint">Альтернативные названия не добавлены</span>}</div></Card></div>
 			<div className="mt-[14px] flex flex-col gap-[14px]"><Card><CardHeader title="Действующие договоры" extra={`${active.length}`} />{contractTableWithFlow(active, 'Действующих договоров нет')}</Card><Card><CardHeader title="Закрытые и архивные договоры" extra={`${completed.length}`} />{contractTableWithFlow(completed, 'Закрытых договоров пока нет')}</Card></div>
 		</div>
 	</>

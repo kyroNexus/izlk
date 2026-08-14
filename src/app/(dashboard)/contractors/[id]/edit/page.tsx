@@ -7,6 +7,7 @@ import { Card, textareaClass } from '@/components/ui'
 import { initials } from '@/lib/format'
 import { contractorSchema, firstIssue, orNull } from '@/lib/validation'
 import { Prisma } from '@prisma/client'
+import ContractorTypeFields from '@/components/ContractorTypeFields'
 
 const FIELD_CLASS =
 	'h-[40px] w-full rounded-[10px] border border-line bg-surface px-[13px] text-[13.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
@@ -27,7 +28,7 @@ export default async function EditContractorPage({
 
 	const contractor = await prisma.contractor.findFirst({
 		where: { id: contractorId, deletedAt: null },
-		select: { id: true, name: true, aliases: true, inn: true, address: true, phone: true, email: true },
+		select: { id: true, name: true, aliases: true, type: true, inn: true, address: true, phone: true, email: true, snils: true, passportSeries: true, passportNumber: true, passportIssuedBy: true, passportIssuedAt: true, passportDeptCode: true },
 	})
 
 	if (!contractor) redirect('/contractors')
@@ -40,10 +41,17 @@ export default async function EditContractorPage({
 		const parsed = contractorSchema.safeParse({
 			name: String(formData.get('name') ?? ''),
 			aliases: String(formData.get('aliases') ?? ''),
+			type: String(formData.get('type') ?? 'LEGAL'),
 			inn: String(formData.get('inn') ?? ''),
 			address: String(formData.get('address') ?? ''),
 			phone: String(formData.get('phone') ?? ''),
 			email: String(formData.get('email') ?? ''),
+			snils: String(formData.get('snils') ?? ''),
+			passportSeries: String(formData.get('passportSeries') ?? ''),
+			passportNumber: String(formData.get('passportNumber') ?? ''),
+			passportIssuedBy: String(formData.get('passportIssuedBy') ?? ''),
+			passportIssuedAt: String(formData.get('passportIssuedAt') ?? ''),
+			passportDeptCode: String(formData.get('passportDeptCode') ?? ''),
 		})
 		if (!parsed.success) {
 			redirect(
@@ -72,10 +80,17 @@ export default async function EditContractorPage({
 				data: {
 					name: data.name,
 					aliases: [...new Set((data.aliases ?? '').split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean))],
+					type: data.type,
 					inn,
 					address: orNull(data.address),
 					phone: orNull(data.phone),
 					email: orNull(data.email),
+					snils: orNull(data.snils),
+					passportSeries: orNull(data.passportSeries),
+					passportNumber: orNull(data.passportNumber),
+					passportIssuedBy: orNull(data.passportIssuedBy),
+					passportIssuedAt: data.passportIssuedAt ? new Date(`${data.passportIssuedAt}T12:00:00`) : null,
+					passportDeptCode: orNull(data.passportDeptCode),
 				},
 			})
 		} catch (e) {
@@ -122,6 +137,17 @@ export default async function EditContractorPage({
 							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Название *'}</label>
 							<input name="name" required defaultValue={contractor.name} className={FIELD_CLASS} />
 						</div>
+						<ContractorTypeFields
+							defaultType={contractor.type}
+							defaults={{
+								snils: contractor.snils,
+								passportSeries: contractor.passportSeries,
+								passportNumber: contractor.passportNumber,
+								passportIssuedBy: contractor.passportIssuedBy,
+								passportIssuedAt: contractor.passportIssuedAt ? contractor.passportIssuedAt.toISOString().slice(0, 10) : null,
+								passportDeptCode: contractor.passportDeptCode,
+							}}
+						/>
 						<div>
 							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">Другие названия</label>
 							<textarea name="aliases" defaultValue={contractor.aliases.join('\n')} className={textareaClass} placeholder="Каждое название с новой строки" />
