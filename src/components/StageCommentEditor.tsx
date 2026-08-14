@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
+import Icon from '@/components/Icon'
 import type { ContractWorkflowStage } from '@prisma/client'
 
 type Stage = { key: ContractWorkflowStage; label: string }
@@ -57,5 +59,5 @@ export default function StageCommentEditor({ contractId, stages, comments, canWr
 				{index < stages.length - 1 && <span className={`mx-1 h-px w-2 shrink-0 ${lineTone}`} />}
 			</span>
 		})}
-	</div>{stage && createPortal(<div ref={panelRef} style={position} className="animate-[fade-in_.16s_ease-out] fixed z-[100] w-[280px] rounded-[var(--radius-control)] border border-line bg-surface p-3 shadow-[var(--shadow-float)]"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-[11px]">{stage.label}</b><button type="button" onClick={() => setSelected(null)} className="text-[12px] text-muted hover:text-ink">×</button></div><textarea autoFocus value={text} onChange={(event) => setText(event.target.value)} maxLength={1000} rows={3} placeholder="Комментарий к этапу — например, «деньги поступят через неделю»" disabled={!canWrite} className="w-full resize-none rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[11px] outline-none focus:border-brand" />{canWrite ? <button type="button" onClick={() => void save()} disabled={saving || !text.trim()} className="mt-2 h-8 rounded-[8px] bg-brand px-3 text-[11px] font-semibold text-white disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить и отметить пройденным'}</button> : <p className="mt-2 text-[10px] text-faint">Только просмотр</p>}</div>, document.body)}</>
+	</div>{stage && createPortal(<div ref={panelRef} style={position} className="animate-[fade-in_.16s_ease-out] fixed z-[100] w-[280px] rounded-[var(--radius-control)] border border-line bg-surface p-3 shadow-[var(--shadow-float)]"><div className="mb-2 flex items-center justify-between gap-2"><b className="text-[11px]">{stage.label}</b><button type="button" onClick={() => setSelected(null)} className="text-muted hover:text-ink" aria-label="Закрыть"><Icon icon={X} size={14} /></button></div><textarea autoFocus value={text} onChange={(event) => setText(event.target.value)} maxLength={1000} rows={3} placeholder="Комментарий к этапу — например, «деньги поступят через неделю»" disabled={!canWrite} className="w-full resize-none rounded-[8px] border border-line bg-surface px-2.5 py-2 text-[11px] outline-none focus:border-brand" />{canWrite ? <button type="button" onClick={() => void save()} disabled={saving || !text.trim()} className="mt-2 h-8 rounded-[8px] bg-brand px-3 text-[11px] font-semibold text-white disabled:opacity-50">{saving ? 'Сохранение…' : 'Сохранить и отметить пройденным'}</button> : <p className="mt-2 text-[10px] text-faint">Только просмотр</p>}</div>, document.body)}</>
 }
