@@ -31,7 +31,7 @@ export default function ContractSectionNav({ sections }: { sections: Section[] }
 		window.history.replaceState(null, '', `#${id}`)
 	}
 
-	return <nav aria-label="Разделы договора" className="contract-section-nav sticky top-[72px] z-10 flex items-center gap-1 overflow-x-auto border-b border-line bg-surface/95 px-2 py-2 backdrop-blur-xl">
-		{sections.map((section) => <button key={section.id} type="button" onClick={() => changeSection(section.id)} aria-current={activeId === section.id ? 'page' : undefined} className={`whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] transition ${activeId === section.id ? 'bg-brand-soft font-bold text-brand-ink' : 'font-semibold text-muted hover:bg-raised hover:text-ink'}`}>{section.label}</button>)}
+	return <nav aria-label="Разделы договора" role="tablist" className="contract-section-nav sticky top-[72px] z-10 flex items-center gap-1 overflow-x-auto border-b border-line bg-surface/95 px-2 py-2 backdrop-blur-xl">
+		{sections.map((section) => <button key={section.id} id={`tab-${section.id}`} type="button" role="tab" aria-selected={activeId === section.id} aria-controls={section.id} onClick={() => changeSection(section.id)} className={`whitespace-nowrap rounded-[8px] px-3 py-2 text-[11px] transition ${activeId === section.id ? 'bg-brand-soft font-bold text-brand-ink' : 'font-semibold text-muted hover:bg-raised hover:text-ink'}`}>{section.label}</button>)}
 	</nav>
 }

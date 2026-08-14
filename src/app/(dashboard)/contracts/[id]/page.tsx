@@ -356,6 +356,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 					<div className="min-w-0">
 						<div className="flex flex-wrap items-center gap-[11px]">
 							<h1 className="text-[26px] font-bold tracking-[-0.02em]">{contract.number}</h1>
+							<CopyValue value={contract.number} label="Скопировать номер договора" />
 							<StatusChip status={contract.status} />
 							<Chip tone={workflowTone}>{WORKFLOW_STAGE_LABEL[contract.workflowStage]}</Chip>
 						</div>
@@ -405,7 +406,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 									<div className="mt-[14px] grid grid-cols-2 gap-x-[20px] gap-y-[10px] text-[12px]"><div><div className="text-[10px] font-semibold uppercase text-faint">ИНН</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.inn ?? '—'}<CopyValue value={contract.contractor.inn ?? ''} label="Скопировать ИНН" /></div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Телефон</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.phone ? <a href={`tel:${contract.contractor.phone.replace(/[^+\d]/g, '')}`} className="text-brand-ink hover:underline">{contract.contractor.phone}</a> : '—'}<CopyValue value={contract.contractor.phone ?? ''} label="Скопировать телефон" /></div></div><div className="col-span-2"><div className="text-[10px] font-semibold uppercase text-faint">Email</div><div className="mt-1 flex items-center font-semibold"><span className="truncate">{contract.contractor.email ? <a href={`mailto:${contract.contractor.email}`} className="text-brand-ink hover:underline">{contract.contractor.email}</a> : '—'}</span><CopyValue value={contract.contractor.email ?? ''} label="Скопировать email" /></div></div></div>
 									<div className="mt-[15px] flex flex-wrap gap-2"><Link href={`/contractors/${contract.contractor.id}?from=${contract.id}`} className="inline-flex rounded-[8px] border border-brand/25 bg-surface/80 px-[10px] py-[7px] text-[11.5px] font-semibold text-brand-ink hover:bg-brand-soft">Открыть карточку контрагента →</Link><CopyContractorDetails name={contract.contractor.name} inn={contract.contractor.inn} phone={contract.contractor.phone} email={contract.contractor.email} address={contract.contractor.address} /></div>
 								</div>
-								<div className="p-[19px]"><div className="grid grid-cols-2 gap-x-[26px] gap-y-[12px] text-[12px]"><div><div className="text-[10px] font-semibold uppercase text-faint">Шифр договора</div><div className="mt-1 font-bold">{contract.cipher ?? '—'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Менеджер</div><div className="mt-1 font-semibold">{contract.manager?.name ?? 'Не назначен'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Подписание ПР1</div><div className="mt-1 font-semibold">{contract.pr1SignedAt ? formatDate(contract.pr1SignedAt) : 'Не подтверждено'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Рабочих дней</div><div className="mt-1 font-semibold">{contract.workingDays ?? '—'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Дедлайн договора</div><div className={`mt-1 font-semibold ${deadlineInfo.tone === 'danger' ? 'text-danger' : deadlineInfo.tone === 'warn' ? 'text-warn' : ''}`}>{contract.deadline ? formatDate(contract.deadline) : 'Не рассчитан'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Адрес объекта</div><div className="mt-1 truncate font-semibold">{contract.objectAddress ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contract.objectAddress)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contract.objectAddress}</a> : '—'}</div></div></div>
+								<div className="p-[19px]"><div className="grid grid-cols-2 gap-x-[26px] gap-y-[12px] text-[12px]"><div><div className="text-[10px] font-semibold uppercase text-faint">Шифр договора</div><div className="mt-1 flex items-center font-bold">{contract.cipher ?? '—'}<CopyValue value={contract.cipher ?? ''} label="Скопировать шифр" /></div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Менеджер</div><div className="mt-1 font-semibold">{contract.manager?.name ?? 'Не назначен'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Подписание ПР1</div><div className="mt-1 font-semibold">{contract.pr1SignedAt ? formatDate(contract.pr1SignedAt) : 'Не подтверждено'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Рабочих дней</div><div className="mt-1 font-semibold">{contract.workingDays ?? '—'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Дедлайн договора</div><div className={`mt-1 font-semibold ${deadlineInfo.tone === 'danger' ? 'text-danger' : deadlineInfo.tone === 'warn' ? 'text-warn' : ''}`}>{contract.deadline ? formatDate(contract.deadline) : 'Не рассчитан'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Адрес объекта</div><div className="mt-1 truncate font-semibold">{contract.objectAddress ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contract.objectAddress)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contract.objectAddress}</a> : '—'}</div></div></div>
 									{canSeeAmounts && <div className="mt-[16px] border-t border-line-soft pt-[12px]"><div className="text-[10px] font-semibold uppercase tracking-[.06em] text-faint">Стоимость договора</div><div className="mt-[4px] text-[20px] font-bold tracking-[-.02em]">{formatMoney(contract.amount, contract.currency)}</div>{hasPlanBreakdown && <div className="mt-[9px] grid grid-cols-3 gap-[6px] text-center text-[10.5px] text-muted"><div className="rounded-[8px] bg-raised p-[6px]">СМР<br/><b className="text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div className="rounded-[8px] bg-raised p-[6px]">МК<br/><b className="text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div className="rounded-[8px] bg-raised p-[6px]">Доставка<br/><b className="text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}</div>}
 								</div>
 							</div>
@@ -423,7 +424,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						]} />
 
 						{/* Дополнительные соглашения */}
-						<Card id="workflow">
+						<Card id="workflow" role="tabpanel" aria-labelledby="tab-workflow">
 							<CardHeader title="Ход договора" extra={<Chip tone={contract.workflowStage === 'CLOSED' ? 'ok' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'}>{WORKFLOW_STAGE_LABEL[contract.workflowStage]}</Chip>} />
 							<div className="p-[18px]">
 								{!contract.pr1ConfirmedAt && (latestPr1 ? (
@@ -443,7 +444,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							</div>
 						</Card>
 
-						<Card id="agreements">
+						<Card id="agreements" hidden role="tabpanel" aria-labelledby="tab-agreements">
 							<CardHeader
 								title={'\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u044f'}
 								extra={
@@ -492,7 +493,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						</Card>
 
 						{/* Документы, сгруппированные по типу */}
-						<Card id="documents">
+						<Card id="documents" hidden role="tabpanel" aria-labelledby="tab-documents">
 							<CardHeader
 								title={'\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b'}
 								extra={plural(documentsForRegistry.length, '\u0444\u0430\u0439\u043b', '\u0444\u0430\u0439\u043b\u0430', '\u0444\u0430\u0439\u043b\u043e\u0432')}
@@ -543,7 +544,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							)}
 						</Card>
 
-						<Card id="history" className="order-last">
+						<Card id="history" className="order-last" hidden role="tabpanel" aria-labelledby="tab-history">
 							<CardHeader title="История действий" extra={`${auditLogs.length} событий`} />
 							{auditLogs.length === 0 ? <EmptyState text="История начнёт заполняться после изменений и загрузок" /> : <div>{auditLogs.map((log) => {
 								const objectName = documentNameById.get(log.entityId) ?? `договор № ${contract.number}`
@@ -553,7 +554,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						</Card>
 						{/* Площадка */}
 						{site && (
-						<Card id="site" className="overflow-hidden">
+						<Card id="site" className="overflow-hidden" hidden role="tabpanel" aria-labelledby="tab-site">
 							<details open={site.status === 'ISSUE' || site.status === 'BLOCKED'} className="group/site">
 								<summary className="flex cursor-pointer list-none items-center gap-3 px-[19px] py-[14px] transition hover:bg-raised/50"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-soft text-brand-ink transition-transform group-open/site:rotate-180">⌄</span><span className="min-w-0"><span className="block text-[14px] font-bold tracking-[-.01em]">{'\u041f\u043b\u043e\u0449\u0430\u0434\u043a\u0430'}</span><span className="mt-0.5 block truncate text-[10.5px] text-faint">{site.address} · {plural(site.events.length, 'запись', 'записи', 'записей')}</span></span><span className="ml-auto"><Chip tone={SITE_STATUS[site.status].tone}>{SITE_STATUS[site.status].label}</Chip></span></summary>
 								<div className="border-t border-line-soft p-[18px]">
@@ -588,7 +589,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						)}
 
 						{/* Проект */}
-						<Card id="project">
+						<Card id="project" hidden role="tabpanel" aria-labelledby="tab-project">
 							<CardHeader title={'\u041f\u0440\u043e\u0435\u043a\u0442'} extra={projectSections.length || undefined} />
 							{projectSections.length === 0 && missingProjectSections.length === 0 ? (
 								<EmptyState text={'\u0420\u0430\u0437\u0434\u0435\u043b\u044b \u043f\u0440\u043e\u0435\u043a\u0442\u0430 \u043d\u0435 \u0437\u0430\u0432\u0435\u0434\u0435\u043d\u044b'} />
@@ -635,7 +636,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							)}
 						</Card>
 
-						<Card id="tasks">
+						<Card id="tasks" hidden role="tabpanel" aria-labelledby="tab-tasks">
 							<CardHeader title="Задачи" extra={openTasks.length || undefined} />
 							{openTasks.length === 0 ? (
 								<EmptyState text="Открытых задач по договору нет" />
@@ -660,7 +661,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						</Card>
 
 						{/* Исполнительная документация */}
-						<Card id="executive">
+						<Card id="executive" hidden role="tabpanel" aria-labelledby="tab-executive">
 							<CardHeader title={'\u0418\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f'} extra={executiveDocs.length || undefined} />
 							{executiveDocs.length === 0 ? (
 								<EmptyState text={'\u0421\u043f\u0438\u0441\u043e\u043a \u043f\u0443\u0441\u0442'} />

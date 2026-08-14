@@ -10,11 +10,12 @@ export function RichEmptyState({ title, description, icon = Inbox, primaryAction
 
 /* ---------------- Карточка ---------------- */
 
-export function Card({ children, className = '', id }: { children: ReactNode; className?: string; id?: string }) {
+export function Card({ children, className = '', id, ...rest }: { children: ReactNode; className?: string; id?: string } & Omit<React.HTMLAttributes<HTMLDivElement>, 'id' | 'className' | 'children'>) {
 	return (
 		<div
 			id={id}
 			className={`rounded-[18px] border border-line bg-surface shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(43,31,102,.035)] transition-[border-color,box-shadow] duration-200 ease-out hover:border-brand/20 hover:shadow-[0_2px_4px_rgba(16,24,40,.05),0_14px_32px_rgba(72,50,154,.09)] ${className}`}
+			{...rest}
 		>
 			{children}
 		</div>
