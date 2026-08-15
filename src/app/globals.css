@@ -138,20 +138,6 @@ body {
 	line-height: 1.45;
 }
 
-/* High-density displays make a fixed-pixel business UI look unnecessarily
-   small. Zoom the whole workspace only when there is ample room, keeping the
-   layout and all existing controls in the same proportion. */
-@media (min-width: 2200px) and (min-height: 1000px) {
-	body { zoom: 1.14; }
-	/* zoom scales 100vh too; compensate fixed navigation so its bottom card
-	   remains inside the physical viewport. */
-	.app-sidebar { bottom: auto; height: calc(100vh / 1.14); }
-}
-@media (min-width: 3000px) and (min-height: 1400px) {
-	body { zoom: 1.24; }
-	.app-sidebar { bottom: auto; height: calc(100vh / 1.24); }
-}
-
 /* One focus treatment across links, controls, summaries and custom buttons. */
 :where(a, button, input, select, textarea, summary):focus-visible {
 	outline: 3px solid color-mix(in srgb, var(--brand) 42%, transparent);
