@@ -99,7 +99,7 @@ export default async function ProductionSchedulePage() {
 					<p className="mt-1 text-[12px] text-muted">Очередь формируется по приоритету и сроку договора. Формулы плановых дат будут подключены после их утверждения. Остальные поля — по кнопке раскрытия строки.</p>
 					<Link href="/projects" className="mt-2 inline-flex text-[11.5px] font-semibold text-brand-ink hover:underline">← Карта потока проектирования</Link>
 				</div>
-				<div className="rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-semibold text-brand-ink">В потоке: {rows.length}</div>
+				<div className="flex items-center gap-2"><div className="rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-semibold text-brand-ink">В потоке: {rows.length}</div><a href="/api/production-schedule/export" className="inline-flex h-[34px] items-center rounded-[9px] border border-line bg-surface px-3 text-[11.5px] font-semibold hover:bg-raised">Скачать XLSX</a></div>
 			</div>
 			<div className="overflow-x-auto rounded-[14px] border border-line bg-surface">
 				<table className="min-w-[820px] w-full border-collapse text-[11px]">
