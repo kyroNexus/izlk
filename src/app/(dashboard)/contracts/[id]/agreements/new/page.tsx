@@ -23,7 +23,7 @@ export default async function NewAgreementPage({
 	const user = session!.user as { id: string; name?: string | null; email?: string | null; role: string }
 
 	if (user.role === 'VIEWER') {
-		return <div className="px-[26px] py-[22px] text-[13px] text-faint">{'Доступ ограничен'}</div>
+		return <div className="workspace-content px-[26px] py-[22px] text-[13px] text-faint">{'Доступ ограничен'}</div>
 	}
 
 	const contractId = params.id
@@ -110,7 +110,7 @@ export default async function NewAgreementPage({
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="mb-[20px]">
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">{'Новое доп. соглашение'}</h1>
 					<div className="mt-[4px] text-[13px] text-faint">{`К договору № ${contract.number}`}</div>

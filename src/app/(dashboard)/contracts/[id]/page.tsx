@@ -350,7 +350,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				{searchParams.success && <div className="mb-[14px] rounded-[10px] border border-green-200 bg-green-50 px-[13px] py-[10px] text-[12.5px] font-medium text-green-800">{searchParams.success}</div>}
 				{/* Шапка страницы */}
 				<div className="work-hero mb-[20px] flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-start">

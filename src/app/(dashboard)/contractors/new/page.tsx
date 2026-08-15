@@ -63,7 +63,7 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 	const name = user.name ?? user.email ?? ''
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Контрагенты', href: '/contractors' }, { label: 'Новый контрагент' }]} userName={name.split(' ')[0]} initials={initials(name)} />
-		<div className="px-[26px] py-[22px]">
+		<div className="workspace-content px-[26px] py-[22px]">
 			<div className="mb-[20px]"><h1 className="text-[26px] font-bold tracking-[-0.02em]">Новый контрагент</h1><p className="mt-[5px] text-[13px] text-muted">{returnToContract ? 'После сохранения вернёмся к созданию договора.' : 'Реквизиты и варианты названия для быстрого поиска.'}</p></div>
 			<div className="max-w-[680px]"><FormError message={searchParams.error} /><Card className="mt-[14px] p-[22px]">
 				<form action={createContractor} className="flex flex-col gap-[15px]">

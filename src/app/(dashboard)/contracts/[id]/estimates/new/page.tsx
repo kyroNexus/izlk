@@ -191,7 +191,7 @@ export default async function NewEstimatePage({
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="mb-[20px]">
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">{'Новая смета'}</h1>
 					<div className="mt-[4px] text-[13px] text-faint">{`К договору № ${contract.number}`}</div>

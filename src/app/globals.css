@@ -223,7 +223,7 @@ button, a, details, summary, input, select {
 	background-image: linear-gradient(135deg, color-mix(in srgb, var(--surface) 96%, var(--brand-soft)) 0%, var(--surface) 48%, color-mix(in srgb, var(--surface) 98%, transparent) 100%);
 }
 
-main > div[class*="px-[26px]"] {
+.workspace-content {
 	animation: workspace-enter 260ms cubic-bezier(.2,.8,.2,1) both;
 }
 
@@ -255,7 +255,7 @@ a[href^="/api/site-photos/"]:hover {
 a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0); }
 
 @media (prefers-reduced-motion: reduce) {
-	main > div[class*="px-[26px]"], a[href^="/api/site-photos/"] { animation: none; transition: none; }
+	.workspace-content, a[href^="/api/site-photos/"] { animation: none; transition: none; }
 }
 
 /* Reusable work-screen layers: dense registers stay calm and actionable. */
@@ -467,7 +467,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 
 /* A dense desktop layout must not lose its breathing room on a phone. */
 @media (max-width: 639px) {
-	main > div[class*="px-[26px]"] {
+	.workspace-content {
 		padding-left: 14px;
 		padding-right: 14px;
 	}
@@ -482,25 +482,6 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 	.app-sidebar.w-16 > button { right: -48px; top: 31px; transform: none; }
 }
 
-/* Use native details collapsing: it removes the entire section instead of
-   leaving an empty container. The brief entry animation keeps opening gentle. */
-details.dashboard-disclosure > summary::-webkit-details-marker { display: none; }
-details.dashboard-disclosure:not([open]) { min-height: 0 !important; }
-details.dashboard-disclosure:not([open]) > div { display: none; }
-details.dashboard-disclosure[open] > div { animation: dashboard-content-in 180ms cubic-bezier(.2,.8,.2,1); }
-details.dashboard-disclosure > summary > span:last-child > span:last-child {
-	font-size: 0;
-	border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
-	background: var(--brand-soft);
-	transform: none !important;
-}
-details.dashboard-disclosure > summary > span:last-child > span:last-child::after {
-	content: '+';
-	font-size: 18px;
-	font-weight: 400;
-	line-height: 1;
-}
-details.dashboard-disclosure[open] > summary > span:last-child > span:last-child::after { content: '−'; }
 .department-panel-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--brand) 55%, transparent) transparent; }
 .department-panel-scroll::-webkit-scrollbar { width: 8px; }
 .department-panel-scroll::-webkit-scrollbar-track { margin: 14px 0; background: transparent; }
@@ -544,13 +525,13 @@ details.dashboard-disclosure[open] > summary > span:last-child > span:last-child
 /* Fixed administrative side columns should not compress a table on a laptop.
    They stack below the main content until the wide desktop breakpoint. */
 @media (max-width: 1279px) {
-	div[class*="grid-cols-[minmax(0,1fr)_360px]"] {
+	.side-panel-grid {
 		grid-template-columns: minmax(0, 1fr) !important;
 	}
-	div[class*="grid-cols-[minmax(0,1fr)_360px]"] > :first-child {
+	.side-panel-grid > :first-child {
 		overflow-x: auto !important;
 	}
-	div[class*="grid-cols-[minmax(0,1fr)_360px]"] > :first-child > div[class*="grid-cols-[1fr_1.2fr_120px"] {
+	.side-panel-grid > :first-child > .settings-users-row {
 		min-width: 650px;
 	}
 }
@@ -558,18 +539,18 @@ details.dashboard-disclosure[open] > summary > span:last-child > span:last-child
 /* Catalog + table + filters is excellent on a 4K display, but too dense on a
    normal workstation. Use two clear columns first, then a single work flow. */
 @media (max-width: 1535px) {
-	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] {
+	.three-col-panel {
 		grid-template-columns: 220px minmax(0, 1fr) !important;
 	}
-	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] > :last-child {
+	.three-col-panel > :last-child {
 		grid-column: 1 / -1;
 	}
 }
 @media (max-width: 1279px) {
-	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] {
+	.three-col-panel {
 		grid-template-columns: minmax(0, 1fr) !important;
 	}
-	div[class*="grid-cols-[250px_minmax(0,1fr)_250px]"] > :nth-child(2) {
+	.three-col-panel > :nth-child(2) {
 		overflow-x: auto;
 	}
 }
@@ -579,7 +560,7 @@ details.dashboard-disclosure[open] > summary > span:last-child > span:last-child
 @media (max-width: 639px) {
 	/* The bell sits beside the profile button, so an anchored desktop popover
 	   can be clipped off-screen. On a phone it becomes a bounded top sheet. */
-	.notification-menu > div.absolute {
+	.notification-panel {
 		position: fixed;
 		top: 70px;
 		left: 12px;
@@ -587,7 +568,7 @@ details.dashboard-disclosure[open] > summary > span:last-child > span:last-child
 		width: auto;
 	}
 
-	main details.group > div[class*="w-[520px]"][class*="absolute"] {
+	.task-quick-create-panel {
 		right: 14px !important;
 		width: calc(100vw - 28px) !important;
 		max-width: 520px;

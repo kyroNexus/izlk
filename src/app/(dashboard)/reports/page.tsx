@@ -66,7 +66,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: { fr
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="mb-[18px]">
 					<div className="flex flex-wrap items-end justify-between gap-3"><h1 className="text-[26px] font-bold tracking-[-0.02em]">Отчёты</h1><form className="flex flex-wrap items-end gap-2" method="get"><label className="text-[11px] text-muted">С <input name="from" type="date" defaultValue={period.from.toISOString().slice(0, 10)} className="ml-1 rounded border border-line bg-surface px-2 py-1 text-ink" /></label><label className="text-[11px] text-muted">По <input name="to" type="date" defaultValue={period.to.toISOString().slice(0, 10)} className="ml-1 rounded border border-line bg-surface px-2 py-1 text-ink" /></label><button className="h-[30px] rounded border border-line px-3 text-[12px] font-semibold">Показать</button><a href={`/api/reports/export?from=${period.from.toISOString().slice(0, 10)}&to=${period.to.toISOString().slice(0, 10)}`} className="brand-gradient inline-flex h-[30px] items-center rounded px-3 text-[12px] font-semibold text-white">Скачать Excel</a></form></div>
 					<div className="mt-[5px] text-[13px] text-muted">

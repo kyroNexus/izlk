@@ -144,7 +144,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Договоры' }]} userName={name.split(' ')[0]} initials={initials(name)} notifications={0} />
-		<div className="px-[26px] py-[22px]">
+		<div className="workspace-content px-[26px] py-[22px]">
 			<div className="mb-[18px] flex items-start gap-4">
 				<div><h1 className="text-[26px] font-bold tracking-[-0.02em]">Договоры</h1><div className="mt-1 text-[13px] text-muted">{plural(visibleContracts.length, 'договор', 'договора', 'договоров')} в выбранном разделе</div></div>
 				{canWrite(user) && <div className="ml-auto flex gap-2"><Link href="/contracts/import" className="inline-flex h-[38px] items-center rounded-[10px] px-[12px] text-[12px] font-semibold text-muted hover:bg-raised hover:text-ink">Загрузить</Link><Link href="/contracts/new" className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13px] font-semibold text-white">+ Новый договор</Link></div>}

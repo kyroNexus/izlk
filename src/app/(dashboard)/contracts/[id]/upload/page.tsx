@@ -101,7 +101,7 @@ export default async function UploadDocumentPage({
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="work-hero mb-[20px] px-5 py-4">
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">{pr1Mode ? 'Подписанное Приложение №1' : 'Загрузка документа'}</h1>
 					<div className="mt-[4px] text-[13px] text-faint">К договору № {contract.number}</div>

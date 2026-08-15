@@ -257,7 +257,7 @@ export default async function TaskPage({
         userName={name.split(' ')[0]}
         initials={initials(name)}
       />
-      <div className="px-[26px] py-[22px]">
+      <div className="workspace-content px-[26px] py-[22px]">
         <div className="mb-[16px] flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-[9px]">
@@ -278,7 +278,7 @@ export default async function TaskPage({
 
         <FormError message={searchParams.error} />
 
-        <div className="mt-[14px] grid grid-cols-[minmax(0,1fr)_360px] gap-[14px]">
+        <div className="side-panel-grid mt-[14px] grid grid-cols-[minmax(0,1fr)_360px] gap-[14px]">
           <Card className="p-[20px]">
             <form action={updateTask} className="flex flex-col gap-[14px]">
               <Field label="Название" required>

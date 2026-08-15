@@ -257,7 +257,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 				notifications={items.length}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="mb-[18px] flex items-start gap-4">
 					<div>
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Очередь импорта</h1>

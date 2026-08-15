@@ -245,7 +245,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Проекты' }]} userName={name.split(' ')[0]} initials={initials(name)} notifications={late} />
-		<div className="px-[26px] py-[22px]">
+		<div className="workspace-content px-[26px] py-[22px]">
 			<div className="work-hero mb-[16px] flex flex-wrap items-end justify-between gap-[12px] px-5 py-4">
 				<div>
 					<h1 className="text-[26px] font-bold">Очередь проектирования</h1>

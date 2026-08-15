@@ -21,7 +21,7 @@ export default async function ImportLogPage() {
 	const name = user.name ?? user.email ?? ''
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Журнал импорта' }]} userName={name.split(' ')[0]} initials={initials(name)} />
-		<div className="px-[26px] py-[22px]">
+		<div className="workspace-content px-[26px] py-[22px]">
 			<div className="mb-5">
 				<h1 className="text-[26px] font-bold tracking-[-0.02em]">Журнал импорта</h1>
 				<p className="mt-1 text-[13px] text-muted">Последние 250 событий: сканирование, автопривязка, действия сотрудников и причины ошибок.</p>

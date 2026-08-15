@@ -59,7 +59,7 @@ export default async function SitesPage({
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="work-hero mb-[20px] px-5 py-4">
 					<div>
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">

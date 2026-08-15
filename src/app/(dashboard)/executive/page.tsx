@@ -34,7 +34,7 @@ export default async function ExecutivePage({ searchParams }: { searchParams: { 
 
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Исполнительная документация' }]} userName={name.split(' ')[0]} initials={initials(name)} notifications={incomplete} />
-		<div className="px-[26px] py-[22px]">
+		<div className="workspace-content px-[26px] py-[22px]">
 			<div className="work-hero mb-[18px] px-5 py-4"><h1 className="text-[26px] font-bold">Исполнительная документация</h1><p className="mt-[5px] max-w-[820px] text-[13px] leading-5 text-muted">Один список по всем договорам: сразу видно, где комплект готов, где не хватает файлов и куда перейти для загрузки.</p></div>
 			<div className="mb-[14px] grid grid-cols-2 gap-[10px] lg:grid-cols-4"><Link href={filterHref('')}><StatTile label="Договоров" value={rawContracts.length} tone="brand" /></Link><Link href={filterHref('ready')}><StatTile label="Комплект готов" value={complete} tone="ok" /></Link><Link href={filterHref('attention')}><StatTile label="Требуют внимания" value={incomplete} tone="danger" /></Link><Link href={filterHref('not-required')}><StatTile label="Не требуется" value={notRequired} /></Link></div>
 			<form className="work-toolbar mb-[14px] flex max-w-[720px] gap-[8px] p-2"><input name="q" defaultValue={q} placeholder="Договор, шифр или контрагент" className="h-[40px] flex-1 rounded-[10px] border border-line bg-surface px-[13px] text-[13px]" />{filter && <input type="hidden" name="filter" value={filter} />}<button className="rounded-[10px] border border-line bg-surface px-[15px] text-[13px] font-semibold">Найти</button>{(q || filter) && <Link href="/executive" className="inline-flex items-center px-[8px] text-[12px] text-muted">Сбросить</Link>}</form>

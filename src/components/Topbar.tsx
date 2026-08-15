@@ -54,7 +54,7 @@ export default async function Topbar({
 						</span>
 					)}
 					</summary>
-					<div className="absolute right-0 top-[42px] z-50 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-[13px] border border-line bg-surface shadow-2xl">
+					<div className="notification-panel absolute right-0 top-[42px] z-50 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-[13px] border border-line bg-surface shadow-2xl">
 						<div className="flex items-center justify-between border-b border-line px-4 py-3"><span className="text-[13px] font-bold">Уведомления</span><span className="text-[10.5px] text-faint">{unread} непрочитанных</span></div>
 						{latest.length === 0 ? <div className="px-4 py-8 text-center text-[12px] text-faint">Новых событий пока нет</div> : <div>{latest.map((item) => <Link key={item.id} href={item.href ?? '/notifications'} className={`block border-b border-line-soft px-4 py-3 last:border-0 hover:bg-raised ${item.readAt ? '' : 'bg-brand-soft/35'}`}><span className="block text-[12px] font-bold">{item.title}</span>{item.message && <span className="mt-1 block text-[10.5px] leading-4 text-muted">{item.message}</span>}</Link>)}</div>}
 						<Link href="/notifications" className="block border-t border-line px-4 py-2.5 text-center text-[11.5px] font-semibold text-brand-ink hover:bg-raised">Показать все</Link>

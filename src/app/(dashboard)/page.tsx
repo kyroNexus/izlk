@@ -66,7 +66,7 @@ export default async function DashboardPage() {
 				notifications={data.attentionCounts.danger}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 			<DepartmentBoard departments={data.departmentProgress} flows={data.departmentFlow} totalContracts={data.totals.contracts} closedContracts={data.totals.closedContracts} attentionCount={attentionTotal} createdToday={data.totals.createdToday} funnel={data.funnel} timeline={data.activityTimeline} departmentTimeline={data.departmentTimeline} attentionItems={data.attention.slice(0, 6)} userName={firstName} role={user.role} />
 				<div className="mt-[14px] grid grid-cols-1 gap-[14px] xl:grid-cols-2">
 					<Card>

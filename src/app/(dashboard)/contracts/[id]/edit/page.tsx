@@ -163,7 +163,7 @@ export default async function EditContractPage({
 				initials={initials(name)}
 			/>
 
-			<div className="px-[26px] py-[22px]">
+			<div className="workspace-content px-[26px] py-[22px]">
 				<div className="mb-[20px]">
 					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Редактирование договора</h1>
 					<div className="mt-[4px] text-[13px] text-faint">№ {contract.number}</div>
