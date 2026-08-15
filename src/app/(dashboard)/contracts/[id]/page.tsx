@@ -4,59 +4,33 @@ import { prisma } from '@/lib/prisma'
 import { canSeeAmounts as canSeeAmountsFor, canWrite, contractScope, isAdmin, requireUser } from '@/lib/access'
 import Topbar from '@/components/Topbar'
 import ContractSectionNav from '@/components/ContractSectionNav'
-import ContractHierarchy, { type ContractHierarchyNode } from '@/components/ContractHierarchy'
+import type { ContractHierarchyNode } from '@/components/ContractHierarchy'
 import ChatPanel from '@/components/ChatPanel'
 import CopyValue, { CopyContractorDetails } from '@/components/CopyValue'
-import { Card, CardHeader, Chip, EmptyState, ExecStatusChip, FileIcon, ProgressBar, StatusChip } from '@/components/ui'
+import { Card, CardHeader, EmptyState, ProgressBar } from '@/components/ui'
 import {
 	DOCUMENT_KIND_LABELS,
 	DOCUMENT_KIND_ORDER,
-	formatBytes,
 	formatDate,
-	formatDateTime,
 	formatMoney,
 	initials,
 	plural,
 } from '@/lib/format'
-import type { ContractWorkflowStage, DocumentKind, DocumentState, SectionCode, SiteStatus } from '@prisma/client'
+import type { ContractWorkflowStage, DocumentKind, DocumentState, SectionCode } from '@prisma/client'
 import { writeAudit } from '@/lib/audit'
 import { addMissingProjectSection, confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, sectionsForKind, transitionContractStage, WORKFLOW_STAGE_LABEL, WORKFLOW_STAGE_ORDER } from '@/lib/contract-workflow'
 import { getDeadlineInfo } from '@/lib/deadline'
 import { logger } from '@/lib/logger'
-
-
-const PROJECT_SECTION_LABEL: Record<string, string> = {
-	KM: '\u041a\u041c',
-	AR: '\u0410\u0420',
-	KZH: '\u041a\u0416',
-	OTHER: '\u041f\u0440\u043e\u0447\u0435\u0435',
-}
-
-const SITE_STATUS: Record<SiteStatus, { label: string; tone: 'ok' | 'warn' | 'off' | 'danger' }> = {
-	READY: { label: '\u0413\u043e\u0442\u043e\u0432\u0430', tone: 'ok' },
-	PREPARING: { label: '\u041f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043a\u0430', tone: 'off' },
-	ISSUE: { label: '\u041f\u0440\u043e\u0431\u043b\u0435\u043c\u0430', tone: 'warn' },
-	BLOCKED: { label: '\u0417\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u0430', tone: 'danger' },
-}
-
-/** Номер ДС часто уже содержит «ДС» или «№» — без этого выходило «ДС №ДС №1». */
-function agreementTitle(rawNumber: string): string {
-	const raw = rawNumber.trim()
-	if (/^ДС/i.test(raw)) return raw
-	return raw.startsWith('№') ? `ДС ${raw}` : `ДС №${raw}`
-}
-
-function estimateTitle(rawNumber: string): string {
-	const raw = rawNumber.trim()
-	if (/^Смета/i.test(raw)) return raw
-	return raw.startsWith('№') ? `Смета ${raw}` : `Смета №${raw}`
-}
-
-const EVENT_DOT: Record<string, string> = {
-	SUCCESS: 'bg-ok',
-	WARNING: 'bg-warn',
-	INFO: 'bg-brand',
-}
+import { agreementTitle, CONTRACT_INCLUDE, estimateTitle, PROJECT_SECTION_LABEL, SITE_STATUS } from '@/components/contract/shared'
+import ContractHero from '@/components/contract/ContractHero'
+import TabWorkflow from '@/components/contract/TabWorkflow'
+import TabAgreements from '@/components/contract/TabAgreements'
+import TabDocuments from '@/components/contract/TabDocuments'
+import TabHistory from '@/components/contract/TabHistory'
+import TabSite from '@/components/contract/TabSite'
+import TabProject from '@/components/contract/TabProject'
+import TabTasks from '@/components/contract/TabTasks'
+import TabExecutive from '@/components/contract/TabExecutive'
 
 const DOCUMENT_STATES: { key: DocumentState; label: string; hint: string }[] = [
 	{ key: 'SOURCE', label: 'Актуальные исходники', hint: 'Рабочие договоры, сметы и приложения' },
@@ -69,6 +43,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const user = await requireUser()
 	const canSeeAmounts = canSeeAmountsFor(user)
 	const canEdit = canWrite(user)
+	const isAdminUser = isAdmin(user)
 
 	// Видимость считается централизованно (lib/access), а не копией условий на каждой странице.
 	const contractLoadStartedAt = Date.now()
@@ -77,19 +52,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 			id: params.id,
 			...contractScope(user),
 		},
-		include: {
-    contractor: true,
-    manager: { select: { name: true } },
-		estimates: { where: { deletedAt: null }, orderBy: { date: 'asc' } },
-    agreements: { where: { deletedAt: null }, orderBy: { date: 'asc' }, include: { estimates: { where: { deletedAt: null } } } },
-			invoices: { where: { deletedAt: null }, orderBy: { date: 'asc' } },
-    documents: { where: { deletedAt: null }, orderBy: { signedAt: 'desc' } },
-    sites: { include: { events: { orderBy: { occurredAt: 'asc' } }, works: { select: { direction: true, crewCost: true, equipmentCost: true, materialCost: true, otherCost: true } } } },
-    executiveDocs: { orderBy: { name: 'asc' } },
-			projectSections: { orderBy: { code: 'asc' }, include: { responsible: { select: { name: true } }, documents: { where: { deletedAt: null, kind: { in: ['PROJECT_PDF', 'PROJECT_DWG'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, fileName: true, kind: true } } } },
-    tasks: { where: { deletedAt: null, status: { notIn: ['DONE', 'CANCELLED'] } }, orderBy: [{ dueDate: 'asc' }, { priority: 'desc' }], include: { assignee: { select: { name: true } } }, take: 5 },
-			stageHistory: { orderBy: { createdAt: 'desc' }, include: { changedBy: { select: { name: true } } } },
-},
+		include: CONTRACT_INCLUDE,
 	})
 
 	if (!contract) redirect('/contracts')
@@ -350,68 +313,27 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const overdueProjects = projectSections.filter((item) => item.deadline && item.deadline < new Date() && item.queueStatus !== 'DONE' && !item.dateTo)
 	const overdueTasks = openTasks.filter((item) => item.dueDate && item.dueDate < new Date())
 	const workflowTone: 'ok' | 'warn' | 'off' | 'brand' = contract.workflowStage === 'CLOSED' ? 'ok' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(contract.workflowStage) ? 'warn' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'
-	const workflowStageIndex = WORKFLOW_STAGE_ORDER.indexOf(contract.workflowStage)
 	const workflowError = searchParams.workflowError === 'km-final-file-required'
 
 	return (
 		<>
 			<Topbar
-				crumbs={[{ label: '\u0414\u043e\u0433\u043e\u0432\u043e\u0440\u044b', href: '/contracts' }, { label: contract.number }]}
+				crumbs={[{ label: 'Договоры', href: '/contracts' }, { label: contract.number }]}
 				userName={name.split(' ')[0]}
 				initials={initials(name)}
 			/>
 
 			<div className="workspace-content px-[26px] py-[22px]">
 				{searchParams.success && <div className="mb-[14px] rounded-[10px] border border-green-200 bg-green-50 px-[13px] py-[10px] text-[12.5px] font-medium text-green-800">{searchParams.success}</div>}
-				{/* Шапка страницы */}
-				<div className="work-hero mb-[20px] flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-start">
-					<div className="min-w-0">
-						<div className="flex flex-wrap items-center gap-[11px]">
-							<h1 className="text-[26px] font-bold tracking-[-0.02em]">{contract.number}</h1>
-							<CopyValue value={contract.number} label="Скопировать номер договора" />
-							<StatusChip status={contract.status} />
-							<Chip tone={workflowTone}>{WORKFLOW_STAGE_LABEL[contract.workflowStage]}</Chip>
-						</div>
-						<div className="mt-[5px] text-[13px] text-muted">
-							{contract.cipher ?? '\u0428\u0438\u0444\u0440 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'}
-							{' \u00b7 \u043e\u0442 '}
-							{formatDate(contract.date)}
-							{contract.manager?.name ? ` \u00b7 \u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440: ${contract.manager.name}` : ''}
-						</div>
-						<div className="mt-[12px] max-w-[520px]">
-							<div className="flex items-center gap-[3px]" role="img" aria-label={`\u0421\u0442\u0430\u0434\u0438\u044f ${workflowStageIndex + 1} \u0438\u0437 ${WORKFLOW_STAGE_ORDER.length}: ${WORKFLOW_STAGE_LABEL[contract.workflowStage]}`}>
-								{WORKFLOW_STAGE_ORDER.map((stage, index) => <span key={stage} title={WORKFLOW_STAGE_LABEL[stage]} className={`h-[6px] flex-1 rounded-full transition-colors ${index < workflowStageIndex ? 'bg-brand/55' : index === workflowStageIndex ? 'bg-brand ring-2 ring-brand/25' : 'bg-line'}`} />)}
-							</div>
-							<div className="mt-[6px] text-[11px] text-faint">{`\u042d\u0442\u0430\u043f ${workflowStageIndex + 1} \u0438\u0437 ${WORKFLOW_STAGE_ORDER.length}`}</div>
-						</div>
-					</div>
 
-					{canEdit && (
-						<div className="flex flex-wrap gap-[9px] sm:ml-auto sm:justify-end">
-							<ContractHierarchy nodes={hierarchyNodes} />
-							<a href={`/api/contracts/${contract.id}/download`} className="inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised">Скачать всё</a>
-							<Link
-								href={`/contracts/${contract.id}/edit`}
-								className="inline-flex h-[38px] items-center gap-[7px] rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised"
-							>
-								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-									<path d="M12 20h8M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-								</svg>
-								{'\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c'}
-							</Link>
-							<Link
-								href={`/contracts/${contract.id}/upload`}
-								className="brand-gradient inline-flex h-[38px] items-center gap-[7px] rounded-[10px] px-[15px] text-[13.5px] font-semibold text-white"
-							>
-								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-									<path d="M12 4v11m0 0 4-4m-4 4-4-4M4 19h16" />
-								</svg>
-								{'\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442'}
-							</Link>
-							{isAdmin(user) && <form action={deleteContract}><button className="inline-flex h-[38px] items-center rounded-[10px] border border-danger/25 bg-danger/10 px-[12px] text-[12px] font-semibold text-danger hover:bg-danger/15">В корзину</button></form>}
-						</div>
-					)}
-				</div>
+				<ContractHero
+					contract={contract}
+					canEdit={canEdit}
+					isAdminUser={isAdminUser}
+					workflowTone={workflowTone}
+					hierarchyNodes={hierarchyNodes}
+					deleteContract={deleteContract}
+				/>
 
 				<div className="grid grid-cols-1 items-start gap-[18px] xl:grid-cols-[minmax(0,1fr)_316px]">
 					{/* ---------- Левая колонка ---------- */}
@@ -441,259 +363,52 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							{ id: 'history', label: 'История' },
 						]} />
 
-						{/* Дополнительные соглашения */}
-						<Card id="workflow" role="tabpanel" aria-labelledby="tab-workflow">
-							<CardHeader title="Ход договора" extra={<Chip tone={contract.workflowStage === 'CLOSED' ? 'ok' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'}>{WORKFLOW_STAGE_LABEL[contract.workflowStage]}</Chip>} />
-							<div className="p-[18px]">
-								{!contract.pr1ConfirmedAt && (latestPr1 ? (
-									<form action={confirmPr1} className="rounded-[11px] border border-brand/25 bg-brand/5 p-[12px]">
-										<div className="text-[12.5px] font-bold">Подтвердить подписанное Приложение №1</div>
-										<div className="mt-1 text-[11.5px] leading-5 text-muted">Система создаст нужные разделы, задачи и площадку для СМР.</div>
-										<div className="mt-3 grid gap-[8px] sm:grid-cols-[1fr_140px_auto]"><input name="signedAt" type="date" defaultValue={(latestPr1.signedAt ?? new Date()).toISOString().slice(0, 10)} className="h-[35px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><input name="workingDays" type="number" min="1" max="730" defaultValue={contract.workingDays ?? ''} placeholder="Рабочих дней" className="h-[35px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><button className="brand-gradient rounded-[8px] px-[12px] text-[12px] font-semibold text-white">Подтвердить ПР1</button></div>
-									</form>
-								) : <div className="flex flex-wrap items-center justify-between gap-[10px] rounded-[11px] border border-warn/25 bg-warn-bg p-[12px]"><div><div className="text-[12.5px] font-bold">Нужен подписанный файл ПР1</div><div className="mt-1 text-[11.5px] text-muted">Откройте отдельную зону, перетащите файл и подтвердите дату.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?pr1=1`} className="rounded-[8px] border border-line bg-surface px-[11px] py-[7px] text-[11.5px] font-semibold">Загрузить ПР1</Link>}</div>)}
+						<TabWorkflow
+							contract={contract}
+							canEdit={canEdit}
+							isAdminUser={isAdminUser}
+							latestPr1={latestPr1}
+							nextWorkflowStages={nextWorkflowStages}
+							workflowError={workflowError}
+							confirmPr1={confirmPr1}
+							revokePr1={revokePr1}
+							moveWorkflowStage={moveWorkflowStage}
+							applyDemoStep={applyDemoStep}
+						/>
 
-								{isAdmin(user) && contract.pr1ConfirmedAt && <form action={revokePr1} className="mt-[12px] flex flex-wrap items-center gap-[8px] border-t border-line-soft pt-[12px]"><span className="text-[11.5px] text-faint">Админ: отмена ошибочного ПР1</span><input name="reason" required placeholder="Причина отмены" className="h-[34px] min-w-[180px] flex-1 rounded-[8px] border border-danger/25 bg-surface px-[9px] text-[12px]" /><button className="h-[34px] rounded-[8px] border border-danger/30 bg-danger/10 px-[11px] text-[12px] font-semibold text-danger">Отменить ПР1</button></form>}
-								{canEdit && nextWorkflowStages.length > 0 && <form action={moveWorkflowStage} className="mt-[12px] flex flex-wrap items-center gap-[8px] border-t border-line-soft pt-[12px]"><span className="text-[11.5px] text-muted">Следующий шаг:</span><select name="toStage" className="h-[34px] rounded-[8px] border border-line bg-surface px-[9px] text-[12px]">{nextWorkflowStages.map((stage) => <option key={stage} value={stage}>{WORKFLOW_STAGE_LABEL[stage]}</option>)}</select><input name="comment" placeholder="Комментарий (необязательно)" className="h-[34px] min-w-[180px] flex-1 rounded-[8px] border border-line bg-surface px-[9px] text-[12px]" /><button className="h-[34px] rounded-[8px] border border-brand/30 bg-brand/10 px-[11px] text-[12px] font-semibold text-brand-ink">Перевести</button></form>}
-								{workflowError && <div className="mt-[10px] flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-warn/30 bg-warn-bg px-[11px] py-[9px] text-[11.5px] text-warn"><span><b>Передача в цех пока заблокирована.</b> Нужны: готовый раздел КМ и итоговый PDF.</span><Link href={`/projects?view=production`} className="font-semibold text-brand-ink hover:underline">Открыть буфер цеха →</Link></div>}
+						<TabAgreements contract={contract} canEdit={canEdit} canSeeAmounts={canSeeAmounts} />
 
-								{isAdmin(user) && <details className="group mt-[12px] overflow-hidden rounded-[11px] border border-dashed border-brand/35 bg-gradient-to-r from-brand/10 via-brand-soft/45 to-surface"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-[12px] py-[10px]"><span><b className="block text-[11.5px] text-brand-ink">Демо-панель администратора</b><span className="mt-0.5 block text-[10.5px] text-muted">Тестовые переходы без загрузки файлов</span></span><span className="grid h-7 w-7 place-items-center rounded-lg bg-surface text-brand-ink transition-transform group-open:rotate-180">⌄</span></summary><div className="grid gap-2 border-t border-brand/15 p-[10px] sm:grid-cols-2"><form action={applyDemoStep} className="rounded-[9px] border border-line bg-surface/85 p-[10px]"><input type="hidden" name="step" value="pr1" /><b className="block text-[11px]">1. Подтвердить ПР1</b><span className="mt-1 block text-[10px] leading-4 text-muted">Создаст площадку, проектные разделы и задачи.</span><button className="mt-2 rounded-lg bg-brand px-2.5 py-1.5 text-[10.5px] font-semibold text-white transition hover:brightness-110">Сделать ПР1 подписанным</button></form><form action={applyDemoStep} className="rounded-[9px] border border-line bg-surface/85 p-[10px]"><input type="hidden" name="step" value="production" /><b className="block text-[11px]">2. Завершить проектирование</b><span className="mt-1 block text-[10px] leading-4 text-muted">Переведёт договор в ожидание производства только для демонстрации.</span><button className="mt-2 rounded-lg border border-brand/30 bg-brand-soft px-2.5 py-1.5 text-[10.5px] font-semibold text-brand-ink transition hover:bg-brand hover:text-white">КМ готов → в буфер</button></form></div></details>}
-								{contract.stageHistory.length > 0 && <div className="mt-[14px] border-t border-line-soft pt-[12px]"><div className="mb-[7px] text-[10.5px] font-bold uppercase tracking-[0.07em] text-faint">Последние изменения</div><div className="flex flex-col gap-[6px]">{contract.stageHistory.slice(0, 5).map((item) => <div key={item.id} className="flex items-start justify-between gap-3 text-[11.5px]"><div><span className="font-medium">{item.fromStage ? `${WORKFLOW_STAGE_LABEL[item.fromStage]} → ` : ''}{WORKFLOW_STAGE_LABEL[item.toStage]}</span>{item.comment ? <span className="text-muted"> · {item.comment}</span> : null}<span className="text-faint"> · {item.isAutomatic ? 'автоматически' : item.changedBy?.name ?? 'система'}</span></div><span className="flex-none text-faint">{formatDateTime(item.createdAt)}</span></div>)}</div></div>}
-							</div>
-						</Card>
+						<TabDocuments
+							contract={contract}
+							canEdit={canEdit}
+							isAdminUser={isAdminUser}
+							documentsForRegistry={documentsForRegistry}
+							selectedFolder={selectedFolder}
+							folders={FOLDERS}
+							folderFor={folderFor}
+							sourceDataChecklist={sourceDataChecklist}
+							latestPr1={latestPr1}
+							documentSections={documentSections}
+							stateLabel={stateLabel}
+							changeDocumentState={changeDocumentState}
+							deleteDocument={deleteDocument}
+						/>
 
-						<Card id="agreements" hidden role="tabpanel" aria-labelledby="tab-agreements">
-							<CardHeader
-								title={'\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u044f'}
-								extra={
-									canEdit ? (
-										<span className="flex items-center gap-[12px] text-[12px]">
-											<Link href={`/contracts/${contract.id}/agreements/new`} className="text-brand-ink hover:underline">
-												{'+ \u0414\u0421'}
-											</Link>
-											<Link href={`/contracts/${contract.id}/estimates/new`} className="text-brand-ink hover:underline">
-												{'+ \u0421\u043c\u0435\u0442\u0430'}
-											</Link>
-											<span className="text-muted">{contract.agreements.length}</span>
-										</span>
-									) : (
-										contract.agreements.length || undefined
-									)
-								}
-							/>
-							{contract.agreements.length === 0 ? (
-								<EmptyState text={'\u0414\u043e\u043f. \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0439 \u043d\u0435\u0442'} />
-							) : (
-								<div className="px-[10px] py-[6px]">
-									{contract.agreements.map((a) => {
-										const est = a.estimates[0]
-										return (
-											<div key={a.id} className="flex items-center gap-[11px] rounded-[10px] px-[8px] py-[9px] hover:bg-raised">
-												<div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-brand-soft text-[9px] font-bold text-brand-ink">
-													{'\u0414\u0421'}
-												</div>
-												<div className="min-w-0">
-													<div className="truncate text-[13px] font-medium">
-														{agreementTitle(a.number)}
-													</div>
-													<div className="mt-[2px] text-[11.5px] text-faint">
-														{est
-													? `${estimateTitle(est.number)}${canSeeAmounts && est.amount != null ? ` \u00b7 ${formatMoney(est.amount)}` : ''}`
-															: '\u0411\u0435\u0437 \u0441\u043c\u0435\u0442\u044b'}
-													</div>
-												</div>
-												<div className="tnum ml-auto text-[11.5px] text-faint">{formatDate(a.date)}</div>
-											</div>
-										)
-									})}
-								</div>
-							)}
-						</Card>
+						<TabHistory contractNumber={contract.number} auditLogs={auditLogs} documentNameById={documentNameById} />
 
-						{/* Документы, сгруппированные по типу */}
-						<Card id="documents" hidden role="tabpanel" aria-labelledby="tab-documents">
-							<CardHeader
-								title={'\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b'}
-								extra={plural(documentsForRegistry.length, '\u0444\u0430\u0439\u043b', '\u0444\u0430\u0439\u043b\u0430', '\u0444\u0430\u0439\u043b\u043e\u0432')}
-							/>
-							<div className="flex gap-1 overflow-x-auto border-b border-line-soft px-3 py-2.5">
-								<Link href={`/contracts/${contract.id}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${!selectedFolder ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>Все · {documentsForRegistry.length}</Link>
-								{FOLDERS.map((folder) => { const count = documentsForRegistry.filter((document) => folderFor(document) === folder.key).length; return <Link key={folder.key} href={`/contracts/${contract.id}?folder=${folder.key}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${selectedFolder === folder.key ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>{folder.label} · {count}</Link> })}
-							</div>
-							{(!selectedFolder || selectedFolder === 'source-data') && <div className="mx-[11px] mt-[11px] rounded-[11px] border border-brand/15 bg-brand/5 p-3">
-								<div className="flex flex-wrap items-start gap-3"><div className="min-w-0 flex-1"><div className="text-[12.5px] font-bold">Исходные данные от заказчика</div><div className="mt-1 text-[10.5px] text-muted">ИГИ, ГПЗУ, топосъёмка и сведения о стеснённых условиях хранятся отдельно от смет и проектов.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?kind=SOURCE_DATA`} className="rounded-[8px] border border-brand/25 bg-surface px-2.5 py-1.5 text-[10.5px] font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить</Link>}</div>
-								<div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{sourceDataChecklist.map((item) => <div key={item.label} className={`rounded-[8px] border px-2.5 py-2 ${item.document ? 'border-ok/25 bg-ok/5' : 'border-line-soft bg-surface/60'}`}><div className="flex items-center gap-1.5 text-[10.5px] font-bold"><span className={item.document ? 'text-ok' : 'text-faint'}>{item.document ? '●' : '○'}</span>{item.label}</div><div className="mt-1 truncate text-[10px] text-faint">{item.document ? item.document.fileName : item.hint}</div></div>)}</div>
-							</div>}
-							<div className={`mx-[11px] mt-[11px] flex flex-wrap items-center gap-[10px] rounded-[11px] border px-[12px] py-[10px] ${latestPr1 ? contract.pr1ConfirmedAt ? 'border-ok/25 bg-ok-bg' : 'border-warn/25 bg-warn-bg' : 'border-line-soft bg-raised/50'}`}>
-								<div className="grid h-8 w-8 place-items-center rounded-[8px] bg-surface text-[10px] font-bold text-brand-ink">{`\u041f\u04201`}</div>
-								<div className="min-w-0 flex-1"><div className="text-[12px] font-bold">{`\u041f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u043d\u043e\u0435 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u21161`}</div>{latestPr1 ? <Link href={`/documents/${latestPr1.id}`} className="mt-[2px] block truncate text-[11px] font-semibold text-brand-ink hover:underline">{latestPr1.fileName}</Link> : <div className="mt-[2px] text-[11px] text-muted">{`\u0424\u0430\u0439\u043b \u0435\u0449\u0451 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d`}</div>}</div>
-								{latestPr1 ? <a href="#workflow" className={`rounded-[8px] px-[10px] py-[6px] text-[11px] font-semibold ${contract.pr1ConfirmedAt ? 'bg-ok/10 text-ok' : 'bg-warn/15 text-warn'}`}>{contract.pr1ConfirmedAt ? `\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e` : `\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c`}</a> : canEdit && <Link href={`/contracts/${contract.id}/upload?pr1=1`} className="rounded-[8px] border border-line bg-surface px-[10px] py-[6px] text-[11px] font-semibold">{`\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u041f\u04201`}</Link>}
-							</div>
-							{documentsForRegistry.length === 0 ? (
-								<EmptyState text={'\u0424\u0430\u0439\u043b\u043e\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442'} />
-							) : (
-								<div className="space-y-[9px] p-[11px]">
-									{documentSections.map((section) => <details key={section.key} open={section.key === 'SOURCE' && section.documents.length <= 6} className="overflow-hidden rounded-[11px] border border-line-soft">
-									<summary className="group/state flex cursor-pointer list-none items-center gap-3 bg-raised/60 px-3 py-2.5 transition hover:bg-brand/5"><span className="text-faint transition-transform group-open/state:rotate-90"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="m9 18 6-6-6-6" /></svg></span><span className="min-w-0 flex-1"><span className="block text-[12.5px] font-bold">{section.label}</span><span className="block text-[10px] text-faint">{section.hint}</span></span><span className="hidden text-[10px] font-medium text-faint sm:inline">{section.documents.length > 12 ? 'Открыть список' : ''}</span><span className="rounded-full bg-surface px-2 py-1 text-[10px] font-bold text-muted">{section.documents.length}</span></summary>
-										<div className="px-2 pb-2">{canEdit && <div className="flex justify-end px-2 pt-2"><Link href={`/contracts/${contract.id}/upload?state=${section.key}`} className="rounded-[7px] border border-line bg-surface px-2.5 py-1 text-[10.5px] font-semibold text-brand-ink hover:bg-brand-soft">+ Загрузить в эту папку</Link></div>}{section.kinds.length === 0 && <div className="px-2 py-4 text-center text-[11px] text-faint">В этом разделе файлов пока нет</div>}{section.kinds.map((kind) => <div key={kind}>
-											<div className="flex items-center gap-2 px-2 pb-1 pt-3"><span className="text-[11px] font-bold text-muted">{DOCUMENT_KIND_LABELS[kind]}</span><span className="text-[10px] text-faint">{section.byKind.get(kind)!.length}</span></div>
-											{section.byKind.get(kind)!.slice(0, 12).map((d) => (
-							<div key={d.id} className="interactive-row flex items-center gap-2 rounded-[10px] px-[8px] py-[4px]">
-												<Link href={`/documents/${d.id}`} className="flex min-w-0 flex-1 items-center gap-[11px] py-[5px]">
-													<FileIcon fileName={d.fileName} />
-													<div className="min-w-0">
-														<div className="truncate text-[13px] font-medium">{d.fileName}</div>
-														<div className="mt-[2px] text-[11.5px] text-faint">
-															{formatBytes(d.sizeBytes)}
-															{` · ${stateLabel[d.state]}`}
-															{d.signedAt ? ` \u00b7 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d ${formatDate(d.signedAt)}` : ''}
-															{d.isConfidential ? ' \u00b7 \u041a\u043e\u043d\u0444\u0438\u0434\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u043e' : ''}
-														</div>
-													</div>
-												</Link>
-												{canEdit && <form action={changeDocumentState}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-[7px] border border-line bg-surface px-2.5 py-1.5 text-[10.5px] font-semibold text-muted hover:border-brand/40 hover:text-brand-ink">{d.state === 'ARCHIVE' ? 'Восстановить' : 'В архив'}</button></form>}
-												{isAdmin(user) && <form action={deleteDocument}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-[7px] border border-danger/20 bg-danger/5 px-2 py-1.5 text-[10.5px] font-semibold text-danger hover:bg-danger/10">Удалить</button></form>}
-												</div>
-											))}
-											{section.byKind.get(kind)!.length > 12 && <Link href={`/documents?contractId=${contract.id}&kind=${kind}&state=${section.key}`} className="mx-2 mt-1 inline-flex rounded-[8px] border border-dashed border-line-soft bg-raised/40 px-2.5 py-2 text-[11px] font-semibold text-brand-ink hover:bg-brand-soft">Показать все {section.byKind.get(kind)!.length} файлов в реестре</Link>}
-										</div>)}</div>
-									</details>)}
-								</div>
-							)}
-						</Card>
+						{site && <TabSite site={site} />}
 
-						<Card id="history" className="order-last" hidden role="tabpanel" aria-labelledby="tab-history">
-							<CardHeader title="История действий" extra={`${auditLogs.length} событий`} />
-							{auditLogs.length === 0 ? <EmptyState text="История начнёт заполняться после изменений и загрузок" /> : <div>{auditLogs.map((log) => {
-								const objectName = documentNameById.get(log.entityId) ?? `договор № ${contract.number}`
-								const actionLabel = log.entityType === 'DocumentArchived' ? 'отправил в архив' : log.entityType === 'DocumentRestored' ? 'восстановил версию' : log.action === 'UPLOAD' ? 'загрузил файл' : log.action === 'DOWNLOAD' ? 'скачал файл' : log.action === 'CREATE' ? 'создал' : log.action === 'DELETE' ? 'удалил' : 'изменил'
-								return <div key={log.id} className="flex items-start gap-3 border-b border-line-soft px-4 py-3 last:border-0"><div className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full bg-brand-soft text-brand"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 8v5l3 2"/><circle cx="12" cy="12" r="9"/></svg></div><div className="min-w-0 flex-1"><div className="text-[12px]"><b>{log.user.name}</b> {actionLabel} <span className="font-medium">{objectName}</span></div><div className="mt-1 text-[10.5px] text-faint">{formatDateTime(log.createdAt)}</div></div></div>
-							})}</div>}
-						</Card>
-						{/* Площадка */}
-						{site && (
-						<Card id="site" className="overflow-hidden" hidden role="tabpanel" aria-labelledby="tab-site">
-							<details open={site.status === 'ISSUE' || site.status === 'BLOCKED'} className="group/site">
-								<summary className="flex cursor-pointer list-none items-center gap-3 px-[19px] py-[14px] transition hover:bg-raised/50"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-soft text-brand-ink transition-transform group-open/site:rotate-180">⌄</span><span className="min-w-0"><span className="block text-[14px] font-bold tracking-[-.01em]">{'\u041f\u043b\u043e\u0449\u0430\u0434\u043a\u0430'}</span><span className="mt-0.5 block truncate text-[10.5px] text-faint">{site.address} · {plural(site.events.length, 'запись', 'записи', 'записей')}</span></span><span className="ml-auto"><Chip tone={SITE_STATUS[site.status].tone}>{SITE_STATUS[site.status].label}</Chip></span></summary>
-								<div className="border-t border-line-soft p-[18px]">
-									<div className="mb-[14px] text-[13px] text-muted">{site.address}</div>
-									<div className="relative flex flex-col gap-[16px] before:absolute before:bottom-[10px] before:left-[8px] before:top-[10px] before:w-px before:bg-line">
-										{site.events.map((e) => (
-											<div key={e.id} className="relative pl-[28px]">
-												<span
-													className={`absolute left-[2px] top-[3px] h-[13px] w-[13px] rounded-full ring-4 ring-surface ${
-														EVENT_DOT[e.type] ?? 'bg-brand'
-													}`}
-												/>
-												<div className="tnum text-[11px] text-faint">{formatDateTime(e.occurredAt)}</div>
-												<div className="mt-[3px] text-[12.5px] leading-[1.45]">{e.text}</div>
-											</div>
-										))}
-										{site.events.length === 0 && (
-											<div className="pl-[28px] text-[12.5px] text-faint">
-												{'\u0421\u043e\u0431\u044b\u0442\u0438\u0439 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442'}
-											</div>
-										)}
-									</div>
-									<Link
-										href={`/sites/${site.id}`}
-										className="mt-[14px] inline-flex h-[36px] items-center justify-center rounded-[10px] border border-line bg-surface px-[15px] text-[13px] font-semibold hover:bg-raised"
-									>
-										{'\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435 \u043e \u043f\u043b\u043e\u0449\u0430\u0434\u043a\u0435'}
-									</Link>
-								</div>
-							</details>
-						</Card>
-						)}
+						<TabProject
+							contractId={contract.id}
+							projectSections={projectSections}
+							missingProjectSections={missingProjectSections}
+							canEdit={canEdit}
+							addProjectSection={addProjectSection}
+						/>
 
-						{/* Проект */}
-						<Card id="project" hidden role="tabpanel" aria-labelledby="tab-project">
-							<CardHeader title={'\u041f\u0440\u043e\u0435\u043a\u0442'} extra={projectSections.length || undefined} />
-							{projectSections.length === 0 && missingProjectSections.length === 0 ? (
-								<EmptyState text={'\u0420\u0430\u0437\u0434\u0435\u043b\u044b \u043f\u0440\u043e\u0435\u043a\u0442\u0430 \u043d\u0435 \u0437\u0430\u0432\u0435\u0434\u0435\u043d\u044b'} />
-							) : (
-								<div className="grid grid-cols-1 gap-[12px] p-[18px] sm:grid-cols-2 xl:grid-cols-3">
-									{projectSections.map((s) => { const sourceDocs = s.documents.filter((document) => document.kind === 'PROJECT_DWG'); const finalDocs = s.documents.filter((document) => document.kind === 'PROJECT_PDF'); return (
-										<div key={s.id} className="rounded-[12px] border border-line bg-raised/40 p-[14px]">
-											<div className="inline-flex items-center rounded-[7px] bg-brand-soft px-[9px] py-[3px] text-[11.5px] font-bold text-brand-ink">
-												{PROJECT_SECTION_LABEL[s.code] ?? s.code}
-											</div>
-											<div className="mt-[10px] truncate text-[13px] font-medium">
-												{s.responsible?.name ?? '\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043d\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d'}
-											</div>
-											<div className="tnum mt-[4px] text-[11.5px] text-faint">
-												{s.dateFrom ? formatDate(s.dateFrom) : '\u2014'}
-												{' \u2013 '}
-												{s.dateTo ? formatDate(s.dateTo) : '\u2014'}
-											</div>
-											<div className="mt-3">
-												<div className="micro-label">Исходники (DWG)</div>
-												<div className="mt-1 flex flex-wrap gap-1.5">
-													{sourceDocs.map((document) => <a key={document.id} href={`/api/documents/${document.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 text-[10px] font-bold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">↓ DWG</a>)}
-													{sourceDocs.length === 0 && <span className="text-[10px] text-faint">Пока не загружены</span>}
-													{canEdit && <Link href={`/contracts/${contract.id}/upload?project=${s.id}`} className="rounded-lg border border-dashed border-line px-2 py-1 text-[10px] font-semibold text-muted hover:border-brand/40 hover:text-brand-ink">+ Добавить</Link>}
-												</div>
-											</div>
-											<div className="mt-3">
-												<div className="micro-label">Итоговый файл (PDF)</div>
-												<div className="mt-1 flex flex-wrap gap-1.5">
-													{finalDocs.map((document) => <a key={document.id} href={`/api/documents/${document.id}`} className="rounded-lg border border-line bg-surface px-2 py-1 text-[10px] font-bold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">↓ PDF</a>)}
-													{finalDocs.length === 0 && <span className="text-[10px] text-warn">Ещё не загружен</span>}
-												</div>
-											</div>
-										</div>
-									)})}
-									{canEdit && missingProjectSections.map((code) => (
-										<form key={code} action={addProjectSection} className="flex flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-line p-[14px] text-center">
-											<input type="hidden" name="code" value={code} />
-											<span className="text-[11.5px] text-muted">Раздел {PROJECT_SECTION_LABEL[code] ?? code} ещё не заведён</span>
-											<button className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить раздел {PROJECT_SECTION_LABEL[code] ?? code}</button>
-										</form>
-									))}
-								</div>
-							)}
-						</Card>
+						<TabTasks contractId={contract.id} openTasks={openTasks} />
 
-						<Card id="tasks" hidden role="tabpanel" aria-labelledby="tab-tasks">
-							<CardHeader title="Задачи" extra={openTasks.length || undefined} />
-							{openTasks.length === 0 ? (
-								<EmptyState text="Открытых задач по договору нет" />
-							) : (
-								<div className="flex flex-col p-[10px]">
-									{openTasks.map((task) => {
-										const overdue = Boolean(task.dueDate && task.dueDate < new Date())
-										return (
-											<Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center gap-[12px] rounded-[10px] px-[9px] py-[9px] hover:bg-raised">
-												<div className="min-w-0 flex-1">
-													<div className="truncate text-[12.5px] font-semibold">{task.title}</div>
-													<div className="mt-[2px] truncate text-[11px] text-muted">{task.assignee.name}{task.category ? ` · ${task.category}` : ''}</div>
-												</div>
-												<span className={`text-[11.5px] ${overdue ? 'font-semibold text-danger' : 'text-muted'}`}>{formatDate(task.dueDate)}</span>
-												<Chip tone={task.status === 'IN_PROGRESS' ? 'brand' : 'off'}>{task.status === 'IN_PROGRESS' ? 'В работе' : 'Не начато'}</Chip>
-											</Link>
-										)
-									})}
-									<Link href={`/tasks?contract=${contract.id}`} className="mt-[6px] rounded-[9px] border border-line px-[12px] py-[8px] text-center text-[11.5px] font-semibold hover:bg-raised">Все задачи и создание новой →</Link>
-								</div>
-							)}
-						</Card>
-
-						{/* Исполнительная документация */}
-						<Card id="executive" hidden role="tabpanel" aria-labelledby="tab-executive">
-							<CardHeader title={'\u0418\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446\u0438\u044f'} extra={executiveDocs.length || undefined} />
-							{executiveDocs.length === 0 ? (
-								<EmptyState text={'\u0421\u043f\u0438\u0441\u043e\u043a \u043f\u0443\u0441\u0442'} />
-							) : (
-								<div className="flex flex-col gap-[2px] p-[10px]">
-									{executiveDocs.map((ed) => (
-										<div key={ed.id} className="flex items-center gap-3 rounded-[10px] px-[8px] py-[9px] hover:bg-raised">
-											<span className="min-w-0 flex-1 truncate text-[13px]">{ed.name}</span>
-											<ExecStatusChip status={ed.status} />
-										</div>
-									))}
-								</div>
-							)}
-						</Card>
+						<TabExecutive executiveDocs={executiveDocs} />
 					</div>
 
 					{/* ---------- Правая колонка ---------- */}
@@ -701,18 +416,18 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						{canSeeAmounts && (
 							<Card className="p-[18px]">
 								<div className="text-[11.5px] text-muted">
-									{'\u0421\u0443\u043c\u043c\u0430 \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430'}
+									Сумма договора
 								</div>
 								<div className="tnum mt-[5px] text-[23px] font-bold tracking-[-0.01em]">
 									{formatMoney(contract.amount, contract.currency)}
 								</div>
 								<div className="mt-[4px] text-[11.5px] text-faint">
-									{'\u0432\u043a\u043b. '}
+									{'вкл. '}
 									{plural(
 										contract.agreements.length,
-										'\u0434\u043e\u043f. \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0435',
-										'\u0434\u043e\u043f. \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u044f',
-										'\u0434\u043e\u043f. \u0441\u043e\u0433\u043b\u0430\u0448\u0435\u043d\u0438\u0439',
+										'доп. соглашение',
+										'доп. соглашения',
+										'доп. соглашений',
 									)}
 								</div>
 								{(contract.smrAmount != null || contract.mkAmount != null || contract.deliveryAmount != null) && <div className="mt-[13px] grid grid-cols-3 gap-[5px] border-t border-line-soft pt-[11px] text-center text-[10.5px] text-muted"><div>СМР<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div>МК<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div>Доставка<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}
