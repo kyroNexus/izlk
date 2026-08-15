@@ -69,6 +69,14 @@ export type DepartmentFlow = {
 	handoff: { label: string; count: number }
 }
 
+/** What each department takes in, focuses on, and hands off — shown once, on the department's own page. */
+export const DEPARTMENT_NOTE: Record<DepartmentKey, { input: string; focus: string; result: string; output: string }> = {
+	commercial: { input: 'Запрос заказчика и исходные документы', focus: 'Подписи, исходные договоры и передача в проектирование.', result: 'Договор подтверждён и передан в следующий отдел.', output: 'Конструкторский отдел' },
+	engineering: { input: 'Подписанное ПР1 и задача на проектирование', focus: 'Очередь КМ, КЖ и АР, сроки разделов и готовые PDF.', result: 'Готовые разделы переданы в производство.', output: 'Производственный отдел' },
+	production: { input: 'Готовый КМ и подтверждённый запуск', focus: 'Буфер запуска, выпуск и готовность к отгрузке.', result: 'Изделия переданы на отгрузку или монтаж.', output: 'Строительный отдел' },
+	construction: { input: 'Изделия, площадка и план монтажа', focus: 'Площадки, монтаж, комментарии и фотоотчёты.', result: 'Работы закрыты, комплект исполнительной документации собран.', output: 'Исполнительная документация' },
+}
+
 const WORKFLOW_FUNNEL_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
 
 export type DesignRow = {
