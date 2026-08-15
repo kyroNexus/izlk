@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isAdmin, type SessionUser } from '@/lib/access'
 import { withApiAuth } from '@/lib/api-auth'
-import { chatError, chatThread, requireChatWrite } from '@/lib/chat'
+import { chatError, chatThread, notifyChatParticipants, requireChatWrite } from '@/lib/chat'
 import { prisma } from '@/lib/prisma'
 import { writeAudit } from '@/lib/audit'
 
@@ -62,6 +62,9 @@ async function post(request: Request, { user }: { user: SessionUser }, { params 
 	if (!thread) return chatError()
 	const message = await prisma.chatMessage.create({ data: { threadId: thread.id, authorId: user.id, text: parsed.data.text }, include: { author: { select: { id: true, name: true } } } })
 	await writeAudit({ userId: user.id, action: 'CREATE', entityType: 'ChatMessage', entityId: message.id })
+	// Notifications are secondary to the message itself actually saving — notify() already
+	// swallows its own errors, same as everywhere else notify() is called in this app.
+	await notifyChatParticipants(thread, user.id)
 	return NextResponse.json({ id: message.id, text: message.text, createdAt: message.createdAt, author: message.author, own: true, canDelete: true }, { status: 201 })
 }
 

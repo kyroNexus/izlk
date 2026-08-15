@@ -9,6 +9,11 @@ type NotifyInput = {
   message?: string | null
   href?: string | null
   dedupeKey?: string | null
+  /** Reopens an already-read notification under the same dedupeKey — for
+   * events where "still true today" (a standing deadline) should stay
+   * read once acknowledged, but "something new happened" (another chat
+   * message) should make it unread again even if the row already exists. */
+  resetUnread?: boolean
 }
 
 export async function notify(input: NotifyInput) {
@@ -18,7 +23,7 @@ export async function notify(input: NotifyInput) {
     where: { userId_dedupeKey: { userId: input.userId, dedupeKey: input.dedupeKey ?? `${Date.now()}-${Math.random()}` } },
     // Важный момент: предупреждение «скоро срок» должно превращаться в
     // «просрочено», а не оставаться старым текстом в колокольчике.
-    update: { type: input.type ?? 'INFO', title: input.title, message: input.message ?? null, href: input.href ?? null },
+    update: { type: input.type ?? 'INFO', title: input.title, message: input.message ?? null, href: input.href ?? null, ...(input.resetUnread ? { readAt: null } : {}) },
     create: {
       userId: input.userId,
       type: input.type ?? 'INFO',
