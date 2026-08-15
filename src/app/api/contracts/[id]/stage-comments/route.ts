@@ -19,4 +19,4 @@ async function post(request: Request, { user }: { user: SessionUser }, { params 
 	return NextResponse.json({ id: comment.id, stage: comment.stage, text: comment.text, createdAt: comment.createdAt, authorName: user.name ?? null })
 }
 
-export const POST = withApiAuth(post, { access: 'write', csrf: true })
+export const POST = withApiAuth(post, { access: 'write', csrf: true, rateLimit: 'stage-comment' })

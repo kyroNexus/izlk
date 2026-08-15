@@ -79,5 +79,5 @@ async function remove(request: Request, { user }: { user: SessionUser }, { param
 }
 
 export const GET = withApiAuth(get, { access: 'authenticated' })
-export const POST = withApiAuth(post, { access: 'write', csrf: true })
+export const POST = withApiAuth(post, { access: 'write', csrf: true, rateLimit: 'chat-message' })
 export const DELETE = withApiAuth(remove, { access: 'write', csrf: true })

@@ -6,6 +6,12 @@ type Message = { id: string; text: string; createdAt: string; author: { id: stri
 
 const NEAR_BOTTOM_PX = 40
 
+function rateLimitMessage(response: Response) {
+	if (response.status !== 429) return null
+	const retryAfter = Number(response.headers.get('Retry-After'))
+	return retryAfter > 0 ? `Слишком много сообщений подряд — попробуйте через ${retryAfter} сек.` : 'Слишком много сообщений подряд, подождите немного.'
+}
+
 export default function ChatPanel({ endpoint, title }: { endpoint: string; title: string }) {
 	const [messages, setMessages] = useState<Message[]>([])
 	const [canWrite, setCanWrite] = useState(false)
@@ -84,7 +90,7 @@ export default function ChatPanel({ endpoint, title }: { endpoint: string; title
 		if (!text.trim()) return
 		stickToBottomRef.current = true
 		const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) })
-		if (!response.ok) { setError('Не удалось отправить сообщение.'); return }
+		if (!response.ok) { setError(rateLimitMessage(response) ?? 'Не удалось отправить сообщение.'); return }
 		const created = await response.json()
 		setMessages((current) => [...current, created]); setText('')
 	}
