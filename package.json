@@ -32,6 +32,7 @@
     "test:chat-delete-auth": "node -r ts-node/register/files scripts/test-chat-delete-authorization.cts",
     "test:construction-last-work": "node -r ts-node/register/files scripts/test-construction-last-work.cts",
     "test:department-flow": "tsx scripts/test-department-flow.cts",
+    "test:production-schedule-row": "node -r ts-node/register/files scripts/test-production-schedule-row.cts",
     "test:design-system": "node -r ts-node/register/files scripts/test-design-system.cts",
     "restore:database": "node -r ts-node/register/files scripts/restore-database.cts"
   },

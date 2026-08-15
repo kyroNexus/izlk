@@ -1,25 +1,75 @@
-import Link from 'next/link'
-import { ProductionPriority } from '@prisma/client'
 import Topbar from '@/components/Topbar'
 import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { prisma } from '@/lib/prisma'
-import { formatDate, initials } from '@/lib/format'
+import { initials } from '@/lib/format'
 import { writeAudit } from '@/lib/audit'
 import { advanceAfterShipmentRecorded } from '@/lib/contract-workflow'
-import ProductionRowSaveButton from '@/components/ProductionRowSaveButton'
+import ProductionScheduleRow, { type ProductionRow } from '@/components/ProductionScheduleRow'
+import Link from 'next/link'
+import { ProductionPriority } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
-const priorityLabel: Record<ProductionPriority, string> = { LOW: 'Низкий', NORMAL: 'Обычный', HIGH: 'Высокий', CRITICAL: 'Критичный' }
-const dateInput = (value: Date | null | undefined) => value ? value.toISOString().slice(0, 10) : ''
+/** Изготовление идёт по этой последовательности; первый шаг без даты — то, что цеху нужно сделать дальше. */
+const PRODUCTION_STEPS = [
+	{ key: 'pipeCutAt', label: 'Труборез' },
+	{ key: 'assemblyWeldingAt', label: 'Сборка' },
+	{ key: 'laserCutAt', label: 'Лазер' },
+	{ key: 'rollingAt', label: 'Прокат' },
+	{ key: 'paintingAt', label: 'Покраска' },
+	{ key: 'columnsPouringAt', label: 'Заливка' },
+] as const
+
+function nextOperationLabel(plan: { pipeCutAt: Date | null; assemblyWeldingAt: Date | null; laserCutAt: Date | null; rollingAt: Date | null; paintingAt: Date | null; columnsPouringAt: Date | null; plannedShipmentAt: Date | null; actualShipmentAt: Date | null } | null | undefined) {
+	if (plan?.actualShipmentAt) return 'Отгружено'
+	const next = PRODUCTION_STEPS.find((step) => !plan?.[step.key])
+	if (next) return next.label
+	return plan?.plannedShipmentAt ? 'Ожидает отгрузки' : 'Готово к отгрузке'
+}
 
 export default async function ProductionSchedulePage() {
 	const user = await requireUser()
 	const editable = canWrite(user)
 	const contracts = await prisma.contract.findMany({ where: { ...contractScope(user), workflowStage: { in: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'] } }, orderBy: { deadline: 'asc' }, include: { contractor: { select: { name: true } }, productionPlan: true, stageHistory: { where: { toStage: 'WAITING_PRODUCTION' }, orderBy: { createdAt: 'asc' }, take: 1 } } })
-	const rows = contracts.sort((a, b) => {
+	const sorted = contracts.sort((a, b) => {
 		const score = (priority?: ProductionPriority | null) => priority === 'CRITICAL' ? 4 : priority === 'HIGH' ? 3 : priority === 'NORMAL' ? 2 : 1
 		return score(b.productionPlan?.priority) - score(a.productionPlan?.priority) || Number(a.deadline ?? Infinity) - Number(b.deadline ?? Infinity)
+	})
+	// Строка получает только простые сериализуемые значения (Decimal -> строка) —
+	// клиентский остров ProductionScheduleRow не умеет принимать Decimal-объекты Prisma.
+	const rows: ProductionRow[] = sorted.map((contract, index) => {
+		const plan = contract.productionPlan
+		return {
+			id: contract.id,
+			index: index + 1,
+			number: contract.number,
+			contractorName: contract.contractor.name,
+			deadline: contract.deadline,
+			objectAddress: contract.objectAddress,
+			transfer: contract.stageHistory[0]?.createdAt ?? null,
+			nextOperationLabel: nextOperationLabel(plan),
+			buildingDimensions: plan?.buildingDimensions ?? '',
+			requestNumber: plan?.requestNumber ?? '',
+			locationOverride: plan?.locationOverride ?? '',
+			frameMaterial: plan?.frameMaterial ?? '',
+			columnsSpec: plan?.columnsSpec ?? '',
+			roofSpec: plan?.roofSpec ?? '',
+			ral: plan?.ral ?? '',
+			frameWeight: plan?.frameWeight?.toString() ?? '',
+			reinforcedConcreteWeight: plan?.reinforcedConcreteWeight?.toString() ?? '',
+			galvanizedWeight: plan?.galvanizedWeight?.toString() ?? '',
+			blackMetalWeight: plan?.blackMetalWeight?.toString() ?? '',
+			pipeCutAt: plan?.pipeCutAt ?? null,
+			assemblyWeldingAt: plan?.assemblyWeldingAt ?? null,
+			laserCutAt: plan?.laserCutAt ?? null,
+			rollingAt: plan?.rollingAt ?? null,
+			paintingAt: plan?.paintingAt ?? null,
+			columnsPouringAt: plan?.columnsPouringAt ?? null,
+			plannedShipmentAt: plan?.plannedShipmentAt ?? null,
+			actualShipmentAt: plan?.actualShipmentAt ?? null,
+			note: plan?.note ?? '',
+			priority: plan?.priority ?? 'NORMAL',
+		}
 	})
 	async function save(formData: FormData) {
 		'use server'
@@ -34,10 +84,41 @@ export default async function ProductionSchedulePage() {
 		const priority = String(formData.get('priority') ?? 'NORMAL') as ProductionPriority
 		if (!Object.values(ProductionPriority).includes(priority)) return
 		const actualShipmentAt = date('actualShipmentAt')
-		await prisma.productionPlan.upsert({ where: { contractId }, create: { contractId, buildingDimensions: text('buildingDimensions'), requestNumber: text('requestNumber'), frameMaterial: text('frameMaterial'), columnsSpec: text('columnsSpec'), roofSpec: text('roofSpec'), ral: text('ral'), frameWeight: number('frameWeight'), reinforcedConcreteWeight: number('reinforcedConcreteWeight'), galvanizedWeight: number('galvanizedWeight'), blackMetalWeight: number('blackMetalWeight'), locationOverride: text('locationOverride'), note: text('note'), priority, pipeCutAt: date('pipeCutAt'), assemblyWeldingAt: date('assemblyWeldingAt'), laserCutAt: date('laserCutAt'), rollingAt: date('rollingAt'), paintingAt: date('paintingAt'), columnsPouringAt: date('columnsPouringAt'), plannedShipmentAt: date('plannedShipmentAt'), actualShipmentAt: date('actualShipmentAt') }, update: { buildingDimensions: text('buildingDimensions'), requestNumber: text('requestNumber'), frameMaterial: text('frameMaterial'), columnsSpec: text('columnsSpec'), roofSpec: text('roofSpec'), ral: text('ral'), frameWeight: number('frameWeight'), reinforcedConcreteWeight: number('reinforcedConcreteWeight'), galvanizedWeight: number('galvanizedWeight'), blackMetalWeight: number('blackMetalWeight'), locationOverride: text('locationOverride'), note: text('note'), priority, pipeCutAt: date('pipeCutAt'), assemblyWeldingAt: date('assemblyWeldingAt'), laserCutAt: date('laserCutAt'), rollingAt: date('rollingAt'), paintingAt: date('paintingAt'), columnsPouringAt: date('columnsPouringAt'), plannedShipmentAt: date('plannedShipmentAt'), actualShipmentAt: date('actualShipmentAt') } })
+		const fields = { buildingDimensions: text('buildingDimensions'), requestNumber: text('requestNumber'), frameMaterial: text('frameMaterial'), columnsSpec: text('columnsSpec'), roofSpec: text('roofSpec'), ral: text('ral'), frameWeight: number('frameWeight'), reinforcedConcreteWeight: number('reinforcedConcreteWeight'), galvanizedWeight: number('galvanizedWeight'), blackMetalWeight: number('blackMetalWeight'), locationOverride: text('locationOverride'), note: text('note'), priority, pipeCutAt: date('pipeCutAt'), assemblyWeldingAt: date('assemblyWeldingAt'), laserCutAt: date('laserCutAt'), rollingAt: date('rollingAt'), paintingAt: date('paintingAt'), columnsPouringAt: date('columnsPouringAt'), plannedShipmentAt: date('plannedShipmentAt'), actualShipmentAt }
+		await prisma.productionPlan.upsert({ where: { contractId }, create: { contractId, ...fields }, update: fields })
 		await writeAudit({ userId: actor.id, action: 'UPDATE', entityType: 'ProductionPlan', entityId: contractId })
 		if (actualShipmentAt) await advanceAfterShipmentRecorded({ contractId, actorId: actor.id })
 	}
-	const field = 'h-8 min-w-[92px] rounded border border-line bg-surface px-2 text-[11px] outline-none focus:border-brand/60 disabled:bg-raised'
-	return <><Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Проектирование и графики', href: '/projects' }, { label: 'График производства' }]} userName={user.name ?? user.email ?? 'Пользователь'} initials={initials(user.name ?? user.email ?? 'ПП')} /><main className="px-[26px] py-[22px]"><div className="work-hero mb-4 flex flex-wrap items-end justify-between gap-4 px-5 py-4"><div><span className="text-[10px] font-bold uppercase tracking-[.1em] text-brand-ink">Цех и офис</span><h1 className="mt-1 text-[27px] font-bold tracking-[-.04em]">График производства</h1><p className="mt-1 text-[12px] text-muted">Очередь формируется по приоритету и сроку договора. Формулы плановых дат будут подключены после их утверждения.</p><Link href="/projects" className="mt-2 inline-flex text-[11.5px] font-semibold text-brand-ink hover:underline">← Карта потока проектирования</Link></div><div className="rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-semibold text-brand-ink">В потоке: {rows.length}</div></div><div className="overflow-x-auto rounded-[14px] border border-line bg-surface"><table className="min-w-[2250px] border-collapse text-[11px]"><thead className="sticky top-0 z-10 bg-raised"><tr className="text-[10px] font-bold uppercase tracking-[.05em] text-muted"><th rowSpan={2} className="sticky left-0 z-20 border-b border-r border-line bg-raised px-2 py-3">№</th><th colSpan={4} className="border-b border-r border-line px-2 py-2">Договор</th><th colSpan={5} className="border-b border-r border-line px-2 py-2">Проект</th><th colSpan={2} className="border-b border-r border-line px-2 py-2">Вес, кг</th><th colSpan={7} className="border-b border-r border-line px-2 py-2">Изготовление / отгрузка</th><th colSpan={2} className="border-b border-line px-2 py-2">Управление</th></tr><tr className="text-[10px] text-muted">{['Габарит / передан','№ дог.','№ заявки','Локация','Материал','Колонны','Кровля','RAL','Каркас / ЖБ','Цинк / ЧМ','Труборез','Сборка','Лазер','Прокат','Покраска','Заливка','План / факт','Примечание','Приоритет'].map((label) => <th key={label} className="border-b border-r border-line px-2 py-2 font-semibold last:border-r-0">{label}</th>)}</tr></thead><tbody>{rows.map((contract, index) => { const plan = contract.productionPlan; const transfer = contract.stageHistory[0]?.createdAt; return <tr key={contract.id} className="border-b border-line-soft align-top hover:bg-raised/45"><td className="sticky left-0 z-[1] border-r border-line bg-surface px-2 py-2 text-center font-bold">{index + 1}</td><td className="px-1 py-1"><input form={`plan-${contract.id}`} name="buildingDimensions" defaultValue={plan?.buildingDimensions ?? ''} disabled={!editable} className={field} placeholder="Габарит" /><div className="mt-1 text-[10px] text-faint">{transfer ? formatDate(transfer) : 'не передан'}</div></td><td className="px-2 py-2"><Link href={`/contracts/${contract.id}`} className="font-bold text-brand-ink hover:underline">{contract.number}</Link><div className="mt-1 text-[10px] text-faint">{contract.contractor.name}</div></td><td className="px-1 py-1"><input form={`plan-${contract.id}`} name="requestNumber" defaultValue={plan?.requestNumber ?? ''} disabled={!editable} className={field} /></td><td className="px-1 py-1"><input form={`plan-${contract.id}`} name="locationOverride" defaultValue={plan?.locationOverride ?? contract.objectAddress ?? ''} disabled={!editable} className={field} /><div className="mt-1 text-[10px] text-faint">срок: {formatDate(contract.deadline)}</div></td>{(['frameMaterial','columnsSpec','roofSpec','ral'] as const).map((name) => <td key={name} className="px-1 py-1"><input form={`plan-${contract.id}`} name={name} defaultValue={plan?.[name] ?? ''} disabled={!editable} className={field} /></td>)}<td className="px-1 py-1"><input form={`plan-${contract.id}`} name="frameWeight" type="number" defaultValue={plan?.frameWeight?.toString() ?? ''} disabled={!editable} className={field} placeholder="каркас" /><input form={`plan-${contract.id}`} name="reinforcedConcreteWeight" type="number" defaultValue={plan?.reinforcedConcreteWeight?.toString() ?? ''} disabled={!editable} className={`${field} mt-1`} placeholder="ЖБ" /></td><td className="px-1 py-1"><input form={`plan-${contract.id}`} name="galvanizedWeight" type="number" defaultValue={plan?.galvanizedWeight?.toString() ?? ''} disabled={!editable} className={field} placeholder="цинк" /><input form={`plan-${contract.id}`} name="blackMetalWeight" type="number" defaultValue={plan?.blackMetalWeight?.toString() ?? ''} disabled={!editable} className={`${field} mt-1`} placeholder="ЧМ" /></td>{(['pipeCutAt','assemblyWeldingAt','laserCutAt','rollingAt','paintingAt','columnsPouringAt'] as const).map((name) => <td key={name} className="px-1 py-1"><input form={`plan-${contract.id}`} name={name} type="date" defaultValue={dateInput(plan?.[name])} disabled={!editable} className={field} /></td>)}<td className="px-1 py-1"><input form={`plan-${contract.id}`} name="plannedShipmentAt" type="date" defaultValue={dateInput(plan?.plannedShipmentAt)} disabled={!editable} className={field} /><input form={`plan-${contract.id}`} name="actualShipmentAt" type="date" defaultValue={dateInput(plan?.actualShipmentAt)} disabled={!editable} className={`${field} mt-1`} /></td><td className="px-1 py-1"><textarea form={`plan-${contract.id}`} name="note" defaultValue={plan?.note ?? ''} disabled={!editable} className="h-[58px] w-[160px] rounded border border-line bg-surface p-2 text-[11px] outline-none focus:border-brand/60 disabled:bg-raised" /></td><td className="px-1 py-1"><form id={`plan-${contract.id}`} action={save}><input type="hidden" name="contractId" value={contract.id} /><select name="priority" defaultValue={plan?.priority ?? 'NORMAL'} disabled={!editable} className={field}>{Object.entries(priorityLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editable && <ProductionRowSaveButton />}</form></td></tr>})}</tbody></table></div></main></>
+	return <>
+		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Проектирование и графики', href: '/projects' }, { label: 'График производства' }]} userName={user.name ?? user.email ?? 'Пользователь'} initials={initials(user.name ?? user.email ?? 'ПП')} />
+		<main className="workspace-content px-[26px] py-[22px]">
+			<div className="work-hero mb-4 flex flex-wrap items-end justify-between gap-4 px-5 py-4">
+				<div>
+					<span className="text-[10px] font-bold uppercase tracking-[.1em] text-brand-ink">Цех и офис</span>
+					<h1 className="mt-1 text-[27px] font-bold tracking-[-.04em]">График производства</h1>
+					<p className="mt-1 text-[12px] text-muted">Очередь формируется по приоритету и сроку договора. Формулы плановых дат будут подключены после их утверждения. Остальные поля — по кнопке раскрытия строки.</p>
+					<Link href="/projects" className="mt-2 inline-flex text-[11.5px] font-semibold text-brand-ink hover:underline">← Карта потока проектирования</Link>
+				</div>
+				<div className="rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-semibold text-brand-ink">В потоке: {rows.length}</div>
+			</div>
+			<div className="overflow-x-auto rounded-[14px] border border-line bg-surface">
+				<table className="min-w-[820px] w-full border-collapse text-[11px]">
+					<thead className="sticky top-0 z-10 bg-raised">
+						<tr className="text-[10px] font-bold uppercase tracking-[.05em] text-muted">
+							<th className="sticky left-0 z-20 border-b border-r border-line bg-raised px-2 py-3">№</th>
+							<th className="border-b border-r border-line px-2 py-3 text-left">Договор</th>
+							<th className="border-b border-r border-line px-2 py-3 text-left">Локация / срок</th>
+							<th className="border-b border-r border-line px-2 py-3 text-left">Ближайшая операция</th>
+							<th className="border-b border-r border-line px-2 py-3 text-left">План / факт отгрузки</th>
+							<th className="border-b border-r border-line px-2 py-3 text-left">Приоритет</th>
+							<th className="border-b border-line px-2 py-3">Ещё</th>
+						</tr>
+					</thead>
+					<tbody>
+						{rows.map((row) => <ProductionScheduleRow key={row.id} row={row} editable={editable} save={save} />)}
+					</tbody>
+				</table>
+			</div>
+		</main>
+	</>
 }
