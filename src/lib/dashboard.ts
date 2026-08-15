@@ -52,7 +52,7 @@ export type FunnelStage = {
 	share: number
 }
 
-type DepartmentKey = 'commercial' | 'engineering' | 'production' | 'construction'
+export type DepartmentKey = 'commercial' | 'engineering' | 'production' | 'construction'
 export type DepartmentTimelineDay = {
 	date: string
 	label: string
@@ -164,8 +164,17 @@ function startOfDay(date: Date): Date {
 	return d
 }
 
-/** Главная загрузка данных дашборда. Один проход по договорам в области видимости роли. */
-export async function loadDashboard(user: SessionUser, now: Date = new Date()): Promise<DashboardData> {
+type DashboardComputeOptions = {
+	/** Дневной снимок нагрузки отделов — нужен только реальной сводке на "/", не каждой странице отдела. */
+	writeSnapshot: boolean
+	/** 30-дневные истории (лента активности, снимок по дням) — тяжёлые запросы, которые страница отдела не показывает. */
+	includeTimeline: boolean
+	/** "Мои задачи" и "последняя активность" — тоже только сводка на "/". */
+	includeTasks: boolean
+}
+
+/** Один проход по договорам в области видимости роли — общее ядро для loadDashboard() и loadDepartmentFlow(). */
+async function computeDashboard(user: SessionUser, now: Date, options: DashboardComputeOptions): Promise<DashboardData> {
 	const scope = contractScope(user)
 	const showAmounts = user.role === 'ADMIN' || user.role === 'MANAGER'
 	const showInbox = isAdmin(user)
@@ -235,22 +244,30 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 		showInbox
 			? prisma.inboxItem.groupBy({ by: ['status'], _count: { _all: true } })
 			: Promise.resolve([]),
-		prisma.task.findMany({ where: { assigneeId: user.id, deletedAt: null, status: { not: 'DONE' } }, select: { id: true, title: true, status: true, priority: true, dueDate: true, contract: { select: { number: true } } }, orderBy: [{ dueDate: 'asc' }, { priority: 'desc' }], take: 5 }),
-		prisma.auditLog.findMany({ where: { userId: user.id }, select: { id: true, action: true, entityType: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 6 }),
-		prisma.auditLog.findMany({
-			where: {
-				createdAt: { gte: new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000) },
-				...(user.role === 'ADMIN' ? {} : { userId: user.id }),
-			},
-			select: { action: true, createdAt: true },
-			orderBy: { createdAt: 'asc' },
-			take: 3000,
-		}),
-		prisma.departmentDailySnapshot.findMany({
-			where: { date: { gte: new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000) } },
-			select: { date: true, department: true, working: true, attention: true, paused: true, done: true, total: true },
-			orderBy: { date: 'asc' },
-		}),
+		options.includeTasks
+			? prisma.task.findMany({ where: { assigneeId: user.id, deletedAt: null, status: { not: 'DONE' } }, select: { id: true, title: true, status: true, priority: true, dueDate: true, contract: { select: { number: true } } }, orderBy: [{ dueDate: 'asc' }, { priority: 'desc' }], take: 5 })
+			: Promise.resolve([]),
+		options.includeTasks
+			? prisma.auditLog.findMany({ where: { userId: user.id }, select: { id: true, action: true, entityType: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 6 })
+			: Promise.resolve([]),
+		options.includeTimeline
+			? prisma.auditLog.findMany({
+				where: {
+					createdAt: { gte: new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000) },
+					...(user.role === 'ADMIN' ? {} : { userId: user.id }),
+				},
+				select: { action: true, createdAt: true },
+				orderBy: { createdAt: 'asc' },
+				take: 3000,
+			})
+			: Promise.resolve([]),
+		options.includeTimeline
+			? prisma.departmentDailySnapshot.findMany({
+				where: { date: { gte: new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000) } },
+				select: { date: true, department: true, working: true, attention: true, paused: true, done: true, total: true },
+				orderBy: { date: 'asc' },
+			})
+			: Promise.resolve([]),
 	])
 
 	const attention: AttentionItem[] = []
@@ -637,7 +654,7 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 		done: department.stats.find((item) => item.key === 'done')?.count ?? 0,
 		total: department.stats.reduce((sum, item) => sum + item.count, 0),
 	}))
-	if (isAdmin(user)) {
+	if (options.writeSnapshot && isAdmin(user)) {
 		await prisma.$transaction(currentSnapshot.map((item) => prisma.departmentDailySnapshot.upsert({
 			where: { date_department: { date: today, department: item.department } },
 			create: { date: today, ...item },
@@ -684,4 +701,23 @@ export async function loadDashboard(user: SessionUser, now: Date = new Date()): 
 		departmentFlow,
 		departmentProgress,
 	}
+}
+
+/** Главная загрузка данных дашборда. Один проход по договорам в области видимости роли. */
+export async function loadDashboard(user: SessionUser, now: Date = new Date()): Promise<DashboardData> {
+	return computeDashboard(user, now, { writeSnapshot: true, includeTimeline: true, includeTasks: true })
+}
+
+/**
+ * Лёгкая версия для страницы отдела: та же выборка договоров и тот же проход
+ * (attentionCounts.danger — глобальный бейдж в Topbar, его нельзя посчитать
+ * по одному отделу), но без истории за 30 дней, без "моих задач" и без записи
+ * дневного снимка — этого страница отдела не показывает и не должна писать.
+ */
+export async function loadDepartmentFlow(user: SessionUser, code: DepartmentKey, now: Date = new Date()) {
+	const data = await computeDashboard(user, now, { writeSnapshot: false, includeTimeline: false, includeTasks: false })
+	const department = data.departmentProgress.find((item) => item.key === code)
+	const flow = data.departmentFlow.find((item) => item.key === code)
+	if (!department || !flow) return null
+	return { department, flow, attentionDangerCount: data.attentionCounts.danger }
 }
