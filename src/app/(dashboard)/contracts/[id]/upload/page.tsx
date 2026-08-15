@@ -5,7 +5,7 @@ import Topbar from '@/components/Topbar'
 import { Card, Field, FormError, inputClass, selectClass } from '@/components/ui'
 import SmartDocumentUpload from '@/components/SmartDocumentUpload'
 import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatBytes, initials } from '@/lib/format'
-import { assertContractAccess, requireUser } from '@/lib/access'
+import { assertContractAccess, contractScope, requireUser } from '@/lib/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +25,10 @@ export default async function UploadDocumentPage({
 	const projectSection = searchParams.project ? await prisma.projectSection.findFirst({ where: { id: searchParams.project, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
 	const contract = user.role === 'DESIGNER'
 		? projectSection && await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null }, select: { id: true, number: true, managerId: true } })
+		: user.role === 'BUILDER'
+		// Строитель загружает файлы площадок/исполнительной/графика проектирования
+		// на любой видимый ему договор — без общего canWrite (не может редактировать сам договор).
+		? await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null, ...contractScope(user) }, select: { id: true, number: true, managerId: true } })
 		: await assertContractAccess(contractId, user, { write: true })
 	if (!contract) redirect('/projects')
 

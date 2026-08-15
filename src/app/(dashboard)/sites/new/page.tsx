@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 
 export default async function NewSitePage({ searchParams }: { searchParams: { error?: string; contract?: string } }) {
 	const user = await requireUser()
-	if (!canWrite(user)) redirect('/sites')
+	if (!canWrite(user) && user.role !== 'BUILDER') redirect('/sites')
 	const contracts = await prisma.contract.findMany({
 		where: { ...contractScope(user), status: 'ACTIVE', sites: { none: { deletedAt: null } } },
 		select: { id: true, number: true, cipher: true, objectAddress: true, contractor: { select: { name: true } } },
@@ -18,7 +18,7 @@ export default async function NewSitePage({ searchParams }: { searchParams: { er
 	async function createSite(formData: FormData) {
 		'use server'
 		const actingUser = await requireUser()
-		if (!canWrite(actingUser)) redirect('/sites')
+		if (!canWrite(actingUser) && actingUser.role !== 'BUILDER') redirect('/sites')
 		const contractId = String(formData.get('contractId') ?? '')
 		const address = String(formData.get('address') ?? '').trim()
 		const contract = await prisma.contract.findFirst({ where: { id: contractId, ...contractScope(actingUser), sites: { none: { deletedAt: null } } }, select: { id: true } })

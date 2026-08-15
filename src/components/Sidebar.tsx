@@ -67,6 +67,9 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		}
 		setGroupHeights(next)
 	}, [])
+	// График производства видят только те же роли, что и на самой странице (lib/access.ts canSeeSchedules).
+	const canSeeSchedules = role === 'ADMIN' || role === 'BUILDER' || role === 'PRODUCTION'
+	const workItems = work.filter((entry) => entry.href !== '/production-schedule' || canSeeSchedules)
 	const active = (href: string) => href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
 	const textMotion = `origin-left overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-out ${isOpen ? 'max-w-[188px] translate-x-0 opacity-100' : 'max-w-0 -translate-x-1 opacity-0'}`
 	const closeMobileDrawer = () => {
@@ -105,7 +108,7 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		<button type="button" onClick={() => onOpenChange(!isOpen)} title={isOpen ? 'Свернуть меню' : 'Открыть меню'} aria-label={isOpen ? 'Свернуть меню' : 'Открыть меню'} className="group absolute -right-[18px] top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-brand/35 bg-surface text-brand shadow-[0_5px_18px_rgba(73,47,175,.28)] transition-[transform,box-shadow,background-color] duration-300 hover:scale-110 hover:bg-brand hover:text-white hover:shadow-[0_8px_24px_rgba(73,47,175,.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
 			<Icon icon={ChevronLeft} size={17} strokeWidth={2.4} className={`transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`} />
 		</button>
-		<nav className="flex min-h-0 flex-1 flex-col px-2 py-4"><div className="app-scrollbar min-h-0 overflow-x-hidden overflow-y-auto">{section('Рабочее пространство', primary)}{section('Работа', work, true, 'work')}{section('Документы и данные', resources, true, 'resources')}</div>{role === 'ADMIN' && <div className="mt-auto pt-5">{section('Управление', admin, false, 'admin')}</div>}</nav>
+		<nav className="flex min-h-0 flex-1 flex-col px-2 py-4"><div className="app-scrollbar min-h-0 overflow-x-hidden overflow-y-auto">{section('Рабочее пространство', primary)}{section('Работа', workItems, true, 'work')}{section('Документы и данные', resources, true, 'resources')}</div>{role === 'ADMIN' && <div className="mt-auto pt-5">{section('Управление', admin, false, 'admin')}</div>}</nav>
 		<Link href="/settings" title={!isOpen ? 'Настройки профиля' : undefined} aria-label="Настройки профиля" className="m-2 flex h-[54px] flex-none items-center gap-2 overflow-hidden rounded-[14px] border border-line bg-surface/75 p-2 shadow-[0_3px_12px_rgba(31,22,85,.03)] transition duration-200 hover:-translate-y-px hover:border-brand/25 hover:bg-brand-soft/45"><span className="brand-gradient grid h-8 w-8 flex-none place-items-center rounded-full text-[11px] font-bold text-white shadow-sm">{initials}</span><span className={textMotion}><b className="block truncate text-[12px] text-ink">{userName}</b><span className="block truncate text-[10px] text-faint">{roleLabel}</span></span></Link>
 	</aside>
 }

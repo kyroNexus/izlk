@@ -13,7 +13,7 @@ import { prisma } from '@/lib/prisma'
  * Теперь любая запись проходит через assertContractAccess().
  */
 
-export type Role = 'ADMIN' | 'MANAGER' | 'DESIGNER' | 'VIEWER'
+export type Role = 'ADMIN' | 'MANAGER' | 'DESIGNER' | 'BUILDER' | 'PRODUCTION' | 'ACCOUNTING' | 'VIEWER_DESIGN' | 'VIEWER'
 
 export type SessionUser = {
 	id: string
@@ -48,9 +48,9 @@ export async function requireUser(): Promise<SessionUser> {
 	return user
 }
 
-/** VIEWER не видит суммы договоров, смет и счетов. */
+/** Только старая роль VIEWER (внешний/ограниченный доступ) не видит суммы. */
 export function canSeeAmounts(user: SessionUser): boolean {
-	return user.role === 'ADMIN' || user.role === 'MANAGER'
+	return user.role !== 'VIEWER'
 }
 
 /** VIEWER не может ничего создавать и изменять. */
@@ -63,7 +63,17 @@ export function isAdmin(user: SessionUser): boolean {
 	return user.role === 'ADMIN'
 }
 
-/** Область видимости договоров для роли. */
+/** График производства и график стройотдела видят только эти три роли. */
+export function canSeeSchedules(user: SessionUser): boolean {
+	return user.role === 'ADMIN' || user.role === 'BUILDER' || user.role === 'PRODUCTION'
+}
+
+/**
+ * Область видимости договоров для роли.
+ * ADMIN, BUILDER, PRODUCTION, ACCOUNTING и VIEWER_DESIGN сюда осознанно не
+ * добавлены — «просмотр всего» для них означает без дополнительного фильтра,
+ * как и для ADMIN.
+ */
 export function contractScope(user: SessionUser): Prisma.ContractWhereInput {
 	return {
 		deletedAt: null,

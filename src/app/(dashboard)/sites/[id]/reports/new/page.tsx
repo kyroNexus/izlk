@@ -8,7 +8,7 @@ import ReportForm from './ReportForm'
 
 export default async function NewSiteReportPage({ params, searchParams }: { params: { id: string }; searchParams: { error?: string } }) {
 	const user = await requireUser()
-	if (!canWrite(user)) redirect(`/sites/${params.id}`)
+	if (!canWrite(user) && user.role !== 'BUILDER') redirect(`/sites/${params.id}`)
 	const site = await prisma.site.findFirst({ where: { id: params.id, deletedAt: null }, select: { id: true, address: true, contract: { select: { id: true, number: true } } } })
 	if (!site) redirect('/sites')
 	await assertContractAccess(site.contract.id, user, { write: true })

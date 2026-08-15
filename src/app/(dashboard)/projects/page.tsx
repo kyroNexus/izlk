@@ -140,7 +140,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 			redirect(`/projects?section=${current.code}`)
 		}
 
-		if (!canWrite(actingUser)) redirect('/projects')
+		if (!canWrite(actingUser) && actingUser.role !== 'BUILDER') redirect('/projects')
 		if (op === 'up' || op === 'down') {
 			const neighbor = await prisma.projectSection.findFirst({
 				where: {
@@ -266,7 +266,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 				late={late}
 				query={query}
 				userRole={user.role}
-				canWrite={canWrite(user)}
+				canWrite={canWrite(user) || user.role === 'BUILDER'}
 				action={updateProject}
 			/>
 		</div>

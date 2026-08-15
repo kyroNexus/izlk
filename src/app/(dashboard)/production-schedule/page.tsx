@@ -1,5 +1,6 @@
+import { redirect } from 'next/navigation'
 import Topbar from '@/components/Topbar'
-import { canWrite, contractScope, requireUser } from '@/lib/access'
+import { canSeeSchedules, canWrite, contractScope, requireUser } from '@/lib/access'
 import { prisma } from '@/lib/prisma'
 import { initials } from '@/lib/format'
 import { writeAudit } from '@/lib/audit'
@@ -29,7 +30,8 @@ function nextOperationLabel(plan: { pipeCutAt: Date | null; assemblyWeldingAt: D
 
 export default async function ProductionSchedulePage() {
 	const user = await requireUser()
-	const editable = canWrite(user)
+	if (!canSeeSchedules(user)) redirect('/')
+	const editable = canWrite(user) || user.role === 'PRODUCTION'
 	const contracts = await prisma.contract.findMany({ where: { ...contractScope(user), workflowStage: { in: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'] } }, orderBy: { deadline: 'asc' }, include: { contractor: { select: { name: true } }, productionPlan: true, stageHistory: { where: { toStage: 'WAITING_PRODUCTION' }, orderBy: { createdAt: 'asc' }, take: 1 } } })
 	const sorted = contracts.sort((a, b) => {
 		const score = (priority?: ProductionPriority | null) => priority === 'CRITICAL' ? 4 : priority === 'HIGH' ? 3 : priority === 'NORMAL' ? 2 : 1
@@ -74,7 +76,7 @@ export default async function ProductionSchedulePage() {
 	async function save(formData: FormData) {
 		'use server'
 		const actor = await requireUser()
-		if (!canWrite(actor)) return
+		if (!canWrite(actor) && actor.role !== 'PRODUCTION') return
 		const contractId = String(formData.get('contractId') ?? '')
 		const contract = await prisma.contract.findFirst({ where: { id: contractId, ...contractScope(actor) }, select: { id: true } })
 		if (!contract) return

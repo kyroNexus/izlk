@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { DocumentKind, DocumentState } from '@prisma/client'
-import { assertContractAccess, type SessionUser } from '@/lib/access'
+import { assertContractAccess, contractScope, type SessionUser } from '@/lib/access'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
 import { DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
@@ -41,6 +41,11 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		const projectSection = requestedProjectSectionId ? await prisma.projectSection.findFirst({ where: { id: requestedProjectSectionId, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
 		if (user.role === 'DESIGNER') {
 			if (!projectSection) return NextResponse.redirect(new URL('/projects', publicOrigin(request)), 303)
+		} else if (user.role === 'BUILDER') {
+			// Строитель загружает файлы (площадки/исполнительная/график проектирования) на любой
+			// видимый ему договор — без общего canWrite, как и у DESIGNER выше.
+			const buildable = await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null, ...contractScope(user) }, select: { id: true } })
+			if (!buildable) return NextResponse.redirect(new URL('/contracts', publicOrigin(request)), 303)
 		} else {
 			await assertContractAccess(contractId, user, { write: true })
 		}
@@ -51,7 +56,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		}
 		if (uploads.length === 0) return NextResponse.redirect(uploadUrl(request, contractId, 'Выберите хотя бы один файл', executiveId), 303)
 		if (uploads.length > 100) return NextResponse.redirect(uploadUrl(request, contractId, 'За один раз можно загрузить не больше 100 файлов', executiveId), 303)
-		const confirmPr1Signed = user.role !== 'DESIGNER' && formData.get('confirmPr1Signed') === 'on'
+		const confirmPr1Signed = user.role !== 'DESIGNER' && user.role !== 'BUILDER' && formData.get('confirmPr1Signed') === 'on'
 		const kindRaw = String(formData.get('kind') ?? 'OTHER')
 		const selectedKind: DocumentKind = (DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw) ? kindRaw as DocumentKind : 'OTHER'
 		const kind: DocumentKind = user.role === 'DESIGNER' ? (selectedKind === 'PROJECT_DWG' ? 'PROJECT_DWG' : 'PROJECT_PDF') : confirmPr1Signed ? 'APPENDIX' : selectedKind
