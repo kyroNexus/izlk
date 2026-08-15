@@ -8,14 +8,49 @@ import { writeAudit } from '@/lib/audit'
 
 const messageInput = z.object({ text: z.string().trim().min(1).max(4000) })
 const scopeOf = (value: string): 'department' | 'contract' | null => value === 'department' || value === 'contract' ? value : null
+const PAGE_SIZE = 50
+const toDto = (user: SessionUser) => (message: { id: string; text: string; createdAt: Date; authorId: string; author: { id: string; name: string } }) => ({ id: message.id, text: message.text, createdAt: message.createdAt, author: message.author, own: message.authorId === user.id })
 
-async function get(_: Request, { user }: { user: SessionUser }, { params }: { params: { scope: string; id: string } }) {
+/** Cursor must belong to this thread — otherwise a client could probe timing across threads it can't read. */
+async function ownCursor(threadId: string, id: string | null) {
+	if (!id) return undefined
+	const message = await prisma.chatMessage.findFirst({ where: { id, threadId }, select: { id: true } })
+	return message?.id
+}
+
+async function get(request: Request, { user }: { user: SessionUser }, { params }: { params: { scope: string; id: string } }) {
 	const scope = scopeOf(params.scope)
 	if (!scope) return chatError()
 	const thread = await chatThread(user, scope, params.id)
 	if (!thread) return chatError()
-	const messages = await prisma.chatMessage.findMany({ where: { threadId: thread.id, deletedAt: null }, orderBy: { createdAt: 'asc' }, take: 200, include: { author: { select: { id: true, name: true } } } })
-	return NextResponse.json({ canWrite: await requireChatWrite(user, scope, params.id), messages: messages.map((message) => ({ id: message.id, text: message.text, createdAt: message.createdAt, author: message.author, own: message.authorId === user.id })) })
+	const canWrite = await requireChatWrite(user, scope, params.id)
+	const url = new URL(request.url)
+	const after = await ownCursor(thread.id, url.searchParams.get('after'))
+	const before = await ownCursor(thread.id, url.searchParams.get('before'))
+
+	if (after) {
+		// Polling for new messages only — cheap, bounded, no page the client already has.
+		const messages = await prisma.chatMessage.findMany({
+			where: { threadId: thread.id, deletedAt: null },
+			orderBy: { createdAt: 'asc' },
+			cursor: { id: after },
+			skip: 1,
+			take: 200,
+			include: { author: { select: { id: true, name: true } } },
+		})
+		return NextResponse.json({ canWrite, messages: messages.map(toDto(user)), hasMore: false })
+	}
+
+	const rows = await prisma.chatMessage.findMany({
+		where: { threadId: thread.id, deletedAt: null },
+		orderBy: { createdAt: 'desc' },
+		take: PAGE_SIZE + 1,
+		...(before ? { cursor: { id: before }, skip: 1 } : {}),
+		include: { author: { select: { id: true, name: true } } },
+	})
+	const hasMore = rows.length > PAGE_SIZE
+	const page = (hasMore ? rows.slice(0, PAGE_SIZE) : rows).reverse()
+	return NextResponse.json({ canWrite, messages: page.map(toDto(user)), hasMore })
 }
 
 async function post(request: Request, { user }: { user: SessionUser }, { params }: { params: { scope: string; id: string } }) {
