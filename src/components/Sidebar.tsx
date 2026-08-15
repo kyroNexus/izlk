@@ -18,7 +18,7 @@ const primary: Item[] = [
 const work: Item[] = [
 	{ href: '/projects', label: 'Проектирование и графики', icon: BarChart3, nested: true },
 	{ href: '/production-schedule', label: 'График производства', icon: Layers, nested: true },
-	{ href: '/departments/production', label: 'Рабочие зоны и чаты', icon: MessageSquare, nested: true },
+	{ href: '/departments', label: 'Отделы и чаты', icon: MessageSquare, nested: true },
 	{ href: '/tasks', label: 'Задачи', icon: CheckSquare, nested: true },
 	{ href: '/sites', label: 'Площадки', icon: MapPin, nested: true },
 	{ href: '/executive', label: 'Исполнительная документация', icon: FileCheck2, nested: true },

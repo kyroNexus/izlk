@@ -8,6 +8,8 @@ const shell = read('src/components/DashboardShell.tsx')
 const densityToggle = read('src/components/TableDensityToggle.tsx')
 const ui = read('src/components/ui.tsx')
 const contracts = read('src/app/(dashboard)/contracts/page.tsx')
+const sidebar = read('src/components/Sidebar.tsx')
+const departmentsPicker = read('src/app/(dashboard)/departments/page.tsx')
 
 assert.match(css, /prefers-reduced-motion/)
 assert.match(css, /table thead th \{ position: sticky/)
@@ -19,4 +21,11 @@ assert.match(densityToggle, /aria-pressed/)
 assert.match(ui, /export function RichEmptyState/)
 assert.match(contracts, /Нет назначенных договоров/)
 assert.match(contracts, /<Icon icon=\{Folder\}/)
-console.log('Design-system checks passed: icons, empty state, density, sticky headers, and reduced motion.')
+// C2: пункт сайдбара раньше вёл жёстко на /departments/production для всех ролей —
+// теперь на страницу выбора, которая перечисляет все 4 отдела.
+assert.match(sidebar, /href: '\/departments', label: 'Отделы и чаты'/)
+for (const code of ['commercial', 'engineering', 'production', 'construction']) {
+	assert.match(departmentsPicker, new RegExp(`/departments/\\$\\{department\\.key\\}`))
+	assert.match(departmentsPicker, new RegExp(code))
+}
+console.log('Design-system checks passed: icons, empty state, density, sticky headers, reduced motion, and department picker routing.')
