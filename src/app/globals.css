@@ -138,12 +138,6 @@ body {
 	line-height: 1.45;
 }
 
-/* One focus treatment across links, controls, summaries and custom buttons. */
-:where(a, button, input, select, textarea, summary):focus-visible {
-	outline: 3px solid color-mix(in srgb, var(--brand) 42%, transparent);
-	outline-offset: 2px;
-}
-
 button, a, summary, input, select, textarea {
 	-webkit-tap-highlight-color: transparent;
 }
