@@ -30,6 +30,7 @@
 		"test:chat-access": "node -r ts-node/register/files scripts/test-chat-access.cts",
     "test:chat-pagination": "node -r ts-node/register/files scripts/test-chat-pagination.cts",
     "test:chat-delete-auth": "node -r ts-node/register/files scripts/test-chat-delete-authorization.cts",
+    "test:construction-last-work": "node -r ts-node/register/files scripts/test-construction-last-work.cts",
     "test:design-system": "node -r ts-node/register/files scripts/test-design-system.cts",
     "restore:database": "node -r ts-node/register/files scripts/restore-database.cts"
   },
