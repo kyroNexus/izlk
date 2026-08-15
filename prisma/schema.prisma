@@ -5,7 +5,11 @@
 // ==========================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Без этого Prisma грузит include-связи отдельными последовательными запросами
+  // (по одному на связь), а не одним SQL JOIN — на дашборде с 5+ связями это
+  // даёт ~10 лишних round-trip'ов на каждую загрузку. Стабильно с Prisma 5.9+.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -226,7 +230,6 @@ model Contract {
   access          ContractAccess[]
   tasks           Task[]
   stageHistory    ContractStageHistory[]
-  stageComments   ContractStageComment[]
   stageCommentLog StageComment[]
   chatThreads     ChatThread[]
   productionPlan  ProductionPlan?
@@ -255,23 +258,6 @@ model ContractStageHistory {
 
   @@index([contractId, createdAt])
   @@index([changedById])
-}
-
-/// Устаревшая модель — одна перезаписываемая заметка на этап.
-/// Замещена StageComment (тред из нескольких сообщений). Таблица оставлена
-/// как страховочная копия на один цикл деплоя; новый код в неё не пишет.
-model ContractStageComment {
-  id         String                @id @default(cuid())
-  contractId String
-  contract   Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  stage      ContractWorkflowStage
-  text       String                @db.VarChar(1000)
-  updatedById String?
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
-
-  @@unique([contractId, stage])
-  @@index([contractId])
 }
 
 /// Обсуждение этапа договора — несколько сообщений на этап, не одна

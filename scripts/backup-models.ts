@@ -39,7 +39,6 @@ export const restoreOrder = [
   'importEvent',
   'auditLog',
   'contractStageHistory',
-  'contractStageComment',
   'stageComment',
   'chatThread',
   'chatMessage',

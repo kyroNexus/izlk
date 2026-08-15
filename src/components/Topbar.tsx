@@ -23,7 +23,7 @@ export default async function Topbar({
 	const unread = userId ? await prisma.notification.count({ where: { userId, readAt: null } }) : 0
 	const notificationCount = Math.max(unread, notifications)
 	return (
-		<header className="topbar-shell sticky top-0 z-20 flex h-[62px] flex-none items-center gap-2 border-b border-line bg-surface/88 px-[14px] shadow-[0_1px_0_rgba(36,25,96,.025)] backdrop-blur-xl sm:gap-3 sm:px-[26px]">
+		<header className="topbar-shell sticky top-0 z-20 flex h-[var(--topbar-height)] flex-none items-center gap-2 border-b border-line bg-surface/88 px-[14px] shadow-[0_1px_0_rgba(36,25,96,.025)] backdrop-blur-xl sm:gap-3 sm:px-[26px]">
 			<nav aria-label="Хлебные крошки" className="flex min-w-0 flex-1 items-center gap-[7px] overflow-hidden whitespace-nowrap text-[13px] text-muted">
 				{crumbs.map((c, i) => {
 					const isLast = i === crumbs.length - 1

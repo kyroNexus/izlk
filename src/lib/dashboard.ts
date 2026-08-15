@@ -194,6 +194,10 @@ async function computeDashboard(user: SessionUser, now: Date, options: Dashboard
 	const [contracts, contractorsCount, inboxGroups, myTasks, recentActivity, timelineActivity, snapshotRows] = await Promise.all([
 		prisma.contract.findMany({
 			where: scope,
+			// Без явного join Prisma по умолчанию грузит include-связи отдельными
+			// последовательными запросами (по одному на связь) — на дашборде
+			// с 5+ связями это лишние round-trip'ы на каждую загрузку.
+			relationLoadStrategy: 'join',
 			select: {
 				id: true,
 				createdAt: true,

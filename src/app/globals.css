@@ -23,10 +23,15 @@
 	--radius-control: 11px;
 	--radius-card: 18px;
 	--radius-panel: 24px;
-	--control-height: 40px;
+	/* Единственный источник высоты Topbar — иначе offset-числа под ним
+	   (scroll-margin, sticky sub-nav, мобильные попапы) расходятся порознь. */
+	--topbar-height: 62px;
 	--duration-fast: 180ms;
 	--duration-ui: 240ms;
 	--ease-ui: cubic-bezier(.2, .8, .2, 1);
+	/* data: URI не читает var() изнутри, поэтому цвет стрелки select держим
+	   собственным токеном — при смене --brand поменяйте оба сразу. */
+	--select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237357f5' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
 	--shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(43,31,102,.035);
 	--shadow-float: 0 18px 44px rgba(28,19,76,.18);
 	--canvas: #f7f7fb;
@@ -126,7 +131,7 @@ html.dark {
 /* Section links on contracts, dashboards and long registers should land below
    the fixed workspace header instead of hiding the destination heading. */
 [id] {
-	scroll-margin-top: 86px;
+	scroll-margin-top: calc(var(--topbar-height) + 24px);
 }
 
 body {
@@ -150,7 +155,7 @@ select {
 	appearance: none;
 	cursor: pointer;
 	padding-right: 40px !important;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237357f5' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+	background-image: var(--select-arrow);
 	background-repeat: no-repeat;
 	background-position: right 12px center;
 	background-size: 16px;
@@ -209,8 +214,8 @@ select option { background: var(--surface); color: var(--ink); }
 
 /* Deliberate, short motion: interfaces feel responsive without slowing work. */
 button, a, details, summary, input, select {
-	transition-duration: 180ms;
-	transition-timing-function: cubic-bezier(.2,.8,.2,1);
+	transition-duration: var(--duration-fast);
+	transition-timing-function: var(--ease-ui);
 }
 
 .workspace-surface {
@@ -225,7 +230,7 @@ button, a, details, summary, input, select {
 a[href^="/api/site-photos/"] {
 	position: relative;
 	box-shadow: 0 4px 12px color-mix(in srgb, var(--ink) 8%, transparent);
-	transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms cubic-bezier(.2,.8,.2,1), border-color 180ms cubic-bezier(.2,.8,.2,1);
+	transition: transform var(--duration-fast) var(--ease-ui), box-shadow var(--duration-fast) var(--ease-ui), border-color var(--duration-fast) var(--ease-ui);
 }
 a[href^="/api/site-photos/"]::after {
 	content: 'Открыть';
@@ -239,7 +244,7 @@ a[href^="/api/site-photos/"]::after {
 	font-weight: 700;
 	opacity: 0;
 	transform: translateY(3px);
-	transition: opacity 180ms cubic-bezier(.2,.8,.2,1), transform 180ms cubic-bezier(.2,.8,.2,1);
+	transition: opacity var(--duration-fast) var(--ease-ui), transform var(--duration-fast) var(--ease-ui);
 }
 a[href^="/api/site-photos/"]:hover {
 	transform: translateY(-2px);
@@ -247,10 +252,6 @@ a[href^="/api/site-photos/"]:hover {
 	box-shadow: 0 12px 22px color-mix(in srgb, var(--ink) 15%, transparent);
 }
 a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0); }
-
-@media (prefers-reduced-motion: reduce) {
-	.workspace-content, a[href^="/api/site-photos/"] { animation: none; transition: none; }
-}
 
 /* Reusable work-screen layers: dense registers stay calm and actionable. */
 .work-hero {
@@ -280,7 +281,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 }
 .interactive-row {
 	position: relative;
-	transition: background-color 180ms cubic-bezier(.2,.8,.2,1), transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms cubic-bezier(.2,.8,.2,1);
+	transition: background-color var(--duration-fast) var(--ease-ui), transform var(--duration-fast) var(--ease-ui), box-shadow var(--duration-fast) var(--ease-ui);
 }
 .interactive-row:hover {
 	transform: translateX(2px);
@@ -337,7 +338,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 	border-radius: 10px;
 	background: radial-gradient(circle at 50% 10%, color-mix(in srgb, var(--brand) 9%, transparent), transparent 60%);
 	opacity: 0;
-	transition: opacity 180ms cubic-bezier(.2,.8,.2,1);
+	transition: opacity var(--duration-fast) var(--ease-ui);
 }
 .smart-upload-dropzone:hover::before { opacity: 1; }
 
@@ -427,7 +428,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 /* The long contract screen stays navigable without a second side panel. */
 .contract-section-nav {
 	position: sticky;
-	top: 76px;
+	top: calc(var(--topbar-height) + 14px);
 	z-index: 20;
 	backdrop-filter: blur(14px);
 	background: color-mix(in srgb, var(--surface) 86%, transparent);
@@ -556,7 +557,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 	   can be clipped off-screen. On a phone it becomes a bounded top sheet. */
 	.notification-panel {
 		position: fixed;
-		top: 70px;
+		top: calc(var(--topbar-height) + 8px);
 		left: 12px;
 		right: 12px;
 		width: auto;
@@ -567,9 +568,6 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 		width: calc(100vw - 28px) !important;
 		max-width: 520px;
 	}
-}
-@media (prefers-reduced-motion: reduce) {
-	*, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
 
 /* Акцентный градиент #7B5CFA -> #6A3FE0, на hover уходит в #4b2fc7 */

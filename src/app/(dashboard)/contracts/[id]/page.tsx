@@ -52,6 +52,9 @@ export default async function ContractPage({ params, searchParams }: { params: {
 			id: params.id,
 			...contractScope(user),
 		},
+		// См. комментарий у аналогичного запроса в dashboard.ts — без join
+		// каждая из 9 связей CONTRACT_INCLUDE даёт отдельный round-trip.
+		relationLoadStrategy: 'join',
 		include: CONTRACT_INCLUDE,
 	})
 
