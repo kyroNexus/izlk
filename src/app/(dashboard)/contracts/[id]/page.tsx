@@ -22,6 +22,7 @@ import type { ContractWorkflowStage, DocumentKind, DocumentState, SectionCode, S
 import { writeAudit } from '@/lib/audit'
 import { addMissingProjectSection, confirmSignedPr1Workflow, getNextWorkflowStages, revokePr1Confirmation, sectionsForKind, transitionContractStage, WORKFLOW_STAGE_LABEL, WORKFLOW_STAGE_ORDER } from '@/lib/contract-workflow'
 import { getDeadlineInfo } from '@/lib/deadline'
+import { logger } from '@/lib/logger'
 
 
 const PROJECT_SECTION_LABEL: Record<string, string> = {
@@ -70,6 +71,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const canEdit = canWrite(user)
 
 	// Видимость считается централизованно (lib/access), а не копией условий на каждой странице.
+	const contractLoadStartedAt = Date.now()
 	const contract = await prisma.contract.findFirst({
 		where: {
 			id: params.id,
@@ -91,6 +93,15 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	})
 
 	if (!contract) redirect('/contracts')
+	// Карточка договора — самая тяжёлая по числу связанных таблиц страница после дашборда.
+	// Только длительность и число строк, без содержимого документов/договоров.
+	logger.info('contract.loaded', {
+		durationMs: Date.now() - contractLoadStartedAt,
+		entityType: 'Contract',
+		entityId: contract.id,
+		userId: user.id,
+		count: contract.documents.length + contract.agreements.length + contract.estimates.length + contract.invoices.length + contract.sites.length + contract.executiveDocs.length + contract.projectSections.length + contract.tasks.length + contract.stageHistory.length,
+	})
 
 	async function changeDocumentState(formData: FormData) {
 		'use server'

@@ -8,6 +8,8 @@ export type TechnicalLog = {
 	userId?: string
 	entityType?: string
 	entityId?: string
+	/** Row count behind a timed load — never the data itself, just how much of it there was. */
+	count?: number
 	error?: unknown
 }
 
@@ -25,7 +27,7 @@ function defaultWrite(level: LogLevel, line: string) {
 
 export function createLogger(write: WriteLine = defaultWrite) {
 	return (level: LogLevel, event: string, context: TechnicalLog = {}) => {
-		const { requestId, route, method, durationMs, userId, entityType, entityId, error } = context
+		const { requestId, route, method, durationMs, userId, entityType, entityId, count, error } = context
 		write(level, JSON.stringify({
 			timestamp: new Date().toISOString(),
 			level,
@@ -37,6 +39,7 @@ export function createLogger(write: WriteLine = defaultWrite) {
 			...(userId ? { userId } : {}),
 			...(entityType ? { entityType } : {}),
 			...(entityId ? { entityId } : {}),
+			...(typeof count === 'number' ? { count } : {}),
 			...(error === undefined ? {} : { error: errorDetails(error) }),
 		}))
 	}

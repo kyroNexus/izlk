@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { contractScope, isAdmin, type SessionUser } from '@/lib/access'
 import { workingDaysBetween } from '@/lib/deadline'
 import { WORKFLOW_STAGE_LABEL } from '@/lib/contract-workflow'
+import { logger } from '@/lib/logger'
 
 /**
  * Сборка данных для дашборда (Блок A).
@@ -713,7 +714,12 @@ async function computeDashboard(user: SessionUser, now: Date, options: Dashboard
 
 /** Главная загрузка данных дашборда. Один проход по договорам в области видимости роли. */
 export async function loadDashboard(user: SessionUser, now: Date = new Date()): Promise<DashboardData> {
-	return computeDashboard(user, now, { writeSnapshot: true, includeTimeline: true, includeTasks: true })
+	const startedAt = Date.now()
+	const data = await computeDashboard(user, now, { writeSnapshot: true, includeTimeline: true, includeTasks: true })
+	// Heaviest query in the app — timed so real bottlenecks show up before anyone
+	// guesses at an optimization. No data content logged, only how much of it there was.
+	logger.info('dashboard.loaded', { durationMs: Date.now() - startedAt, entityType: 'Contract', count: data.totals.contracts, userId: user.id })
+	return data
 }
 
 /**
