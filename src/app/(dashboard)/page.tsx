@@ -3,7 +3,6 @@ import type { Metadata } from 'next'
 import type { SiteStatus } from '@prisma/client'
 import Topbar from '@/components/Topbar'
 import {
-	AttentionRow,
 	Card,
 	CardHeader,
 	Chip,
@@ -80,40 +79,6 @@ export default async function DashboardPage() {
 				</div>
 
 				<div className="mt-[14px] grid grid-cols-1 gap-[14px] xl:grid-cols-3">
-					{/* Требуют внимания */}
-					<div className="hidden xl:col-span-2">
-						<Card>
-							<CardHeader
-								title="Требуют внимания"
-								extra={
-									attentionTotal > 0 ? (
-										<Chip tone={data.attentionCounts.danger > 0 ? 'danger' : 'warn'}>
-											{attentionTotal}
-										</Chip>
-									) : (
-										<Chip tone="ok">Чисто</Chip>
-									)
-								}
-							/>
-							{data.attention.length === 0 ? (
-								<EmptyState text="Нет открытых проблем — все сроки и оплаты в норме" />
-							) : (
-								<div>
-									{data.attention.map((item) => (
-										<AttentionRow
-											key={item.id}
-											tone={item.tone}
-											title={item.title}
-											detail={item.detail}
-											group={item.group}
-											href={item.href}
-										/>
-									))}
-								</div>
-							)}
-						</Card>
-					</div>
-
 					{/* Воронка этапов */}
 					<Card>
 						<CardHeader title="Этапы договоров" />
