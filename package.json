@@ -13,7 +13,7 @@
     "test:critical": "node -r ts-node/register/files scripts/verify-critical-flows.cts",
     "test:documents": "node -r ts-node/register/files scripts/test-document-bulk.cts",
     "test:integration": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-integration.ps1",
-    "check:release": "npm run test:critical && npm run build",
+    "check:release": "npm run test:critical && npm run test:workflow-rules && npm run build",
     "demo:presentation": "tsx scripts/setup-presentation.ts",
     "reset:presentation": "tsx scripts/reset-presentation-data.ts",
     "backup:files": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-files.ps1",
@@ -35,6 +35,7 @@
     "test:production-schedule-row": "node -r ts-node/register/files scripts/test-production-schedule-row.cts",
     "test:chat-notifications": "tsx scripts/test-chat-notifications.cts",
     "test:schedule-export": "tsx scripts/test-schedule-export.cts",
+    "test:workflow-rules": "node -r ts-node/register/files scripts/test-workflow-rules.cts",
     "test:design-system": "node -r ts-node/register/files scripts/test-design-system.cts",
     "restore:database": "node -r ts-node/register/files scripts/restore-database.cts"
   },
