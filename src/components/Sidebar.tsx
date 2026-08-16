@@ -72,6 +72,11 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 	const workItems = work.filter((entry) => entry.href !== '/production-schedule' || canSeeSchedules)
 	const active = (href: string) => href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
 	const textMotion = `origin-left overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300 ease-out ${isOpen ? 'max-w-[188px] translate-x-0 opacity-100' : 'max-w-0 -translate-x-1 opacity-0'}`
+	// Заголовки разделов — не однострочный текст, а целая строка (лейбл + счётчик + шеврон):
+	// у длинных названий («Документы и данные») это шире фиксированных 188px из textMotion,
+	// и overflow-hidden обрезал шеврон справа. Сворачиваем по высоте, а не по ширине — контент
+	// внутри никогда не обрезается вбок, независимо от длины названия раздела.
+	const headerMotion = `overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${isOpen ? 'mb-1.5 max-h-9 opacity-100' : 'mb-0 max-h-0 opacity-0'}`
 	const closeMobileDrawer = () => {
 		if (window.matchMedia('(max-width: 767px)').matches) onOpenChange(false)
 	}
@@ -89,7 +94,7 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		// В свёрнутом рельсе (isOpen=false) группировка не нужна — иконки видны всегда.
 		const collapsed = Boolean(groupKey && isOpen && collapsedGroups[groupKey])
 		return <div key={label}>
-			<div className={`mb-1.5 px-1 ${textMotion}`}>
+			<div className={`px-1 ${headerMotion}`}>
 				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="group/head -mx-1 flex w-[calc(100%+8px)] items-center gap-2 rounded-tight px-1.5 py-1.5 text-2xs font-bold uppercase tracking-[.14em] text-faint transition-colors duration-200 hover:bg-raised/70 hover:text-brand-ink">
 					<span className="flex-1 text-left">{label}</span>
 					<span className="grid h-[15px] min-w-[15px] place-items-center rounded-full bg-raised px-1 text-[9px] font-bold leading-none text-faint transition-colors duration-200 group-hover/head:bg-brand-soft group-hover/head:text-brand-ink">{entries.length}</span>
@@ -108,12 +113,12 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 	}
 
 	return <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-visible border-r border-line bg-sidebar/92 shadow-[8px_0_32px_rgba(27,20,76,.07)] backdrop-blur-2xl transition-[width,box-shadow] duration-300 ease-out ${isOpen ? 'w-[256px] shadow-[8px_0_32px_rgba(27,20,76,.09)]' : 'w-16'}`}>
-		<header className={`relative flex flex-none items-center overflow-hidden border-b border-line bg-gradient-to-br from-brand-soft/60 via-sidebar to-sidebar ${isOpen ? 'h-[88px] px-4' : 'h-[72px] justify-center px-0'}`}>
-			<div className="pointer-events-none absolute -right-6 -top-10 h-28 w-28 rounded-full bg-brand/10 blur-2xl" aria-hidden="true" />
+		<header className={`relative flex flex-none items-center overflow-hidden border-b border-line-soft bg-gradient-to-br from-brand-soft/65 via-sidebar to-sidebar ${isOpen ? 'h-[88px] px-4' : 'h-[72px] justify-center px-0'}`}>
+			<div className="pointer-events-none absolute inset-x-[-20%] -top-20 h-32 rounded-[999px] bg-brand/12 blur-3xl" aria-hidden="true" />
 			{isOpen && <Link href="/" className="relative min-w-0 flex-1" aria-label="ИЗЛК — главная">
-				<Image src="/logo/logo-light.png" alt="ИЗЛК RUS" width={640} height={47} priority className="h-auto w-full max-w-[174px] dark:hidden" />
+				<Image src="/logo/logo-light.png" alt="ИЗЛК RUS" width={640} height={47} priority className="h-auto w-full max-w-[174px] drop-shadow-[0_1px_1px_rgba(0,0,0,.04)] dark:hidden" />
 				<Image src="/logo/logo-dark.png" alt="" width={640} height={47} priority className="hidden h-auto w-full max-w-[174px] dark:block" />
-				<span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-ok-bg px-2 py-0.5 text-[8px] font-bold uppercase tracking-[.12em] text-ok"><i className="relative h-1.5 w-1.5 rounded-full bg-ok"><i className="absolute inset-0 animate-ping rounded-full bg-ok opacity-75" /></i>система онлайн</span>
+				<span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-ok-bd/60 bg-ok-bg px-2 py-0.5 text-[8px] font-bold uppercase tracking-[.12em] text-ok"><i className="relative h-1.5 w-1.5 rounded-full bg-ok"><i className="absolute inset-0 animate-ping rounded-full bg-ok opacity-75" /></i>система онлайн</span>
 			</Link>}
 			{!isOpen && <Link href="/" title="ИЗЛК — главная" aria-label="ИЗЛК — главная" className="group relative grid h-10 w-10 place-items-center rounded-[13px] border border-brand/20 bg-brand-soft/65 shadow-[0_6px_18px_rgba(73,47,175,.12)] transition duration-200 hover:-translate-y-px hover:border-brand/45 hover:bg-brand hover:shadow-[0_9px_22px_rgba(73,47,175,.24)]">
 				<Image src="/logo/collapsed-z-mark.jpg" alt="" width={640} height={640} priority className="h-7 w-7 rounded-tight object-cover transition-transform duration-200 group-hover:scale-105" />
