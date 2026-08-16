@@ -95,8 +95,14 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 		const collapsed = Boolean(groupKey && isOpen && collapsedGroups[groupKey])
 		return <div key={label}>
 			<div className={`px-1 ${headerMotion}`}>
-				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="group/head -mx-1 flex w-[calc(100%+8px)] items-center gap-2 rounded-tight px-1.5 py-1.5 text-2xs font-bold uppercase tracking-[.14em] text-faint transition-colors duration-200 hover:bg-raised/70 hover:text-brand-ink">
-					<span className="flex-1 text-left">{label}</span>
+				{groupKey ? <button type="button" onClick={() => toggleGroup(groupKey)} aria-expanded={!collapsed} className="group/head -mx-1 flex w-[calc(100%+8px)] items-center gap-1.5 rounded-tight px-1.5 py-1.5 text-xs font-extrabold uppercase tracking-[.03em] text-brand-ink transition-colors duration-200 hover:bg-raised/70">
+					{/* Невидимый зеркальный спейсер слева — без него flex-1 центрирует лейбл только
+					   в урезанной части строки (после бейджа и шеврона), а не по всей ширине кнопки. */}
+					<span className="invisible flex flex-none items-center gap-1.5" aria-hidden="true">
+						<span className="grid h-[15px] min-w-[15px] place-items-center rounded-full px-1 text-[9px] font-bold leading-none">{entries.length}</span>
+						<Icon icon={ChevronDown} size={12} strokeWidth={2.6} />
+					</span>
+					<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-center">{label}</span>
 					<span className="grid h-[15px] min-w-[15px] place-items-center rounded-full bg-raised px-1 text-[9px] font-bold leading-none text-faint transition-colors duration-200 group-hover/head:bg-brand-soft group-hover/head:text-brand-ink">{entries.length}</span>
 					<Icon icon={ChevronDown} size={12} strokeWidth={2.6} className={`flex-none transition-transform duration-300 ease-[var(--ease-ui)] ${collapsed ? '-rotate-90' : ''}`} />
 				</button> : <span className="px-1 text-2xs font-bold uppercase tracking-[.14em] text-faint">{label}</span>}
