@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, Archive, Camera, CheckCircle2, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Ruler, Upload, X } from 'lucide-react'
 import Icon from '@/components/Icon'
 import { ProgressBar } from '@/components/ui'
@@ -92,6 +92,13 @@ type Props = {
 	 *  относится к getAll('files')[i]). Нужно возвращать значение для КАЖДОГО
 	 *  файла последовательно, иначе массивы разъедутся. */
 	itemFields?: (item: SelectedFile) => Record<string, string>
+	/** Задача B3: уведомляет родителя о текущем списке файлов (добавление,
+	 *  удаление, смена статуса) — например, чтобы SmartDocumentUpload сам
+	 *  заметил смету среди выбранных файлов и подставил срок из неё, не
+	 *  дожидаясь отправки формы. Хранится в ref внутри компонента, поэтому
+	 *  новая функция на каждый рендер родителя не вызывает лишних срабатываний —
+	 *  эффект зависит только от самого items. */
+	onFilesChange?: (items: SelectedFile[]) => void
 }
 
 const DEFAULT_MAX_FILES = 100
@@ -170,11 +177,15 @@ export default function FileDropField({
 	required = false,
 	renderItemExtra,
 	itemFields,
+	onFilesChange,
 }: Props) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
 	const xhrRef = useRef<XMLHttpRequest | null>(null)
 	const [items, setItems] = useState<SelectedFile[]>([])
+	const onFilesChangeRef = useRef(onFilesChange)
+	onFilesChangeRef.current = onFilesChange
+	useEffect(() => { onFilesChangeRef.current?.(items) }, [items])
 	const [dragging, setDragging] = useState(false)
 	const [reading, setReading] = useState(false)
 	const [uploading, setUploading] = useState(false)

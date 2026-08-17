@@ -2,11 +2,11 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { DocumentKind } from '@prisma/client'
 import FileDropField, { type FileDropFieldResult, type SelectedFile } from '@/components/FileDropField'
 import { classifyDocumentPath } from '@/lib/document-classifier'
-import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER } from '@/lib/format'
+import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatMoney } from '@/lib/format'
 import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
 
 /**
@@ -78,6 +78,13 @@ export default function SmartDocumentUpload({
 	const [status, setStatus] = useState('')
 	// Ручные правки чипа вида на отдельных файлах — ключ: id файла в FileDropField.
 	const [kindOverrides, setKindOverrides] = useState<Record<string, DocumentKind>>({})
+	// Задача B3: если среди выбранных файлов классификатор нашёл смету,
+	// сразу спрашиваем сервер про срок и сумму — не дожидаясь отправки формы.
+	// Поле "Рабочих дней" тут не единственный источник: пользователь мог уже
+	// вписать срок вручную (или из другого документа) до того, как добавил
+	// файл сметы — тогда его правку не перезаписываем.
+	const [estimatePreview, setEstimatePreview] = useState<{ amount: number | null; warnings: string[] } | null>(null)
+	const previewedEstimateIds = useRef(new Set<string>())
 	// Чип вида уместен только там, где вид вообще неоднозначен: в проектном
 	// режиме и ПР1 вид жёстко фиксирован форматом/ролью, там нечего уточнять.
 	const showKindChip = !isProject && !pr1Mode
@@ -113,6 +120,48 @@ export default function SmartDocumentUpload({
 
 	function itemFields(item: SelectedFile): Record<string, string> {
 		return showKindChip ? { kinds: resolvedKind(item) } : {}
+	}
+
+	// Поле "Рабочих дней" существует только в контексте ПР1 (confirmPr1/pr1Mode) —
+	// вне его превью смысла не имеет, спрашивать сервер не о чем.
+	const wantsEstimatePreview = confirmPr1 || pr1Mode
+
+	async function previewEstimateFile(file: File) {
+		const body = new FormData()
+		body.append('file', file)
+		try {
+			const response = await fetch('/api/contracts/estimate-preview', { method: 'POST', body })
+			const data = await response.json().catch(() => null)
+			if (!response.ok || !data) return
+			// Не перезаписываем срок, который человек уже успел вписать сам —
+			// ни до добавления файла, ни за то время, что шёл запрос.
+			if (data.workingDays != null) setWorkingDays((current) => (current.trim() ? current : String(data.workingDays)))
+			if (data.amount != null || (data.warnings ?? []).length > 0) setEstimatePreview({ amount: data.amount ?? null, warnings: data.warnings ?? [] })
+		} catch {
+			// Тихий отказ: это необязательная подсказка, а не требование — срок
+			// в рабочих днях можно так же ввести вручную, как и раньше.
+		}
+	}
+
+	function onFilesChange(items: SelectedFile[]) {
+		if (!wantsEstimatePreview) return
+		for (const item of items) {
+			if (item.status !== 'pending' || previewedEstimateIds.current.has(item.id)) continue
+			if (!/\.(xlsx|xls|csv)$/i.test(item.file.name)) continue
+			if (classifiedKind(item) !== 'ESTIMATE') continue
+			previewedEstimateIds.current.add(item.id)
+			void previewEstimateFile(item.file)
+		}
+	}
+
+	function renderEstimatePreview() {
+		if (!estimatePreview) return null
+		return (
+			<div className="mt-2 rounded-tight bg-surface/70 px-2.5 py-1.5 text-xs leading-5 text-muted">
+				{estimatePreview.amount != null && <div>Сумма по смете: <b className="text-ink">{formatMoney(estimatePreview.amount)}</b> — сверьте с договором перед сохранением.</div>}
+				{estimatePreview.warnings.map((warning) => <div key={warning} className="text-warn">• {warning}</div>)}
+			</div>
+		)
 	}
 
 	// required у обычного <input type=date> действует только при нативной
@@ -173,6 +222,7 @@ export default function SmartDocumentUpload({
 				onDone={onDone}
 				renderItemExtra={renderKindChip}
 				itemFields={itemFields}
+				onFilesChange={onFilesChange}
 				uploadLabel={confirmPr1 ? 'Загрузить и запустить договор' : 'Загрузить файлы'}
 				hint="До 100 файлов за раз · PDF, DOCX, XLSX, DWG, изображения и архивы"
 			/>
@@ -187,12 +237,13 @@ export default function SmartDocumentUpload({
 
 			{!isProject && !requestedExecutive && !pr1Mode && <label className={`rounded-[13px] border p-4 transition-all duration-200 ${confirmPr1 ? 'border-ok/40 bg-ok/5 shadow-[0_8px_24px_rgba(40,150,90,.08)]' : 'border-brand/22 bg-brand/5 hover:border-brand/45'}`}>
 				<span className="flex items-start gap-3"><input type="checkbox" name="confirmPr1Signed" checked={confirmPr1} onChange={(event) => setConfirmPr1(event.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" /><span><b className="block text-sm text-ink">Это подписанное заказчиком Приложение №1</b><span className="mt-1 block text-xs leading-5 text-muted">После загрузки система создаст площадку и поставит договор в очередь проектирования КМ/КЖ.</span></span></span>
-				{confirmPr1 && <span className="mt-3 grid gap-2 sm:grid-cols-2"><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Дата подписания ПР1</span><input type="date" name="signedAt" required value={signedAt} onChange={(event) => setSignedAt(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Рабочих дней из сметы</span><input type="number" name="workingDays" min="1" max="730" placeholder="Например, 55" value={workingDays} onChange={(event) => setWorkingDays(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label></span>}
+				{confirmPr1 && <span className="mt-3 block"><span className="grid gap-2 sm:grid-cols-2"><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Дата подписания ПР1</span><input type="date" name="signedAt" required value={signedAt} onChange={(event) => setSignedAt(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Рабочих дней из сметы</span><input type="number" name="workingDays" min="1" max="730" placeholder="Например, 55" value={workingDays} onChange={(event) => setWorkingDays(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label></span>{renderEstimatePreview()}</span>}
 			</label>}
 			{pr1Mode && <div className="rounded-[13px] border border-ok/30 bg-ok/5 p-4">
 				<div className="text-sm font-bold text-ink">Данные для запуска договора</div>
 				<div className="mt-1 text-xs leading-5 text-muted">Дата подтверждения и срок нужны, чтобы система рассчитала дедлайн. Если срок пока неизвестен, его можно внести позже.</div>
 				<div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Дата подписания ПР1</span><input type="date" name="signedAt" required value={signedAt} onChange={(event) => setSignedAt(event.target.value)} className="h-10 rounded-tight border border-line bg-surface px-3 text-sm" /></label><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Рабочих дней из сметы</span><input type="number" name="workingDays" min="1" max="730" placeholder="Например, 55" value={workingDays} onChange={(event) => setWorkingDays(event.target.value)} className="h-10 rounded-tight border border-line bg-surface px-3 text-sm" /></label></div>
+				{renderEstimatePreview()}
 			</div>}
 
 			{!pr1Mode && <details open={advanced} onToggle={(event) => setAdvanced((event.target as HTMLDetailsElement).open)} className="rounded-control border border-line bg-raised/35 px-3 py-2.5">

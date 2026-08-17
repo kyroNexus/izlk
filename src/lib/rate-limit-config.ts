@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 export const RATE_LIMITS = {
 	'contract-parse': { limit: 10, windowMs: 5 * 60_000 },
+	'estimate-preview': { limit: 10, windowMs: 5 * 60_000 },
 	'contract-import': { limit: 5, windowMs: 10 * 60_000 },
 	'inbox-scan': { limit: 2, windowMs: 60_000 },
 	'contract-download': { limit: 5, windowMs: 10 * 60_000 },
