@@ -4,12 +4,22 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, Field, inputClass, ProgressBar, selectClass } from '@/components/ui'
 import ContractorTypeFields from '@/components/ContractorTypeFields'
+import { formatBytes } from '@/lib/format'
+import { MAX_UPLOAD_BYTES } from '@/lib/upload-constants'
 import type { FolderParseReport, ParsedContract } from '@/lib/contract-parser'
 
 type Mode = 'file' | 'folder' | 'attach'
 
 const MAX_FOLDER_FILES = 1000
 const MAX_FOLDER_BYTES = 750 * 1024 * 1024
+// Режим "Один файл" — это ОСНОВНОЙ читаемый документ договора, не архив и не
+// чертёж (для них — "Новый договор"/папка). Единственный источник для accept
+// у input'а и для реальной проверки ниже — раньше accept был только у
+// input'а, а сам браузер его не обязан соблюдать: пользователь легко выбирает
+// файл любого формата (drag&drop, "Все файлы" в диалоге ОС), и до этой правки
+// ничего не мешало отправить 200 МБ архив через всю сеть только затем, чтобы
+// получить 400 с сервера — задача найдена по жалобе "0% минуту, потом бабах".
+const SINGLE_FILE_EXTENSIONS = ['.doc', '.docx', '.xlsx', '.xls', '.pdf', '.txt', '.csv', '.jpg', '.jpeg', '.png']
 
 function chooseMainFile(files: File[]) {
 	const parsable = files.filter((file) => /\.(doc|docx|xlsx?|pdf|txt|csv|png|jpe?g)$/i.test(file.name))
@@ -73,6 +83,29 @@ export default function ContractImportForm() {
 
 	function switchMode(next: Mode) { setMode(next); setParsed(null); setFolderReport(null); setError(''); setFolderFiles([]) }
 
+	// accept у input — только подсказка диалогу ОС, браузер её не навязывает:
+	// drag&drop или "Все файлы" в диалоге легко проносят мимо неё что угодно.
+	// Раньше здесь не было никакой реальной проверки — несовместимый или
+	// слишком большой файл целиком уезжал на сервер по сети и только там
+	// получал отказ, вместо мгновенного сообщения на месте.
+	function onSingleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+		setParsed(null); setFolderReport(null)
+		const file = event.target.files?.[0]
+		if (!file) { setError(''); return }
+		const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+		if (!SINGLE_FILE_EXTENSIONS.includes(ext)) {
+			setError(`Формат ${ext || '?'} здесь не подходит — нужен DOC, DOCX, XLSX, XLS, PDF, TXT, CSV или скан JPG/PNG. Для архива или папки с документами используйте «Новый договор» слева.`)
+			event.target.value = ''
+			return
+		}
+		if (file.size > MAX_UPLOAD_BYTES) {
+			setError(`Файл больше допустимых ${formatBytes(MAX_UPLOAD_BYTES)}`)
+			event.target.value = ''
+			return
+		}
+		setError('')
+	}
+
 	function payload(form: HTMLFormElement) {
 		const data = new FormData(form)
 		if (mode === 'folder' || mode === 'attach') {
@@ -130,7 +163,7 @@ export default function ContractImportForm() {
 				<button type="button" onClick={() => switchMode('folder')} className={`h-control rounded-tight text-xs font-semibold ${mode === 'folder' ? 'bg-surface text-brand-ink shadow-sm' : 'text-muted'}`}>Новый договор</button>
 				<button type="button" onClick={() => switchMode('attach')} className={`h-control rounded-tight text-xs font-semibold ${mode === 'attach' ? 'bg-surface text-brand-ink shadow-sm' : 'text-muted'}`}>К существующему</button>
 			</div>
-			{!isFolder ? <><div className="mt-[14px] text-sm leading-5 text-muted">Загрузите основной договор в DOC, DOCX, XLSX, PDF, TXT, CSV или скан JPG/PNG.</div><input name="file" type="file" required accept=".doc,.docx,.xlsx,.xls,.pdf,.txt,.csv,.jpg,.jpeg,.png" onChange={() => { setParsed(null); setFolderReport(null) }} className="mt-[14px] block w-full rounded-control border border-dashed border-line bg-raised p-3.5 text-sm" /></> : <>
+			{!isFolder ? <><div className="mt-[14px] text-sm leading-5 text-muted">Загрузите основной договор в DOC, DOCX, XLSX, PDF, TXT, CSV или скан JPG/PNG.</div><input name="file" type="file" required accept={SINGLE_FILE_EXTENSIONS.join(',')} onChange={onSingleFileChange} className="mt-[14px] block w-full rounded-control border border-dashed border-line bg-raised p-3.5 text-sm" /></> : <>
 				<div className="mt-[14px] rounded-control border border-brand/20 bg-brand/5 p-3 text-sm leading-5 text-muted">{mode === 'attach' ? 'Положите в папку документы с номером договора в названии: «765 — смета.xlsx», «765 — ДС №1.docx», «765 — КМ.dwg». Система найдёт договор и разложит файлы сама.' : 'Выберите папку нового договора. Система найдёт основной файл, распознает реквизиты и распределит остальные документы.'}</div>
 				<label className="group mt-[14px] flex min-h-[112px] cursor-pointer items-center gap-3 rounded-[12px] border-2 border-dashed border-line bg-raised/45 px-4 py-4 transition-all duration-200 hover:border-brand/50 hover:bg-brand/5 hover:shadow-[0_10px_26px_rgba(93,63,210,.08)]">
 					<input ref={(element) => { if (element) { element.setAttribute('webkitdirectory', ''); element.setAttribute('directory', '') } }} type="file" multiple className="sr-only" onChange={(event) => { setFolderFiles(Array.from(event.target.files ?? [])); setParsed(null); setFolderReport(null); setError('') }} />
