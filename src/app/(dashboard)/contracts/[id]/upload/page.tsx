@@ -18,7 +18,10 @@ export default async function UploadDocumentPage({
 }) {
 	const user = await requireUser()
 	const contractId = params.id
-	const requestedState = ['SOURCE', 'SIGNED', 'ARCHIVE'].includes(searchParams.state ?? '') ? searchParams.state! : 'SOURCE'
+	// Пустая строка — SmartDocumentUpload сам подставит AUTO (задача B1):
+	// без явной ссылки вида ?state=SIGNED версия документа определяется
+	// по имени файла, а не жёстко фиксируется на "исходник".
+	const requestedState = ['SOURCE', 'SIGNED', 'ARCHIVE'].includes(searchParams.state ?? '') ? searchParams.state! : ''
 	const requestedKind = DOCUMENT_KIND_ORDER.find((kind) => kind === searchParams.kind) ?? ''
 	const pr1Mode = searchParams.pr1 === '1'
 	const projectSection = searchParams.project ? await prisma.projectSection.findFirst({ where: { id: searchParams.project, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null

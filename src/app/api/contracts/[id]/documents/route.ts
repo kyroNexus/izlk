@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { DocumentKind, DocumentState } from '@prisma/client'
 import { assertContractAccess, contractScope, type SessionUser } from '@/lib/access'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
+import { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 import { DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
@@ -65,9 +66,14 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		if (uploads.length === 0) return errorResponse(wantsJson, 'Выберите хотя бы один файл', uploadUrl(request, contractId, 'Выберите хотя бы один файл', executiveId))
 		if (uploads.length > 100) return errorResponse(wantsJson, 'За один раз можно загрузить не больше 100 файлов', uploadUrl(request, contractId, 'За один раз можно загрузить не больше 100 файлов', executiveId))
 		const confirmPr1Signed = user.role !== 'DESIGNER' && user.role !== 'BUILDER' && formData.get('confirmPr1Signed') === 'on'
-		const kindRaw = String(formData.get('kind') ?? 'OTHER')
+		// kind/state из формы — это ПЕРЕОПРЕДЕЛЕНИЕ на всю пачку, а не значение по
+		// умолчанию: явный выбор (не AUTO) побеждает для всех файлов, как и раньше.
+		// Если поле осталось на AUTO (новое значение по умолчанию в форме) — вид и
+		// версия каждого файла определяются classifyDocumentPath/documentStateForPath
+		// по имени файла отдельно для каждого файла в цикле ниже.
+		const kindRaw = String(formData.get('kind') ?? 'AUTO')
 		const selectedKind: DocumentKind = (DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw) ? kindRaw as DocumentKind : 'OTHER'
-		const kind: DocumentKind = user.role === 'DESIGNER' ? (selectedKind === 'PROJECT_DWG' ? 'PROJECT_DWG' : 'PROJECT_PDF') : confirmPr1Signed ? 'APPENDIX' : selectedKind
+		const isAutoKind = !(DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw)
 		const signedAtRaw = user.role === 'DESIGNER' ? null : orNull(String(formData.get('signedAt') ?? ''))
 		const signedAt = signedAtRaw ? parseDate(signedAtRaw) : confirmPr1Signed ? new Date() : null
 		const workingDaysRaw = String(formData.get('workingDays') ?? '').trim()
@@ -75,8 +81,8 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		if (confirmPr1Signed && workingDaysRaw && (!Number.isInteger(workingDays) || workingDays! < 1 || workingDays! > 730)) {
 			return errorResponse(wantsJson, 'Укажите срок от 1 до 730 рабочих дней', uploadUrl(request, contractId, 'Укажите срок от 1 до 730 рабочих дней', executiveId))
 		}
-		const stateRaw = String(formData.get('state') ?? 'SOURCE')
-		const state: DocumentState = user.role === 'DESIGNER' ? 'SOURCE' : confirmPr1Signed || signedAt ? 'SIGNED' : ['SOURCE', 'SIGNED', 'ARCHIVE'].includes(stateRaw) ? stateRaw as DocumentState : 'SOURCE'
+		const stateRaw = String(formData.get('state') ?? 'AUTO')
+		const isAutoState = !['SOURCE', 'SIGNED', 'ARCHIVE'].includes(stateRaw)
 		const isConfidential = user.role !== 'DESIGNER' && formData.get('isConfidential') === 'on'
 		const executiveDoc = executiveId ? await prisma.executiveDoc.findFirst({ where: { id: executiveId, contractId, deletedAt: null }, select: { id: true } }) : null
 		const executiveDocId = executiveDoc?.id ?? null
@@ -88,11 +94,34 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		// теперь собирается и для ответа клиенту — вместо одной склеенной строки
 		// на всю пачку каждый файл в FileDropField получает свой точный статус.
 		const perFile: Array<{ fileName: string; status: 'SUCCESS' | 'IGNORED' | 'FAILED'; message: string; documentId?: string }> = []
+		// Раньше kind/state были одним значением на всю пачку — теперь workflow-синк
+		// (ниже) должен смотреть на них по факту загруженных файлов: если среди
+		// смешанной автоопределённой пачки оказался договор — берём его состояние;
+		// SIGNED важнее SOURCE, если договорных файлов оказалось несколько.
+		let contractUploadState: DocumentState | null = null
 		for (const upload of uploads) {
 			let savedPath: string | null = null
 			try {
 				if (upload.size > MAX_UPLOAD_BYTES) throw new Error(`Файл больше допустимых ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} МБ`)
 				assertSafeDocumentUpload(upload.name)
+				// DESIGNER и подтверждение ПР1 — это не догадки, а обязывающий выбор
+				// пользователя/роли, побеждает всегда. Явный выбор из селекта (не AUTO)
+				// побеждает для всей пачки. Иначе — вид и версия каждого файла решаются
+				// классификатором по имени, отдельно для каждого файла.
+				const kind: DocumentKind = user.role === 'DESIGNER'
+					? (selectedKind === 'PROJECT_DWG' ? 'PROJECT_DWG' : 'PROJECT_PDF')
+					: confirmPr1Signed
+					? 'APPENDIX'
+					: isAutoKind
+					? classifyDocumentPath(upload.name)
+					: selectedKind
+				const state: DocumentState = user.role === 'DESIGNER'
+					? 'SOURCE'
+					: confirmPr1Signed || signedAt
+					? 'SIGNED'
+					: isAutoState
+					? documentStateForPath(upload.name)
+					: (stateRaw as DocumentState)
 				const buffer = Buffer.from(await upload.arrayBuffer())
 				const digest = sha256Buffer(buffer)
 				if (await prisma.document.findFirst({ where: { contractId, sha256: digest }, select: { id: true } })) {
@@ -106,6 +135,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				savedPath = saved.storagePath
 				const document = await createVersionedDocument({ contractId, kind, state, fileName: upload.name, storagePath: saved.storagePath, mimeType: saved.mimeType, sizeBytes: BigInt(saved.sizeBytes), sha256: saved.sha256, signedAt, isConfidential, executiveDocId, projectSectionId: projectSection?.id ?? null, uploadedById: user.id })
 				await writeAudit({ userId: user.id, action: 'UPLOAD', entityType: 'Document', entityId: document.id })
+				if (kind === 'CONTRACT') contractUploadState = contractUploadState === 'SIGNED' ? contractUploadState : state
 				const message = `Загружен как ${kind}.`
 				await writeImportEvent({ fileName: upload.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId, actorId: user.id, message })
 				perFile.push({ fileName: upload.name, status: 'SUCCESS', message, documentId: document.id })
@@ -123,7 +153,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		}
 
 		const workflow = confirmPr1Signed ? await confirmSignedPr1Workflow({ contractId, actorId: user.id, signedAt: signedAt ?? new Date(), workingDays }) : null
-		const automaticStage = !workflow && uploadedCount > 0 ? (await trySyncWorkflowAfterDocumentUpload({ contractId, actorId: user.id, kind, state })).result : null
+		const automaticStage = !workflow && contractUploadState ? (await trySyncWorkflowAfterDocumentUpload({ contractId, actorId: user.id, kind: 'CONTRACT', state: contractUploadState })).result : null
 		if (projectSection && uploadedCount > 0) await prisma.projectSection.update({ where: { id: projectSection.id }, data: { queueStatus: 'IN_PROGRESS', dateFrom: new Date() } })
 		const destination = new URL(projectSection ? `/projects?section=${projectSection.code}` : executiveDocId ? `/executive/${contractId}` : `/contracts/${contractId}`, publicOrigin(request))
 		const workflowText = workflow ? ` ПР1 подтверждён: площадка ${workflow.siteCreated ? 'создана' : 'уже существовала'}, разделов добавлено: ${workflow.sectionsCreated}, задач создано: ${workflow.tasksCreated}${workflow.responsibleName ? `, ответственный: ${workflow.responsibleName}` : ''}.` : automaticStage?.changed ? ' Этап договора обновлён автоматически.' : ''

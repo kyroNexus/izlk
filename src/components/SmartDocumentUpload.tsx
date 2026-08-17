@@ -31,7 +31,11 @@ type Props = {
 	pr1Mode?: boolean
 }
 
+// Задача B1: AUTO — новое значение по умолчанию, сервер определяет вид
+// каждого файла отдельно через classifyDocumentPath. Любой другой явный
+// выбор здесь — переопределение на всю пачку, как и раньше.
 const KIND_OPTIONS: [string, string][] = [
+	['AUTO', 'Определить автоматически'],
 	['CONTRACT', 'Договор / приложение'],
 	['ESTIMATE', 'Смета'],
 	['SOURCE_DATA', 'Исходные данные от заказчика'],
@@ -44,7 +48,7 @@ export default function SmartDocumentUpload({
 	projectSection = null,
 	executiveDocs,
 	requestedExecutive = '',
-	requestedState = 'SOURCE',
+	requestedState = '',
 	requestedKind = '',
 	pr1Mode = false,
 }: Props) {
@@ -54,11 +58,11 @@ export default function SmartDocumentUpload({
 
 	const [advanced, setAdvanced] = useState(false)
 	const [confirmPr1, setConfirmPr1] = useState(pr1Mode)
-	const [kind, setKind] = useState(() => (isProject ? 'PROJECT_PDF' : requestedKind || (requestedExecutive ? 'EXECUTIVE' : 'CONTRACT')))
+	const [kind, setKind] = useState(() => (isProject ? 'PROJECT_PDF' : requestedKind || (requestedExecutive ? 'EXECUTIVE' : 'AUTO')))
 	const [executiveDocId, setExecutiveDocId] = useState(pr1Mode ? '' : requestedExecutive)
 	const [signedAt, setSignedAt] = useState('')
 	const [workingDays, setWorkingDays] = useState('')
-	const [state, setState] = useState(requestedState)
+	const [state, setState] = useState(requestedState || 'AUTO')
 	const [isConfidential, setIsConfidential] = useState(false)
 	const [status, setStatus] = useState('')
 
@@ -142,7 +146,7 @@ export default function SmartDocumentUpload({
 
 			{!pr1Mode && <details open={advanced} onToggle={(event) => setAdvanced((event.target as HTMLDetailsElement).open)} className="rounded-control border border-line bg-raised/35 px-3 py-2.5">
 				<summary className="cursor-pointer list-none text-xs font-semibold text-muted">Дополнительно: версия и доступ <span className="ml-1 text-brand-ink">{advanced ? '−' : '+'}</span></summary>
-				<div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5"><span className="text-xs font-semibold text-muted">Версия документа</span><select name="state" value={state} onChange={(event) => setState(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-xs"><option value="SOURCE">Актуальный исходник</option><option value="SIGNED">Подписанная версия</option><option value="ARCHIVE">Архивная версия</option></select></label>{!isProject && <label className="flex items-center gap-2 pt-5 text-xs text-muted"><input type="checkbox" name="isConfidential" checked={isConfidential} onChange={(event) => setIsConfidential(event.target.checked)} className="h-4 w-4 accent-brand" />Конфиденциально — не выдавать наблюдателям</label>}</div>
+				<div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5"><span className="text-xs font-semibold text-muted">Версия документа</span><select name="state" value={state} onChange={(event) => setState(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-xs"><option value="AUTO">Определить автоматически</option><option value="SOURCE">Актуальный исходник</option><option value="SIGNED">Подписанная версия</option><option value="ARCHIVE">Архивная версия</option></select></label>{!isProject && <label className="flex items-center gap-2 pt-5 text-xs text-muted"><input type="checkbox" name="isConfidential" checked={isConfidential} onChange={(event) => setIsConfidential(event.target.checked)} className="h-4 w-4 accent-brand" />Конфиденциально — не выдавать наблюдателям</label>}</div>
 			</details>
 			}
 
