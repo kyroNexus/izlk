@@ -65,29 +65,29 @@ export default async function DashboardPage() {
 				notifications={data.attentionCounts.danger}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 			<DepartmentBoard departments={data.departmentProgress} flows={data.departmentFlow} totalContracts={data.totals.contracts} closedContracts={data.totals.closedContracts} attentionCount={attentionTotal} createdToday={data.totals.createdToday} funnel={data.funnel} timeline={data.activityTimeline} departmentTimeline={data.departmentTimeline} attentionItems={data.attention.slice(0, 6)} userName={firstName} role={user.role} />
-				<div className="mt-[14px] grid grid-cols-1 gap-[14px] xl:grid-cols-2">
+				<div className="mt-[14px] grid grid-cols-1 gap-3.5 xl:grid-cols-2">
 					<Card>
-						<CardHeader title="Мой день" extra={<Link href="/tasks" className="text-[12px] font-semibold text-brand-ink hover:underline">Все задачи</Link>} />
-						{data.myTasks.length === 0 ? <EmptyState text="На сегодня открытых задач нет" /> : <div>{data.myTasks.map((task) => { const overdue = task.dueDate != null && task.dueDate.getTime() < Date.now(); return <Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center gap-3 border-t border-line-soft px-[18px] py-[11px] first:border-t-0 transition-colors hover:bg-raised"><span className={`h-2.5 w-2.5 flex-none rounded-full ${overdue ? 'bg-danger' : task.priority === 'HIGH' ? 'bg-warn' : 'bg-brand'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-[12.5px] font-semibold text-ink">{task.title}</span><span className="mt-0.5 block text-[10.5px] text-faint">{task.contractNumber ? `Договор № ${task.contractNumber}` : 'Без договора'}</span></span><span className={`flex-none text-[10.5px] font-semibold ${overdue ? 'text-danger' : 'text-muted'}`}>{task.dueDate ? formatDate(task.dueDate) : 'Без срока'}</span></Link> })}</div>}
+						<CardHeader title="Мой день" extra={<Link href="/tasks" className="text-sm font-semibold text-brand-ink hover:underline">Все задачи</Link>} />
+						{data.myTasks.length === 0 ? <EmptyState text="На сегодня открытых задач нет" /> : <div>{data.myTasks.map((task) => { const overdue = task.dueDate != null && task.dueDate.getTime() < Date.now(); return <Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center gap-3 border-t border-line-soft px-4 py-2.5 first:border-t-0 transition-colors hover:bg-raised"><span className={`h-2.5 w-2.5 flex-none rounded-full ${overdue ? 'bg-danger' : task.priority === 'HIGH' ? 'bg-warn' : 'bg-brand'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{task.title}</span><span className="mt-0.5 block text-xs text-faint">{task.contractNumber ? `Договор № ${task.contractNumber}` : 'Без договора'}</span></span><span className={`flex-none text-xs font-semibold ${overdue ? 'text-danger' : 'text-muted'}`}>{task.dueDate ? formatDate(task.dueDate) : 'Без срока'}</span></Link> })}</div>}
 					</Card>
 					<Card>
-						<CardHeader title="Последние действия" extra={<span className="text-[11px] text-muted">ваша активность</span>} />
-						{data.recentActivity.length === 0 ? <EmptyState text="История действий пока пуста" /> : <div>{recentPrimary.map((item) => <div key={item.id} className="flex items-center gap-3 border-t border-line-soft px-[18px] py-[11px] first:border-t-0"><span className="grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-brand-soft text-[12px] font-bold text-brand-ink">{item.action === 'UPLOAD' ? '↑' : item.action === 'CREATE' ? '+' : '•'}</span><span className="min-w-0 flex-1"><span className="block text-[12.5px] font-semibold text-ink">{actionLabel[item.action] ?? item.action}</span><span className="block text-[10.5px] text-faint">{entityLabel[item.entityType] ?? item.entityType}</span></span><span className="tnum flex-none text-[10px] text-faint">{formatDateTime(item.createdAt)}</span></div>)}{recentRest.length > 0 && <details className="border-t border-line-soft"><summary className="cursor-pointer px-[18px] py-[10px] text-[12px] font-semibold text-brand-ink hover:bg-raised">Показать ещё {recentRest.length}</summary>{recentRest.map((item) => <div key={item.id} className="flex items-center gap-3 border-t border-line-soft px-[18px] py-[11px]"><span className="grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-raised text-[12px] font-bold text-muted">{item.action === 'UPLOAD' ? '↑' : item.action === 'CREATE' ? '+' : '•'}</span><span className="min-w-0 flex-1"><span className="block text-[12.5px] font-semibold text-ink">{actionLabel[item.action] ?? item.action}</span><span className="block text-[10.5px] text-faint">{entityLabel[item.entityType] ?? item.entityType}</span></span><span className="tnum flex-none text-[10px] text-faint">{formatDateTime(item.createdAt)}</span></div>)}</details>}</div>}
+						<CardHeader title="Последние действия" extra={<span className="text-xs text-muted">ваша активность</span>} />
+						{data.recentActivity.length === 0 ? <EmptyState text="История действий пока пуста" /> : <div>{recentPrimary.map((item) => <div key={item.id} className="flex items-center gap-3 border-t border-line-soft px-4 py-2.5 first:border-t-0"><span className="grid h-8 w-8 flex-none place-items-center rounded-tight bg-brand-soft text-sm font-bold text-brand-ink">{item.action === 'UPLOAD' ? '↑' : item.action === 'CREATE' ? '+' : '•'}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">{actionLabel[item.action] ?? item.action}</span><span className="block text-xs text-faint">{entityLabel[item.entityType] ?? item.entityType}</span></span><span className="tnum flex-none text-2xs text-faint">{formatDateTime(item.createdAt)}</span></div>)}{recentRest.length > 0 && <details className="border-t border-line-soft"><summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-brand-ink hover:bg-raised">Показать ещё {recentRest.length}</summary>{recentRest.map((item) => <div key={item.id} className="flex items-center gap-3 border-t border-line-soft px-4 py-2.5"><span className="grid h-8 w-8 flex-none place-items-center rounded-tight bg-raised text-sm font-bold text-muted">{item.action === 'UPLOAD' ? '↑' : item.action === 'CREATE' ? '+' : '•'}</span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">{actionLabel[item.action] ?? item.action}</span><span className="block text-xs text-faint">{entityLabel[item.entityType] ?? item.entityType}</span></span><span className="tnum flex-none text-2xs text-faint">{formatDateTime(item.createdAt)}</span></div>)}</details>}</div>}
 					</Card>
 				</div>
 
-				<div className="mt-[14px] grid grid-cols-1 gap-[14px] xl:grid-cols-3">
+				<div className="mt-[14px] grid grid-cols-1 gap-3.5 xl:grid-cols-3">
 					{/* Воронка этапов */}
 					<Card>
 						<CardHeader title="Этапы договоров" />
-						<div className="flex flex-col gap-[11px] px-[18px] py-[14px]">
+						<div className="flex flex-col gap-2.5 px-4 py-3.5">
 							{data.funnel.map((stage) => (
-								<Link key={stage.key} href={`/contracts?stage=${stage.key}`} className="group block rounded-[9px] px-1 py-0.5 transition hover:bg-raised">
-									<div className="mb-[5px] flex items-baseline justify-between gap-[10px]">
-										<span className="truncate text-[12.5px] text-muted group-hover:text-brand-ink">{stage.label}</span>
-										<span className="tnum flex-none text-[12.5px] font-semibold text-ink">
+								<Link key={stage.key} href={`/contracts?stage=${stage.key}`} className="group block rounded-tight px-1 py-0.5 transition hover:bg-raised">
+									<div className="mb-[5px] flex items-baseline justify-between gap-2.5">
+										<span className="truncate text-sm text-muted group-hover:text-brand-ink">{stage.label}</span>
+										<span className="tnum flex-none text-sm font-semibold text-ink">
 											{stage.count}
 										</span>
 									</div>
@@ -107,12 +107,12 @@ export default async function DashboardPage() {
 							<CardHeader
 								title="Проектирование: ближайшие сроки"
 								extra={
-									<span className="text-[12px] text-muted">
+									<span className="text-sm text-muted">
 										Готовность {sectionsPercent}%
 									</span>
 								}
 							/>
-							<div className="px-[18px] pt-[14px]">
+							<div className="px-4 pt-3.5">
 								<ProgressBar
 									percent={sectionsPercent}
 									tone={sectionsPercent >= 80 ? 'ok' : sectionsPercent >= 40 ? 'brand' : 'warn'}
@@ -122,20 +122,20 @@ export default async function DashboardPage() {
 								<EmptyState text="Нет разделов с ближайшими или просроченными сроками" />
 							) : (
 								<div className="mt-[12px] overflow-x-auto">
-									<table className="w-full border-collapse text-[12.5px]">
+									<table className="w-full border-collapse text-sm">
 										<thead>
-											<tr className="border-y border-line-soft text-left text-[11.5px] uppercase tracking-[0.05em] text-faint">
-												<th className="px-[18px] py-[8px] font-medium">Договор</th>
-												<th className="px-[10px] py-[8px] font-medium">Раздел</th>
-												<th className="px-[10px] py-[8px] font-medium">Ответственный</th>
-												<th className="px-[10px] py-[8px] font-medium">Срок</th>
-												<th className="px-[18px] py-[8px] font-medium">Статус</th>
+											<tr className="border-y border-line-soft text-left text-xs uppercase tracking-[0.05em] text-faint">
+												<th className="px-4 py-2 font-medium">Договор</th>
+												<th className="px-2.5 py-2 font-medium">Раздел</th>
+												<th className="px-2.5 py-2 font-medium">Ответственный</th>
+												<th className="px-2.5 py-2 font-medium">Срок</th>
+												<th className="px-4 py-2 font-medium">Статус</th>
 											</tr>
 										</thead>
 										<tbody>
 											{[...data.design.overdue, ...data.design.upcoming].map((row) => (
 												<tr key={row.id} className="border-b border-line-soft last:border-b-0">
-													<td className="px-[18px] py-[9px]">
+													<td className="px-4 py-2">
 														<Link
 															href={`/contracts/${row.contractId}`}
 															className="font-medium text-ink hover:text-brand-ink"
@@ -143,12 +143,12 @@ export default async function DashboardPage() {
 															{row.contractNumber}
 														</Link>
 													</td>
-													<td className="px-[10px] py-[9px] text-muted">{row.label}</td>
-													<td className="px-[10px] py-[9px] text-muted">{row.responsible ?? '—'}</td>
-													<td className="tnum px-[10px] py-[9px] text-muted">
+													<td className="px-2.5 py-2 text-muted">{row.label}</td>
+													<td className="px-2.5 py-2 text-muted">{row.responsible ?? '—'}</td>
+													<td className="tnum px-2.5 py-2 text-muted">
 														{row.dateTo ? formatDate(row.dateTo) : '—'}
 													</td>
-													<td className="px-[18px] py-[9px]">
+													<td className="px-4 py-2">
 													{row.overdue && (row.daysLeft ?? 0) < 0 ? (
 														<Chip tone="danger">
 															Просрочено на {plural(Math.abs(row.daysLeft ?? 0), 'день', 'дня', 'дней')}
@@ -167,29 +167,29 @@ export default async function DashboardPage() {
 									</table>
 								</div>
 							)}
-							<div className="mt-auto grid grid-cols-2 gap-2 border-t border-line-soft bg-raised/35 p-[14px] sm:grid-cols-4">
-								<div className="rounded-[10px] bg-surface px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">Просрочено</span><b className="mt-1 block text-[19px] leading-none text-danger">{data.design.overdue.length}</b></div>
-								<div className="rounded-[10px] bg-surface px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">Ближайшие сроки</span><b className="mt-1 block text-[19px] leading-none text-warn">{data.design.upcoming.length}</b></div>
-								<div className="rounded-[10px] bg-surface px-3 py-2.5"><span className="block text-[10px] font-semibold uppercase tracking-wide text-faint">Готово разделов</span><b className="mt-1 block text-[19px] leading-none text-ok">{data.design.readyCount} / {data.design.totalCount}</b></div>
-								<Link href="/projects" className="flex items-center justify-center rounded-[10px] border border-brand/20 bg-brand-soft px-3 py-2.5 text-center text-[11.5px] font-semibold text-brand-ink transition hover:-translate-y-px hover:border-brand/40">Открыть графики →</Link>
+							<div className="mt-auto grid grid-cols-2 gap-2 border-t border-line-soft bg-raised/35 p-3.5 sm:grid-cols-4">
+								<div className="rounded-control bg-surface px-3 py-2.5"><span className="block text-2xs font-semibold uppercase tracking-wide text-faint">Просрочено</span><b className="mt-1 block text-md leading-none text-danger">{data.design.overdue.length}</b></div>
+								<div className="rounded-control bg-surface px-3 py-2.5"><span className="block text-2xs font-semibold uppercase tracking-wide text-faint">Ближайшие сроки</span><b className="mt-1 block text-md leading-none text-warn">{data.design.upcoming.length}</b></div>
+								<div className="rounded-control bg-surface px-3 py-2.5"><span className="block text-2xs font-semibold uppercase tracking-wide text-faint">Готово разделов</span><b className="mt-1 block text-md leading-none text-ok">{data.design.readyCount} / {data.design.totalCount}</b></div>
+								<Link href="/projects" className="flex items-center justify-center rounded-control border border-brand/20 bg-brand-soft px-3 py-2.5 text-center text-xs font-semibold text-brand-ink transition hover:-translate-y-px hover:border-brand/40">Открыть графики →</Link>
 							</div>
 						</Card>
 					</div>
 
 					{/* Оперативная сводка под ближайшими сроками */}
-					<div className="grid gap-[14px] sm:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+					<div className="grid gap-3.5 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
 						{data.canSeeAmounts && (
 							<Card>
 								<CardHeader
 									title="Финансы"
-									extra={<span className="text-[12px] text-muted">Собрано {collectedPercent}%</span>}
+									extra={<span className="text-sm text-muted">Собрано {collectedPercent}%</span>}
 								/>
-								<div className="px-[18px] py-[14px]">
+								<div className="px-4 py-3.5">
 									<ProgressBar
 										percent={collectedPercent}
 										tone={data.finance.overdueAmount > 0 ? 'warn' : 'ok'}
 									/>
-									<div className="mt-[13px] flex flex-col gap-[7px] text-[12.5px]">
+									<div className="mt-[13px] flex flex-col gap-1.5 text-sm">
 										<div className="flex justify-between">
 											<span className="text-muted">Выставлено</span>
 											<span className="tnum font-semibold text-ink">
@@ -215,27 +215,27 @@ export default async function DashboardPage() {
 									</div>
 
 									{data.finance.debtors.length > 0 && (
-										<div className="mt-[14px] border-t border-line-soft pt-[11px]">
-											<div className="mb-[7px] text-[11.5px] uppercase tracking-[0.06em] text-faint">
+										<div className="mt-[14px] border-t border-line-soft pt-2.5">
+											<div className="mb-[7px] text-xs uppercase tracking-[0.06em] text-faint">
 												Ожидаем оплату
 											</div>
-											<div className="flex flex-col gap-[6px]">
+											<div className="flex flex-col gap-1.5">
 												{data.finance.debtors.map((d) => (
 													<Link
 														key={d.contractId}
 														href={`/contracts/${d.contractId}`}
-														className="flex items-center justify-between gap-[10px] rounded-[8px] px-[6px] py-[4px] transition-colors hover:bg-raised"
+														className="flex items-center justify-between gap-2.5 rounded-tight px-1.5 py-1 transition-colors hover:bg-raised"
 													>
 														<span className="min-w-0 flex-1">
-															<span className="block truncate text-[12.5px] text-ink">
+															<span className="block truncate text-sm text-ink">
 																{d.contractorName}
 															</span>
-															<span className="block truncate text-[11.5px] text-faint">
+															<span className="block truncate text-xs text-faint">
 																{d.contractNumber}
 															</span>
 														</span>
 														<span
-															className={`tnum flex-none text-[12.5px] font-semibold ${
+															className={`tnum flex-none text-sm font-semibold ${
 																d.overdueAmount > 0 ? 'text-danger' : 'text-ink'
 															}`}
 														>
@@ -253,12 +253,12 @@ export default async function DashboardPage() {
 						<Card>
 							<CardHeader
 								title="Площадки"
-								extra={<span className="text-[12px] text-muted">Всего {data.sites.total}</span>}
+								extra={<span className="text-sm text-muted">Всего {data.sites.total}</span>}
 							/>
 							{data.sites.total === 0 ? (
 								<EmptyState text="Площадки не добавлены" />
 							) : (
-								<div className="flex flex-wrap gap-[7px] px-[18px] py-[14px]">
+								<div className="flex flex-wrap gap-1.5 px-4 py-3.5">
 									{data.sites.byStatus.map((s) => (
 										<Chip key={s.status} tone={SITE_STATUS_TONE[s.status]}>
 											{SITE_STATUS_LABEL[s.status]}: {s.count}
@@ -273,12 +273,12 @@ export default async function DashboardPage() {
 								<CardHeader
 									title="Очередь импорта"
 									extra={
-										<Link href="/inbox" className="text-[12px] text-brand-ink hover:underline">
+										<Link href="/inbox" className="text-sm text-brand-ink hover:underline">
 											Открыть
 										</Link>
 									}
 								/>
-								<div className="flex flex-col gap-[7px] px-[18px] py-[14px] text-[12.5px]">
+								<div className="flex flex-col gap-1.5 px-4 py-3.5 text-sm">
 									<div className="flex justify-between">
 										<span className="text-muted">Ждёт подтверждения</span>
 										<span className="tnum font-semibold text-ink">{data.inbox.suggested}</span>
@@ -303,7 +303,7 @@ export default async function DashboardPage() {
 					</div>
 				</div>
 
-				<p className="mt-[16px] text-[11.5px] text-faint">
+				<p className="mt-[16px] text-xs text-faint">
 					Этапы договоров вычисляются по факту: подписанным сканам, загруженным разделам КМ/АР/КЖ,
 					статусу площадки и готовности исполнительной документации.
 				</p>

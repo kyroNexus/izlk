@@ -29,9 +29,9 @@ export default function TableDensityToggle() {
 	}
 
 	return (
-		<div className="inline-flex rounded-[10px] border border-line bg-raised p-[3px]" role="group" aria-label="Плотность таблиц">
-			<button type="button" onClick={() => change('comfortable')} aria-pressed={density === 'comfortable'} className={`rounded-[7px] px-3 py-1.5 text-[12px] font-semibold transition ${density === 'comfortable' ? 'bg-brand text-white shadow-sm' : 'text-muted hover:text-ink'}`}>Комфортно</button>
-			<button type="button" onClick={() => change('compact')} aria-pressed={density === 'compact'} className={`rounded-[7px] px-3 py-1.5 text-[12px] font-semibold transition ${density === 'compact' ? 'bg-brand text-white shadow-sm' : 'text-muted hover:text-ink'}`}>Компактно</button>
+		<div className="inline-flex rounded-control border border-line bg-raised p-1" role="group" aria-label="Плотность таблиц">
+			<button type="button" onClick={() => change('comfortable')} aria-pressed={density === 'comfortable'} className={`rounded-tight px-3 py-1.5 text-sm font-semibold transition ${density === 'comfortable' ? 'bg-brand text-white shadow-sm' : 'text-muted hover:text-ink'}`}>Комфортно</button>
+			<button type="button" onClick={() => change('compact')} aria-pressed={density === 'compact'} className={`rounded-tight px-3 py-1.5 text-sm font-semibold transition ${density === 'compact' ? 'bg-brand text-white shadow-sm' : 'text-muted hover:text-ink'}`}>Компактно</button>
 		</div>
 	)
 }

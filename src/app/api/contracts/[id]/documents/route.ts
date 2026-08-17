@@ -110,7 +110,12 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		if (projectSection && uploadedCount > 0) await prisma.projectSection.update({ where: { id: projectSection.id }, data: { queueStatus: 'IN_PROGRESS', dateFrom: new Date() } })
 		const destination = new URL(projectSection ? `/projects?section=${projectSection.code}` : executiveDocId ? `/executive/${contractId}` : `/contracts/${contractId}`, publicOrigin(request))
 		const workflowText = workflow ? ` ПР1 подтверждён: площадка ${workflow.siteCreated ? 'создана' : 'уже существовала'}, разделов добавлено: ${workflow.sectionsCreated}, задач создано: ${workflow.tasksCreated}${workflow.responsibleName ? `, ответственный: ${workflow.responsibleName}` : ''}.` : automaticStage?.changed ? ' Этап договора обновлён автоматически.' : ''
-		destination.searchParams.set('success', `Загружено файлов: ${uploadedCount}${skippedCount ? `. Пропущено копий: ${skippedCount}` : ''}${failedCount ? `. Ошибок: ${failedCount}; причины есть в журнале импорта` : ''}.${workflowText}`)
+		// "Загружено файлов: 0" на своём читается как сбой, даже когда дубликат
+		// корректно не создался повторно — назвать причину явно, без домыслов.
+		const summaryText = uploadedCount === 0 && skippedCount > 0 && failedCount === 0
+			? `Файл${skippedCount > 1 ? 'ы' : ''} уже есть в системе — точная копия, повторно не загружен${skippedCount > 1 ? 'ы' : ''}.`
+			: `Загружено файлов: ${uploadedCount}${skippedCount ? `. Пропущено копий: ${skippedCount}` : ''}${failedCount ? `. Ошибок: ${failedCount}; причины есть в журнале импорта` : ''}.`
+		destination.searchParams.set('success', `${summaryText}${workflowText}`)
 		return NextResponse.redirect(destination, 303)
 	} catch (error) {
 		logger.error('contract_document.upload_failed', { requestId, route: '/api/contracts/[id]/documents', method: 'POST', userId: user.id, entityType: 'Contract', entityId: contractId, error })

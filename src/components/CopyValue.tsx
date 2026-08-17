@@ -43,5 +43,5 @@ export function CopyContractorDetails({
 			window.setTimeout(() => setDone(false), 1600)
 		} catch { /* Clipboard access may be unavailable in an embedded browser. */ }
 	}
-	return <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 rounded-[8px] border border-brand/25 bg-surface/80 px-2.5 py-1.5 text-[11px] font-semibold text-brand-ink transition hover:-translate-y-px hover:bg-brand-soft" title="Скопировать все реквизиты контрагента">{done ? '✓ Скопировано' : 'Копировать реквизиты'}</button>
+	return <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 rounded-tight border border-brand/25 bg-surface/80 px-2.5 py-1.5 text-xs font-semibold text-brand-ink transition hover:-translate-y-px hover:bg-brand-soft" title="Скопировать все реквизиты контрагента">{done ? '✓ Скопировано' : 'Копировать реквизиты'}</button>
 }

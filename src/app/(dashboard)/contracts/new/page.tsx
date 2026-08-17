@@ -151,10 +151,10 @@ export default async function NewContractPage({
 				initials={initials(name)}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 				<div className="mb-[20px]">
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Новый договор</h1>
-					<div className="mt-[4px] text-[13px] text-faint">
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">Новый договор</h1>
+					<div className="mt-[4px] text-base text-faint">
 						После создания можно загрузить сканы, добавить ДС и сметы
 					</div>
 				</div>
@@ -166,20 +166,20 @@ export default async function NewContractPage({
 
 					{contractors.length === 0 ? (
 						<Card className="p-[22px]">
-							<div className="text-[13px] text-muted">
+							<div className="text-base text-muted">
 								Сначала добавьте контрагента — договор нельзя создать без него.
 							</div>
 							<Link
 								href="/contractors"
-								className="mt-[14px] inline-flex h-[38px] items-center rounded-[10px] border border-line bg-surface px-[15px] text-[13.5px] font-semibold hover:bg-raised"
+								className="mt-[14px] inline-flex h-control items-center rounded-control border border-line bg-surface px-3.5 text-base font-semibold hover:bg-raised"
 							>
 								К контрагентам
 							</Link>
 						</Card>
 					) : (
 						<Card className="p-[22px]">
-							<form action={createContract} className="flex flex-col gap-[15px]">
-								<div className="grid grid-cols-2 gap-[14px]">
+							<form action={createContract} className="flex flex-col gap-3.5">
+								<div className="grid grid-cols-2 gap-3.5">
 									<Field label="Номер договора" required>
 										<input name="number" required className={inputClass} placeholder="555" />
 									</Field>
@@ -188,7 +188,7 @@ export default async function NewContractPage({
 									</Field>
 								</div>
 
-								<div className="flex items-end gap-[10px]">
+								<div className="flex items-end gap-2.5">
 									<Field label="Контрагент" required>
 									<select name="contractorId" required defaultValue={searchParams.contractor ?? ''} className={selectClass}>
 										<option value="" disabled>
@@ -202,10 +202,10 @@ export default async function NewContractPage({
 										))}
 									</select>
 									</Field>
-									<Link href="/contractors/new?returnTo=contract" className="inline-flex h-[38px] flex-none items-center rounded-[10px] border border-brand/30 bg-brand/10 px-[13px] text-[12.5px] font-semibold text-brand-ink hover:bg-brand/15">+ Новый контрагент</Link>
+									<Link href="/contractors/new?returnTo=contract" className="inline-flex h-control flex-none items-center rounded-control border border-brand/30 bg-brand/10 px-3 text-sm font-semibold text-brand-ink hover:bg-brand/15">+ Новый контрагент</Link>
 								</div>
 
-								<div className="grid grid-cols-2 gap-[14px]">
+								<div className="grid grid-cols-2 gap-3.5">
 									<Field label="Дата договора" required>
 										<input type="date" name="date" required defaultValue={today} className={inputClass} />
 									</Field>
@@ -214,16 +214,16 @@ export default async function NewContractPage({
 									</Field>
 								</div>
 
-								<div className="rounded-[11px] border border-line bg-raised/40 p-[12px]">
-									<div className="mb-[9px] text-[12.5px] font-semibold">Структура суммы <span className="font-normal text-faint">(необязательно)</span></div>
-									<div className="grid grid-cols-3 gap-[10px]">
+								<div className="rounded-control border border-line bg-raised/40 p-3">
+									<div className="mb-[9px] text-sm font-semibold">Структура суммы <span className="font-normal text-faint">(необязательно)</span></div>
+									<div className="grid grid-cols-3 gap-2.5">
 										<Field label="СМР"><input name="smrAmount" inputMode="decimal" className={inputClass} placeholder="0" /></Field>
 										<Field label="МК"><input name="mkAmount" inputMode="decimal" className={inputClass} placeholder="0" /></Field>
 										<Field label="Доставка"><input name="deliveryAmount" inputMode="decimal" className={inputClass} placeholder="0" /></Field>
 									</div>
 								</div>
 
-								<div className="grid grid-cols-3 gap-[14px]">
+								<div className="grid grid-cols-3 gap-3.5">
 									<Field label="Тип договора"><select name="kind" defaultValue="SMR" className={selectClass}><option value="SMR">СМР — ИД и паспорт</option><option value="MK">МК — только паспорт</option><option value="PROJECT">Проектный</option></select></Field>
 									<Field label="Валюта">
 										<select name="currency" defaultValue="RUB" className={selectClass}>
@@ -260,16 +260,16 @@ export default async function NewContractPage({
 									<input name="objectAddress" className={inputClass} />
 								</Field>
 
-								<div className="mt-[6px] flex gap-[10px]">
+								<div className="mt-[6px] flex gap-2.5">
 									<button
 										type="submit"
-										className="brand-gradient inline-flex h-[40px] items-center justify-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white"
+										className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white"
 									>
 										Создать договор
 									</button>
 									<Link
 										href="/contracts"
-										className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-line bg-surface px-[18px] text-[13.5px] font-semibold hover:bg-raised"
+										className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
 									>
 										Отмена
 									</Link>

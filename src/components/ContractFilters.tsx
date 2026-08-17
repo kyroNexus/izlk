@@ -55,7 +55,7 @@ export default function ContractFilters({ kinds, sections }: { kinds: Option[]; 
       aria-pressed={active}
       disabled={isNavigating}
       onClick={onClick}
-      className={`contract-filter-button rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition disabled:cursor-wait disabled:opacity-65 ${active ? 'border-brand bg-brand text-white shadow-sm' : 'border-line bg-surface text-muted hover:border-brand/40 hover:text-ink'}`}
+      className={`contract-filter-button rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-65 ${active ? 'border-brand bg-brand text-white shadow-sm' : 'border-line bg-surface text-muted hover:border-brand/40 hover:text-ink'}`}
     >
       {option.label} <span className="ml-1 opacity-70">{option.count}</span>
     </button>
@@ -64,14 +64,14 @@ export default function ContractFilters({ kinds, sections }: { kinds: Option[]; 
   return (
     <div className="mt-3 space-y-2">
       <div className="contract-filter-group flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-faint">Тип:</span>
+        <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-faint">Тип:</span>
         {kinds.map((item) => button(item, activeKinds.has(item.key), () => toggle('kind', item.key)))}
-        {activeKinds.size > 0 && <button type="button" onClick={() => clear('kind')} className="px-2 py-1.5 text-[11px] font-semibold text-brand-ink hover:underline">Сбросить</button>}
+        {activeKinds.size > 0 && <button type="button" onClick={() => clear('kind')} className="px-2 py-1.5 text-xs font-semibold text-brand-ink hover:underline">Сбросить</button>}
       </div>
       <div className="contract-filter-group flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-faint">Раздел проекта:</span>
+        <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-faint">Раздел проекта:</span>
         {sections.map((item) => button(item, activeSections.has(item.key), () => toggle('section', item.key)))}
-        {activeSections.size > 0 && <button type="button" onClick={() => clear('section')} className="px-2 py-1.5 text-[11px] font-semibold text-brand-ink hover:underline">Сбросить</button>}
+        {activeSections.size > 0 && <button type="button" onClick={() => clear('section')} className="px-2 py-1.5 text-xs font-semibold text-brand-ink hover:underline">Сбросить</button>}
       </div>
     </div>
   )

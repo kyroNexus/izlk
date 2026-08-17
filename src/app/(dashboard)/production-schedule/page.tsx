@@ -93,20 +93,20 @@ export default async function ProductionSchedulePage() {
 	}
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Проектирование и графики', href: '/projects' }, { label: 'График производства' }]} userName={user.name ?? user.email ?? 'Пользователь'} initials={initials(user.name ?? user.email ?? 'ПП')} />
-		<main className="workspace-content px-[26px] py-[22px]">
+		<main className="workspace-content">
 			<div className="work-hero mb-4 flex flex-wrap items-end justify-between gap-4 px-5 py-4">
 				<div>
-					<span className="text-[10px] font-bold uppercase tracking-[.1em] text-brand-ink">Цех и офис</span>
-					<h1 className="mt-1 text-[27px] font-bold tracking-[-.04em]">График производства</h1>
-					<p className="mt-1 text-[12px] text-muted">Очередь формируется по приоритету и сроку договора. Формулы плановых дат будут подключены после их утверждения. Остальные поля — по кнопке раскрытия строки.</p>
-					<Link href="/projects" className="mt-2 inline-flex text-[11.5px] font-semibold text-brand-ink hover:underline">← Карта потока проектирования</Link>
+					<span className="text-2xs font-bold uppercase tracking-[.1em] text-brand-ink">Цех и офис</span>
+					<h1 className="mt-1 text-2xl font-bold tracking-[-0.02em]">График производства</h1>
+					<p className="mt-1 text-sm text-muted">Очередь формируется по приоритету и сроку договора. Формулы плановых дат будут подключены после их утверждения. Остальные поля — по кнопке раскрытия строки.</p>
+					<Link href="/projects" className="mt-2 inline-flex text-xs font-semibold text-brand-ink hover:underline">← Карта потока проектирования</Link>
 				</div>
-				<div className="flex items-center gap-2"><div className="rounded-full bg-brand-soft px-3 py-1.5 text-[11px] font-semibold text-brand-ink">В потоке: {rows.length}</div><a href="/api/production-schedule/export" className="inline-flex h-[34px] items-center rounded-[9px] border border-line bg-surface px-3 text-[11.5px] font-semibold hover:bg-raised">Скачать XLSX</a></div>
+				<div className="flex items-center gap-2"><div className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-semibold text-brand-ink">В потоке: {rows.length}</div><a href="/api/production-schedule/export" className="inline-flex h-[34px] items-center rounded-tight border border-line bg-surface px-3 text-xs font-semibold hover:bg-raised">Скачать XLSX</a></div>
 			</div>
 			<div className="overflow-x-auto rounded-[14px] border border-line bg-surface">
-				<table className="min-w-[820px] w-full border-collapse text-[11px]">
+				<table className="min-w-[820px] w-full border-collapse text-xs">
 					<thead className="sticky top-0 z-10 bg-raised">
-						<tr className="text-[10px] font-bold uppercase tracking-[.05em] text-muted">
+						<tr className="text-2xs font-bold uppercase tracking-[.05em] text-muted">
 							<th className="sticky left-0 z-20 border-b border-r border-line bg-raised px-2 py-3">№</th>
 							<th className="border-b border-r border-line px-2 py-3 text-left">Договор</th>
 							<th className="border-b border-r border-line px-2 py-3 text-left">Локация / срок</th>

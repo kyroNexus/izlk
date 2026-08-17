@@ -257,20 +257,20 @@ export default async function TaskPage({
         userName={name.split(' ')[0]}
         initials={initials(name)}
       />
-      <div className="workspace-content px-[26px] py-[22px]">
+      <div className="workspace-content">
         <div className="mb-[16px] flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-[9px]">
-              <h1 className="break-words text-[24px] font-bold">{task.title}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="break-words text-2xl font-bold">{task.title}</h1>
               <Chip tone={statusMeta.tone}>{statusMeta.label}</Chip>
             </div>
-            <div className="mt-[5px] text-[12.5px] text-muted">
+            <div className="mt-[5px] text-sm text-muted">
               Создал: {task.creator.name} · {formatDateTime(task.createdAt)}
             </div>
           </div>
           <Link
             href="/tasks"
-            className="ml-auto flex-none rounded-[9px] border border-line px-[13px] py-[8px] text-[12.5px] font-semibold transition hover:bg-raised"
+            className="ml-auto flex-none rounded-tight border border-line px-3 py-2 text-sm font-semibold transition hover:bg-raised"
           >
             ← К задачам
           </Link>
@@ -278,9 +278,9 @@ export default async function TaskPage({
 
         <FormError message={searchParams.error} />
 
-        <div className="side-panel-grid mt-[14px] grid grid-cols-[minmax(0,1fr)_360px] gap-[14px]">
-          <Card className="p-[20px]">
-            <form action={updateTask} className="flex flex-col gap-[14px]">
+        <div className="side-panel-grid mt-[14px] grid grid-cols-[minmax(0,1fr)_360px] gap-3.5">
+          <Card className="side-panel-grid-primary p-5">
+            <form action={updateTask} className="flex flex-col gap-3.5">
               <Field label="Название" required>
                 <input name="title" defaultValue={task.title} disabled={!canEdit} className={inputClass} />
               </Field>
@@ -292,7 +292,7 @@ export default async function TaskPage({
                   className={textareaClass}
                 />
               </Field>
-              <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Договор">
                   <select
                     name="contractId"
@@ -367,15 +367,15 @@ export default async function TaskPage({
                 </Field>
               </div>
               {canEdit && (
-                <button className="brand-gradient h-[38px] self-start rounded-[9px] px-[16px] text-[12.5px] font-semibold text-white">
+                <button className="brand-gradient h-control self-start rounded-tight px-4 text-sm font-semibold text-white">
                   Сохранить изменения
                 </button>
               )}
             </form>
 
             {canDelete && (
-              <form action={deleteTask} className="mt-[10px] border-t border-line pt-[10px]">
-                <button className="h-[38px] rounded-[9px] border border-danger-bd px-[14px] text-[12px] font-semibold text-danger">
+              <form action={deleteTask} className="mt-[10px] border-t border-line pt-2.5">
+                <button className="h-control rounded-tight border border-danger-bd px-3.5 text-sm font-semibold text-danger">
                   Удалить задачу
                 </button>
               </form>
@@ -386,41 +386,41 @@ export default async function TaskPage({
             <CardHeader title="Комментарии" extra={task.comments.length} />
             <div className="max-h-[430px] overflow-auto">
               {task.comments.length === 0 ? (
-                <div className="p-[22px] text-center text-[12px] text-faint">
+                <div className="p-[22px] text-center text-sm text-faint">
                   Комментариев пока нет
                 </div>
               ) : (
                 task.comments.map((comment) => (
-                  <div key={comment.id} className="border-b border-line-soft px-[15px] py-[11px]">
+                  <div key={comment.id} className="border-b border-line-soft px-3.5 py-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <b className="text-[11.5px]">{comment.author.name}</b>
-                      <span className="text-[10px] text-faint">
+                      <b className="text-xs">{comment.author.name}</b>
+                      <span className="text-2xs text-faint">
                         {formatDateTime(comment.createdAt)}
                       </span>
                     </div>
-                    <div className="mt-[5px] whitespace-pre-wrap text-[12px] leading-5">
+                    <div className="mt-[5px] whitespace-pre-wrap text-sm leading-5">
                       {comment.text}
                     </div>
                   </div>
                 ))
               )}
             </div>
-            <form action={addComment} className="border-t border-line p-[12px]">
+            <form action={addComment} className="border-t border-line p-3">
               <textarea
                 name="text"
                 required
                 placeholder="Написать комментарий…"
                 className={`${textareaClass} min-h-[72px]`}
               />
-              <button className="brand-gradient mt-[7px] h-[34px] w-full rounded-[8px] text-[11.5px] font-semibold text-white">
+              <button className="brand-gradient mt-[7px] h-[34px] w-full rounded-tight text-xs font-semibold text-white">
                 Добавить комментарий
               </button>
             </form>
             {task.contract && (
-              <div className="border-t border-line p-[12px]">
+              <div className="border-t border-line p-3">
                 <Link
                   href={`/contracts/${task.contract.id}`}
-                  className="block rounded-[8px] bg-brand-soft px-[10px] py-[8px] text-center text-[11.5px] font-semibold text-brand-ink"
+                  className="block rounded-tight bg-brand-soft px-2.5 py-2 text-center text-xs font-semibold text-brand-ink"
                 >
                   К договору №{task.contract.number}
                 </Link>

@@ -34,7 +34,7 @@ export default function ThemeToggle() {
 			onClick={toggle}
 			aria-label={dark ? '\u0421\u0432\u0435\u0442\u043b\u0430\u044f \u0442\u0435\u043c\u0430' : '\u0422\u0451\u043c\u043d\u0430\u044f \u0442\u0435\u043c\u0430'}
 			title={dark ? '\u0421\u0432\u0435\u0442\u043b\u0430\u044f \u0442\u0435\u043c\u0430' : '\u0422\u0451\u043c\u043d\u0430\u044f \u0442\u0435\u043c\u0430'}
-			className="grid h-[34px] w-[34px] place-items-center rounded-[9px] border border-line bg-surface text-muted transition-colors hover:bg-raised hover:text-ink"
+			className="grid h-[34px] w-[34px] place-items-center rounded-tight border border-line bg-surface text-muted transition-colors hover:bg-raised hover:text-ink"
 		>
 			{mounted && dark ? (
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">

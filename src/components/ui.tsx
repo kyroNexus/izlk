@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import Icon from '@/components/Icon'
 
 export function RichEmptyState({ title, description, icon = Inbox, primaryAction, secondaryAction }: { title: string; description: ReactNode; icon?: LucideIcon; primaryAction?: ReactNode; secondaryAction?: ReactNode }) {
-	return <div className="ui-empty-state mx-3 my-3 rounded-[14px] border border-dashed border-line px-[18px] py-8 text-center"><span aria-hidden="true" className="mx-auto mb-3 grid h-9 w-9 place-items-center rounded-full bg-brand-soft text-brand-ink"><Icon icon={icon} size={18} /></span><h2 className="text-[13px] font-semibold text-ink">{title}</h2><p className="mx-auto mt-1 max-w-md text-[12px] leading-5 text-muted">{description}</p>{(primaryAction || secondaryAction) && <div className="mt-4 flex flex-wrap justify-center gap-2">{primaryAction}{secondaryAction}</div>}</div>
+	return <div className="ui-empty-state mx-3 my-3 rounded-[14px] border border-dashed border-line px-4 py-8 text-center"><span aria-hidden="true" className="mx-auto mb-3 grid h-9 w-9 place-items-center rounded-full bg-brand-soft text-brand-ink"><Icon icon={icon} size={18} /></span><h2 className="text-base font-semibold text-ink">{title}</h2><p className="mx-auto mt-1 max-w-md text-sm leading-5 text-muted">{description}</p>{(primaryAction || secondaryAction) && <div className="mt-4 flex flex-wrap justify-center gap-2">{primaryAction}{secondaryAction}</div>}</div>
 }
 
 /* ---------------- Карточка ---------------- */
@@ -22,11 +22,11 @@ export function Card({ children, className = '', id, ...rest }: { children: Reac
 	)
 }
 
-export function CardHeader({ title, extra }: { title: string; extra?: ReactNode }) {
+export function CardHeader({ title, extra, className = '' }: { title: string; extra?: ReactNode; className?: string }) {
 	return (
-		<div className="flex items-center gap-3 border-b border-line-soft px-[19px] py-[14px]">
-			<div className="text-[14px] font-bold tracking-[-.01em]">{title}</div>
-			{extra != null && <div className="ml-auto text-[12px] text-faint">{extra}</div>}
+		<div className={`flex items-center gap-3 border-b border-line-soft px-5 py-3.5 ${className}`}>
+			<div className="text-base font-bold tracking-[-.01em]">{title}</div>
+			{extra != null && <div className="ml-auto text-sm text-faint">{extra}</div>}
 		</div>
 	)
 }
@@ -46,7 +46,7 @@ const CHIP_TONE: Record<ChipTone, string> = {
 export function Chip({ tone, children, dot = true }: { tone: ChipTone; children: ReactNode; dot?: boolean }) {
 	return (
 		<span
-			className={`inline-flex items-center gap-[6px] whitespace-nowrap rounded-full border px-[9px] py-[3px] text-[11.5px] font-medium ${CHIP_TONE[tone]}`}
+			className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${CHIP_TONE[tone]}`}
 		>
 			{dot && tone !== 'brand' && <span className="h-[5px] w-[5px] rounded-full bg-current opacity-80" />}
 			{children}
@@ -95,14 +95,14 @@ function fileTone(fileName: string) {
 export function FileIcon({ fileName }: { fileName: string }) {
 	const { tone, label } = fileTone(fileName)
 	return (
-		<div className={`grid h-8 w-8 flex-none place-items-center rounded-lg text-[9px] font-bold ${tone}`}>{label}</div>
+		<div className={`grid h-8 w-8 flex-none place-items-center rounded-lg text-2xs font-bold ${tone}`}>{label}</div>
 	)
 }
 
 /* ---------------- Кнопки ---------------- */
 
 const BTN_BASE =
-	'inline-flex h-[39px] min-h-[44px] items-center gap-[7px] rounded-[11px] px-[15px] text-[13px] font-semibold transition-[transform,box-shadow,background-color,border-color] duration-200 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0'
+	'inline-flex h-control min-h-[44px] items-center gap-1.5 rounded-control px-3.5 text-base font-semibold transition-[transform,box-shadow,background-color,border-color] duration-200 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0'
 
 export function PrimaryButton({
 	children,
@@ -135,9 +135,9 @@ export function SecondaryButton({
 
 export function KeyValue({ label, value, mono = false }: { label: string; value: ReactNode; mono?: boolean }) {
 	return (
-		<div className="flex items-baseline gap-3 border-b border-line-soft py-[9px] last:border-b-0">
-			<span className="text-[12.5px] text-muted">{label}</span>
-			<span className={`ml-auto text-right text-[13px] font-medium ${mono ? 'tnum' : ''}`}>{value}</span>
+		<div className="flex items-baseline gap-3 border-b border-line-soft py-2 last:border-b-0">
+			<span className="text-sm text-muted">{label}</span>
+			<span className={`ml-auto text-right text-base font-medium ${mono ? 'tnum' : ''}`}>{value}</span>
 		</div>
 	)
 }
@@ -145,7 +145,7 @@ export function KeyValue({ label, value, mono = false }: { label: string; value:
 /* ---------------- Пустое состояние ---------------- */
 
 export function EmptyState({ text }: { text: string }) {
-	return <div className="ui-empty-state mx-3 my-3 rounded-[14px] border border-dashed border-line px-[18px] py-8 text-center text-[13px] text-faint"><span aria-hidden="true" className="mx-auto mb-2 grid h-8 w-8 place-items-center rounded-full bg-brand-soft text-brand-ink">—</span>{text}</div>
+	return <div className="ui-empty-state mx-3 my-3 rounded-[14px] border border-dashed border-line px-4 py-8 text-center text-base text-faint"><span aria-hidden="true" className="mx-auto mb-2 grid h-8 w-8 place-items-center rounded-full bg-brand-soft text-brand-ink">—</span>{text}</div>
 }
 
 /* ---------------- Плитка показателя (дашборд) ---------------- */
@@ -174,12 +174,12 @@ export function StatTile({
 	href?: string
 }) {
 	const body = (
-		<div className="flex h-full flex-col rounded-[14px] border border-line bg-surface p-[16px] transition-[border-color,box-shadow] duration-200 hover:border-brand/25 hover:shadow-[0_12px_28px_rgba(69,48,160,.10)]">
-			<div className="text-[11.5px] font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
-			<div className={`tnum mt-[8px] text-[24px] font-bold leading-none tracking-[-0.02em] ${TILE_ACCENT[tone]}`}>
+		<div className="flex h-full flex-col rounded-[14px] border border-line bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-brand/25 hover:shadow-[0_12px_28px_rgba(69,48,160,.10)]">
+			<div className="text-xs font-medium uppercase tracking-[0.06em] text-faint">{label}</div>
+			<div className={`tnum mt-[8px] text-2xl font-bold leading-none tracking-[-0.02em] ${TILE_ACCENT[tone]}`}>
 				{value}
 			</div>
-			{hint != null && <div className="mt-[7px] text-[12px] text-muted">{hint}</div>}
+			{hint != null && <div className="mt-[7px] text-sm text-muted">{hint}</div>}
 		</div>
 	)
 
@@ -249,14 +249,14 @@ export function AttentionRow({
 	return (
 		<a
 			href={href}
-			className="flex items-start gap-[11px] border-b border-line-soft px-[18px] py-[11px] transition-colors last:border-b-0 hover:bg-raised"
+			className="flex items-start gap-2.5 border-b border-line-soft px-4 py-2.5 transition-colors last:border-b-0 hover:bg-raised"
 		>
 			<span className={`mt-[6px] h-[7px] w-[7px] flex-none rounded-full ${ROW_DOT[tone]}`} />
 			<span className="min-w-0 flex-1">
-				<span className="block truncate text-[13px] font-medium text-ink">{title}</span>
-				{detail && <span className="mt-[2px] block truncate text-[12px] text-muted">{detail}</span>}
+				<span className="block truncate text-base font-medium text-ink">{title}</span>
+				{detail && <span className="mt-[2px] block truncate text-sm text-muted">{detail}</span>}
 			</span>
-			{group && <span className="flex-none text-[11px] text-faint">{group}</span>}
+			{group && <span className="flex-none text-xs text-faint">{group}</span>}
 		</a>
 	)
 }
@@ -268,38 +268,43 @@ export function Field({
 	hint,
 	required = false,
 	children,
+	labelClassName,
 }: {
 	label: string
 	hint?: string
 	required?: boolean
 	children: ReactNode
+	/** Точечная замена вида подписи поля в конкретном месте (например,
+	 *  внутри .filter-panel) — вместо контекстного CSS-селектора вида
+	 *  ".filter-panel label > span". */
+	labelClassName?: string
 }) {
 	return (
-		<label className="flex flex-col gap-[6px]">
-			<span className="text-[12.5px] font-medium text-muted">
+		<label className="flex flex-col gap-1.5">
+			<span className={labelClassName ?? 'text-sm font-medium text-muted'}>
 				{label}
 				{required && <span className="ml-[3px] text-danger">*</span>}
 			</span>
 			{children}
-			{hint && <span className="text-[11.5px] text-faint">{hint}</span>}
+			{hint && <span className="text-xs text-faint">{hint}</span>}
 		</label>
 	)
 }
 
 export const inputClass =
-	'h-[40px] min-h-[44px] w-full rounded-[11px] border border-line bg-surface px-[13px] text-[13px] text-ink outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-brand/25 focus:border-brand focus:bg-surface focus:ring-[3px] focus:ring-brand/16 sm:min-h-0'
+	'h-control min-h-[44px] w-full rounded-control border border-line bg-surface px-3 text-base text-ink outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-brand/25 focus:border-brand focus:bg-surface focus:ring-[3px] focus:ring-brand/16 sm:min-h-0'
 
 export const selectClass = inputClass
 
 export const textareaClass =
-	'min-h-[84px] w-full rounded-[11px] border border-line bg-surface px-[13px] py-[9px] text-[13px] text-ink outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-brand/25 focus:border-brand focus:bg-surface focus:ring-[3px] focus:ring-brand/16'
+	'min-h-[84px] w-full rounded-control border border-line bg-surface px-3 py-2 text-base text-ink outline-none transition-[border-color,box-shadow,background-color] placeholder:text-faint hover:border-brand/25 focus:border-brand focus:bg-surface focus:ring-[3px] focus:ring-brand/16'
 
 /** Сообщение об ошибке валидации над формой. */
 export function FormError({ message }: { message?: string | null }) {
 	if (!message) return null
 	return (
-		<div role="alert" className="flex items-start gap-2 rounded-[10px] border border-danger-bd bg-danger-bg px-[13px] py-[9px] text-[12.5px] text-danger">
-			<span aria-hidden="true" className="mt-px grid h-4 w-4 flex-none place-items-center rounded-full border border-current text-[10px] font-bold">!</span>{message}
+		<div role="alert" className="flex items-start gap-2 rounded-control border border-danger-bd bg-danger-bg px-3 py-2 text-sm text-danger">
+			<span aria-hidden="true" className="mt-px grid h-4 w-4 flex-none place-items-center rounded-full border border-current text-2xs font-bold">!</span>{message}
 		</div>
 	)
 }

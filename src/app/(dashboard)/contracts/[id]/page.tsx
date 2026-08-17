@@ -32,9 +32,11 @@ import TabProject from '@/components/contract/TabProject'
 import TabTasks from '@/components/contract/TabTasks'
 import TabExecutive from '@/components/contract/TabExecutive'
 
+// Порядок разделов — по приоритету из рабочих заметок: подписанные заказчиком
+// версии юридически значимее черновиков, поэтому идут первыми.
 const DOCUMENT_STATES: { key: DocumentState; label: string; hint: string }[] = [
-	{ key: 'SOURCE', label: 'Актуальные исходники', hint: 'Рабочие договоры, сметы и приложения' },
 	{ key: 'SIGNED', label: 'Подписанные заказчиком', hint: 'Юридически значимые версии' },
+	{ key: 'SOURCE', label: 'Актуальные исходники', hint: 'Рабочие договоры, сметы и приложения' },
 	{ key: 'ARCHIVE', label: 'Архив версий', hint: 'Старые варианты — можно восстановить в любой момент' },
 ]
 
@@ -326,8 +328,8 @@ export default async function ContractPage({ params, searchParams }: { params: {
 				initials={initials(name)}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
-				{searchParams.success && <div className="mb-[14px] rounded-[10px] border border-green-200 bg-green-50 px-[13px] py-[10px] text-[12.5px] font-medium text-green-800">{searchParams.success}</div>}
+			<div className="workspace-content">
+				{searchParams.success && <div className="mb-[14px] rounded-control border border-green-200 bg-green-50 px-3 py-2.5 text-sm font-medium text-green-800">{searchParams.success}</div>}
 
 				<ContractHero
 					contract={contract}
@@ -338,19 +340,19 @@ export default async function ContractPage({ params, searchParams }: { params: {
 					deleteContract={deleteContract}
 				/>
 
-				<div className="grid grid-cols-1 items-start gap-[18px] xl:grid-cols-[minmax(0,1fr)_316px]">
+				<div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_316px]">
 					{/* ---------- Левая колонка ---------- */}
-					<div className="flex min-w-0 flex-col gap-[18px]">
+					<div className="flex min-w-0 flex-col gap-4">
 						{/* Карточка договора: контрагент слева, управленческие данные справа */}
 						<Card className="overflow-hidden border-brand/10 shadow-[0_14px_34px_rgba(25,22,45,.055)]">
 							<div className="grid grid-cols-1 lg:grid-cols-[minmax(0,.94fr)_minmax(0,1.3fr)]">
-								<div className="border-b border-line-soft bg-gradient-to-br from-brand-soft/55 to-surface p-[19px] lg:border-b-0 lg:border-r">
-									<div className="flex items-center gap-3"><div className="grid h-10 w-10 flex-none place-items-center rounded-[10px] bg-brand text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V6l7-3 7 3v15M9 10h2M9 14h2M15 10h0M15 14h0" /></svg></div><div className="min-w-0"><div className="text-[10.5px] font-semibold uppercase tracking-[.06em] text-faint">Контрагент</div><Link href={`/contractors/${contract.contractor.id}?from=${contract.id}`} className="block truncate text-[16px] font-bold hover:text-brand-ink hover:underline">{contract.contractor.name}</Link></div></div>
-									<div className="mt-[14px] grid grid-cols-2 gap-x-[20px] gap-y-[10px] text-[12px]"><div><div className="text-[10px] font-semibold uppercase text-faint">ИНН</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.inn ?? '—'}<CopyValue value={contract.contractor.inn ?? ''} label="Скопировать ИНН" /></div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Телефон</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.phone ? <a href={`tel:${contract.contractor.phone.replace(/[^+\d]/g, '')}`} className="text-brand-ink hover:underline">{contract.contractor.phone}</a> : '—'}<CopyValue value={contract.contractor.phone ?? ''} label="Скопировать телефон" /></div></div><div className="col-span-2"><div className="text-[10px] font-semibold uppercase text-faint">Email</div><div className="mt-1 flex items-center font-semibold"><span className="truncate">{contract.contractor.email ? <a href={`mailto:${contract.contractor.email}`} className="text-brand-ink hover:underline">{contract.contractor.email}</a> : '—'}</span><CopyValue value={contract.contractor.email ?? ''} label="Скопировать email" /></div></div></div>
-									<div className="mt-[15px] flex flex-wrap gap-2"><Link href={`/contractors/${contract.contractor.id}?from=${contract.id}`} className="inline-flex rounded-[8px] border border-brand/25 bg-surface/80 px-[10px] py-[7px] text-[11.5px] font-semibold text-brand-ink hover:bg-brand-soft">Открыть карточку контрагента →</Link><CopyContractorDetails name={contract.contractor.name} inn={contract.contractor.inn} phone={contract.contractor.phone} email={contract.contractor.email} address={contract.contractor.address} /></div>
+								<div className="border-b border-line-soft bg-gradient-to-br from-brand-soft/55 to-surface p-5 lg:border-b-0 lg:border-r">
+									<div className="flex items-center gap-3"><div className="grid h-10 w-10 flex-none place-items-center rounded-control bg-brand text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V6l7-3 7 3v15M9 10h2M9 14h2M15 10h0M15 14h0" /></svg></div><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[.06em] text-faint">Контрагент</div><Link href={`/contractors/${contract.contractor.id}?from=${contract.id}`} className="block truncate text-md font-bold hover:text-brand-ink hover:underline">{contract.contractor.name}</Link></div></div>
+									<div className="mt-[14px] grid grid-cols-2 gap-x-[20px] gap-y-[10px] text-sm"><div><div className="text-2xs font-semibold uppercase text-faint">ИНН</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.inn ?? '—'}<CopyValue value={contract.contractor.inn ?? ''} label="Скопировать ИНН" /></div></div><div><div className="text-2xs font-semibold uppercase text-faint">Телефон</div><div className="mt-1 flex items-center font-semibold">{contract.contractor.phone ? <a href={`tel:${contract.contractor.phone.replace(/[^+\d]/g, '')}`} className="text-brand-ink hover:underline">{contract.contractor.phone}</a> : '—'}<CopyValue value={contract.contractor.phone ?? ''} label="Скопировать телефон" /></div></div><div className="col-span-2"><div className="text-2xs font-semibold uppercase text-faint">Email</div><div className="mt-1 flex items-center font-semibold"><span className="truncate">{contract.contractor.email ? <a href={`mailto:${contract.contractor.email}`} className="text-brand-ink hover:underline">{contract.contractor.email}</a> : '—'}</span><CopyValue value={contract.contractor.email ?? ''} label="Скопировать email" /></div></div></div>
+									<div className="mt-[15px] flex flex-wrap gap-2"><Link href={`/contractors/${contract.contractor.id}?from=${contract.id}`} className="inline-flex rounded-tight border border-brand/25 bg-surface/80 px-2.5 py-1.5 text-xs font-semibold text-brand-ink hover:bg-brand-soft">Открыть карточку контрагента →</Link><CopyContractorDetails name={contract.contractor.name} inn={contract.contractor.inn} phone={contract.contractor.phone} email={contract.contractor.email} address={contract.contractor.address} /></div>
 								</div>
-								<div className="p-[19px]"><div className="grid grid-cols-2 gap-x-[26px] gap-y-[12px] text-[12px]"><div><div className="text-[10px] font-semibold uppercase text-faint">Шифр договора</div><div className="mt-1 flex items-center font-bold">{contract.cipher ?? '—'}<CopyValue value={contract.cipher ?? ''} label="Скопировать шифр" /></div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Менеджер</div><div className="mt-1 font-semibold">{contract.manager?.name ?? 'Не назначен'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Подписание ПР1</div><div className="mt-1 font-semibold">{contract.pr1SignedAt ? formatDate(contract.pr1SignedAt) : 'Не подтверждено'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Рабочих дней</div><div className="mt-1 font-semibold">{contract.workingDays ?? '—'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Дедлайн договора</div><div className={`mt-1 font-semibold ${deadlineInfo.tone === 'danger' ? 'text-danger' : deadlineInfo.tone === 'warn' ? 'text-warn' : ''}`}>{contract.deadline ? formatDate(contract.deadline) : 'Не рассчитан'}</div></div><div><div className="text-[10px] font-semibold uppercase text-faint">Адрес объекта</div><div className="mt-1 truncate font-semibold">{contract.objectAddress ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contract.objectAddress)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contract.objectAddress}</a> : '—'}</div></div></div>
-									{canSeeAmounts && <div className="mt-[16px] border-t border-line-soft pt-[12px]"><div className="text-[10px] font-semibold uppercase tracking-[.06em] text-faint">Стоимость договора</div><div className="mt-[4px] text-[20px] font-bold tracking-[-.02em]">{formatMoney(contract.amount, contract.currency)}</div>{hasPlanBreakdown && <div className="mt-[9px] grid grid-cols-3 gap-[6px] text-center text-[10.5px] text-muted"><div className="rounded-[8px] bg-raised p-[6px]">СМР<br/><b className="text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div className="rounded-[8px] bg-raised p-[6px]">МК<br/><b className="text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div className="rounded-[8px] bg-raised p-[6px]">Доставка<br/><b className="text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}</div>}
+								<div className="p-5"><div className="grid grid-cols-2 gap-x-[26px] gap-y-[12px] text-sm"><div><div className="text-2xs font-semibold uppercase text-faint">Шифр договора</div><div className="mt-1 flex items-center font-bold">{contract.cipher ?? '—'}<CopyValue value={contract.cipher ?? ''} label="Скопировать шифр" /></div></div><div><div className="text-2xs font-semibold uppercase text-faint">Менеджер</div><div className="mt-1 font-semibold">{contract.manager?.name ?? 'Не назначен'}</div></div><div><div className="text-2xs font-semibold uppercase text-faint">Подписание ПР1</div><div className="mt-1 font-semibold">{contract.pr1SignedAt ? formatDate(contract.pr1SignedAt) : 'Не подтверждено'}</div></div><div><div className="text-2xs font-semibold uppercase text-faint">Рабочих дней</div><div className="mt-1 font-semibold">{contract.workingDays ?? '—'}</div></div><div><div className="text-2xs font-semibold uppercase text-faint">Дедлайн договора</div><div className={`mt-1 font-semibold ${deadlineInfo.tone === 'danger' ? 'text-danger' : deadlineInfo.tone === 'warn' ? 'text-warn' : ''}`}>{contract.deadline ? formatDate(contract.deadline) : 'Не рассчитан'}</div></div><div><div className="text-2xs font-semibold uppercase text-faint">Адрес объекта</div><div className="mt-1 truncate font-semibold">{contract.objectAddress ? <a href={`https://yandex.ru/maps/?text=${encodeURIComponent(contract.objectAddress)}`} target="_blank" rel="noreferrer" className="text-brand-ink hover:underline">{contract.objectAddress}</a> : '—'}</div></div></div>
+									{canSeeAmounts && <div className="mt-[16px] border-t border-line-soft pt-3"><div className="text-2xs font-semibold uppercase tracking-[.06em] text-faint">Стоимость договора</div><div className="mt-[4px] text-xl font-bold tracking-[-.02em]">{formatMoney(contract.amount, contract.currency)}</div>{hasPlanBreakdown && <div className="mt-[9px] grid grid-cols-3 gap-1.5 text-center text-xs text-muted"><div className="rounded-tight bg-raised p-1.5">СМР<br/><b className="text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div className="rounded-tight bg-raised p-1.5">МК<br/><b className="text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div className="rounded-tight bg-raised p-1.5">Доставка<br/><b className="text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}</div>}
 								</div>
 							</div>
 						</Card>
@@ -415,16 +417,16 @@ export default async function ContractPage({ params, searchParams }: { params: {
 					</div>
 
 					{/* ---------- Правая колонка ---------- */}
-					<div className="flex flex-col gap-[18px] xl:sticky xl:top-[76px]">
+					<div className="flex flex-col gap-4 xl:sticky xl:top-[76px]">
 						{canSeeAmounts && (
-							<Card className="p-[18px]">
-								<div className="text-[11.5px] text-muted">
+							<Card className="p-4">
+								<div className="text-xs text-muted">
 									Сумма договора
 								</div>
-								<div className="tnum mt-[5px] text-[23px] font-bold tracking-[-0.01em]">
+								<div className="tnum mt-[5px] text-xl font-bold tracking-[-0.01em]">
 									{formatMoney(contract.amount, contract.currency)}
 								</div>
-								<div className="mt-[4px] text-[11.5px] text-faint">
+								<div className="mt-[4px] text-xs text-faint">
 									{'вкл. '}
 									{plural(
 										contract.agreements.length,
@@ -433,48 +435,48 @@ export default async function ContractPage({ params, searchParams }: { params: {
 										'доп. соглашений',
 									)}
 								</div>
-								{(contract.smrAmount != null || contract.mkAmount != null || contract.deliveryAmount != null) && <div className="mt-[13px] grid grid-cols-3 gap-[5px] border-t border-line-soft pt-[11px] text-center text-[10.5px] text-muted"><div>СМР<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div>МК<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div>Доставка<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}
+								{(contract.smrAmount != null || contract.mkAmount != null || contract.deliveryAmount != null) && <div className="mt-[13px] grid grid-cols-3 gap-1 border-t border-line-soft pt-2.5 text-center text-xs text-muted"><div>СМР<br/><b className="tnum text-xs text-ink">{formatMoney(contract.smrAmount ?? 0, contract.currency)}</b></div><div>МК<br/><b className="tnum text-xs text-ink">{formatMoney(contract.mkAmount ?? 0, contract.currency)}</b></div><div>Доставка<br/><b className="tnum text-xs text-ink">{formatMoney(contract.deliveryAmount ?? 0, contract.currency)}</b></div></div>}
 							</Card>
 						)}
 
 						{canSeeAmounts && (
 							<Card>
 								<CardHeader title="План / факт затрат" extra={siteWorks.length ? `${siteWorks.length} отч.` : 'нет отчётов'} />
-								<div className="p-[18px]">
-									<div className="grid grid-cols-3 gap-[7px] text-center text-[10.5px] text-muted">
-										<div className="rounded-[8px] bg-raised p-[7px]">Выручка<br/><b className="tnum text-[11.5px] text-ink">{formatMoney(contract.amount, contract.currency)}</b></div>
-										<div className="rounded-[8px] bg-raised p-[7px]">Факт затрат<br/><b className="tnum text-[11.5px] text-warn">{formatMoney(actualCosts, contract.currency)}</b></div>
-										<div className="rounded-[8px] bg-raised p-[7px]">Маржа*<br/><b className={`tnum text-[11.5px] ${margin < 0 ? 'text-danger' : 'text-ok'}`}>{formatMoney(margin, contract.currency)}</b></div>
+								<div className="p-4">
+									<div className="grid grid-cols-3 gap-1.5 text-center text-xs text-muted">
+										<div className="rounded-tight bg-raised p-1.5">Выручка<br/><b className="tnum text-xs text-ink">{formatMoney(contract.amount, contract.currency)}</b></div>
+										<div className="rounded-tight bg-raised p-1.5">Факт затрат<br/><b className="tnum text-xs text-warn">{formatMoney(actualCosts, contract.currency)}</b></div>
+										<div className="rounded-tight bg-raised p-1.5">Маржа*<br/><b className={`tnum text-xs ${margin < 0 ? 'text-danger' : 'text-ok'}`}>{formatMoney(margin, contract.currency)}</b></div>
 									</div>
-									{costShare != null ? <><div className="mt-[13px] flex items-center justify-between text-[11.5px]"><span className="text-muted">Освоение бюджета</span><span className={`tnum font-semibold ${actualCosts > planBreakdown ? 'text-danger' : 'text-ink'}`}>{costShare}%</span></div><div className="mt-[6px]"><ProgressBar percent={costShare} tone={actualCosts > planBreakdown ? 'danger' : costShare >= 80 ? 'warn' : 'brand'} height={7} /></div><div className={`mt-[7px] text-[11.5px] ${budgetLeft < 0 ? 'text-danger' : 'text-muted'}`}>{budgetLeft < 0 ? `Перерасход: ${formatMoney(Math.abs(budgetLeft), contract.currency)}` : `Остаток бюджета: ${formatMoney(budgetLeft, contract.currency)}`}</div></> : <div className="mt-[12px] rounded-[8px] bg-raised px-[10px] py-[8px] text-[11.5px] text-muted">Заполните СМР, МК и доставку в редактировании договора — появится контроль бюджета.</div>}
-									{siteWorks.length > 0 && <div className="mt-[10px] flex justify-between text-[11px] text-faint"><span>КЖ: {formatMoney(actualKjCosts, contract.currency)}</span><span>КМ: {formatMoney(actualKmCosts, contract.currency)}</span></div>}
-									{site && <Link href={`/sites/${site.id}`} className="mt-[11px] inline-block text-[11.5px] font-semibold text-brand-ink hover:underline">Открыть отчёты площадки →</Link>}
-									<div className="mt-[7px] text-[10px] text-faint">* Предварительно: выручка договора минус занесённые расходы площадки.</div>
+									{costShare != null ? <><div className="mt-[13px] flex items-center justify-between text-xs"><span className="text-muted">Освоение бюджета</span><span className={`tnum font-semibold ${actualCosts > planBreakdown ? 'text-danger' : 'text-ink'}`}>{costShare}%</span></div><div className="mt-[6px]"><ProgressBar percent={costShare} tone={actualCosts > planBreakdown ? 'danger' : costShare >= 80 ? 'warn' : 'brand'} height={7} /></div><div className={`mt-[7px] text-xs ${budgetLeft < 0 ? 'text-danger' : 'text-muted'}`}>{budgetLeft < 0 ? `Перерасход: ${formatMoney(Math.abs(budgetLeft), contract.currency)}` : `Остаток бюджета: ${formatMoney(budgetLeft, contract.currency)}`}</div></> : <div className="mt-[12px] rounded-tight bg-raised px-2.5 py-2 text-xs text-muted">Заполните СМР, МК и доставку в редактировании договора — появится контроль бюджета.</div>}
+									{siteWorks.length > 0 && <div className="mt-[10px] flex justify-between text-xs text-faint"><span>КЖ: {formatMoney(actualKjCosts, contract.currency)}</span><span>КМ: {formatMoney(actualKmCosts, contract.currency)}</span></div>}
+									{site && <Link href={`/sites/${site.id}`} className="mt-[11px] inline-block text-xs font-semibold text-brand-ink hover:underline">Открыть отчёты площадки →</Link>}
+									<div className="mt-[7px] text-2xs text-faint">* Предварительно: выручка договора минус занесённые расходы площадки.</div>
 								</div>
 							</Card>
 						)}
 
 						<Card>
 							<CardHeader title="Готовность договора" extra={`${completion}%`} />
-							<div className="p-[18px]">
+							<div className="p-4">
 								<ProgressBar percent={completion} height={9} tone={completion === 100 ? 'ok' : completion >= 50 ? 'brand' : 'warn'} />
-								<div className="mt-[14px] flex flex-col gap-[4px]">
+								<div className="mt-[14px] flex flex-col gap-1">
 									{progressParts.map((item) => (
-										<a key={item.label} href={item.href} className="flex items-center gap-[9px] rounded-[8px] px-[7px] py-[7px] text-[12.5px] hover:bg-raised">
-											<span className={`grid h-[18px] w-[18px] place-items-center rounded-full text-[10px] font-bold ${item.ready ? 'bg-ok-bg text-ok' : 'bg-off-bg text-faint'}`}>{item.ready ? '✓' : '—'}</span>
-											<span className="min-w-0 flex-1"><span className="block">{item.label}</span><span className="mt-0.5 block text-[10px] font-normal text-faint">{progressDetail(item)}</span></span>
+										<a key={item.label} href={item.href} className="flex items-center gap-2 rounded-tight px-1.5 py-1.5 text-sm hover:bg-raised">
+											<span className={`grid h-[18px] w-[18px] place-items-center rounded-full text-2xs font-bold ${item.ready ? 'bg-ok-bg text-ok' : 'bg-off-bg text-faint'}`}>{item.ready ? '✓' : '—'}</span>
+											<span className="min-w-0 flex-1"><span className="block">{item.label}</span><span className="mt-0.5 block text-2xs font-normal text-faint">{progressDetail(item)}</span></span>
 											<span className="text-faint">›</span>
 										</a>
 									))}
 								</div>
-								<div className={`mt-[14px] rounded-[10px] border p-[11px] ${closingBlockers.length === 0 ? 'border-ok/25 bg-ok-bg' : 'border-warn/25 bg-warn-bg'}`}>
-									<div className={`text-[11px] font-bold uppercase tracking-[0.08em] ${closingBlockers.length === 0 ? 'text-ok' : 'text-warn'}`}>
+								<div className={`mt-[14px] rounded-control border p-2.5 ${closingBlockers.length === 0 ? 'border-ok/25 bg-ok-bg' : 'border-warn/25 bg-warn-bg'}`}>
+									<div className={`text-xs font-bold uppercase tracking-[0.08em] ${closingBlockers.length === 0 ? 'text-ok' : 'text-warn'}`}>
 										{closingBlockers.length === 0 ? 'Готов к закрытию' : 'Следующие действия'}
 									</div>
 									{closingBlockers.length > 0 && (
-										<div className="mt-[7px] flex flex-col gap-[6px]">
+										<div className="mt-[7px] flex flex-col gap-1.5">
 											{closingBlockers.map((blocker, index) => (
-												<div key={blocker} className="flex gap-[7px] text-[11.5px] leading-4 text-muted">
+												<div key={blocker} className="flex gap-1.5 text-xs leading-4 text-muted">
 													<span className="font-bold text-warn">{index + 1}.</span>
 													<span>{blocker}</span>
 												</div>
@@ -488,11 +490,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						{(problemEvent || overdueProjects.length > 0 || overdueTasks.length > 0 || !site) && (
 							<Card>
 								<CardHeader title="Требует внимания" extra={overdueProjects.length + overdueTasks.length + (problemEvent ? 1 : 0) + (!site ? 1 : 0)} />
-								<div className="p-[10px]">
-									{problemEvent && <Link href={`/sites/${site!.id}`} className="block rounded-[9px] px-[9px] py-[8px] hover:bg-raised"><div className="text-[12.5px] font-semibold text-danger">Проблема на площадке</div><div className="mt-[3px] line-clamp-2 text-[11.5px] leading-4 text-muted">{problemEvent.text}</div></Link>}
-									{overdueProjects.map((project) => <Link key={project.id} href={`/projects?section=${project.code}`} className="block rounded-[9px] px-[9px] py-[8px] hover:bg-raised"><div className="text-[12.5px] font-semibold text-danger">Просрочен раздел {PROJECT_SECTION_LABEL[project.code] ?? project.code}</div><div className="mt-[3px] text-[11.5px] text-muted">Дедлайн: {formatDate(project.deadline)}</div></Link>)}
-									{overdueTasks.map((task) => <Link key={task.id} href={`/tasks/${task.id}`} className="block rounded-[9px] px-[9px] py-[8px] hover:bg-raised"><div className="truncate text-[12.5px] font-semibold text-danger">Просрочена задача: {task.title}</div><div className="mt-[3px] text-[11.5px] text-muted">Срок: {formatDate(task.dueDate)} · {task.assignee.name}</div></Link>)}
-									{!site && <Link href={`/sites/new?contract=${contract.id}`} className="block rounded-[9px] px-[9px] py-[8px] hover:bg-raised"><div className="text-[12.5px] font-semibold text-warn">Площадка не создана</div><div className="mt-[3px] text-[11.5px] text-muted">Создать площадку из этого договора →</div></Link>}
+								<div className="p-2.5">
+									{problemEvent && <Link href={`/sites/${site!.id}`} className="block rounded-tight px-2 py-2 hover:bg-raised"><div className="text-sm font-semibold text-danger">Проблема на площадке</div><div className="mt-[3px] line-clamp-2 text-xs leading-4 text-muted">{problemEvent.text}</div></Link>}
+									{overdueProjects.map((project) => <Link key={project.id} href={`/projects?section=${project.code}`} className="block rounded-tight px-2 py-2 hover:bg-raised"><div className="text-sm font-semibold text-danger">Просрочен раздел {PROJECT_SECTION_LABEL[project.code] ?? project.code}</div><div className="mt-[3px] text-xs text-muted">Дедлайн: {formatDate(project.deadline)}</div></Link>)}
+									{overdueTasks.map((task) => <Link key={task.id} href={`/tasks/${task.id}`} className="block rounded-tight px-2 py-2 hover:bg-raised"><div className="truncate text-sm font-semibold text-danger">Просрочена задача: {task.title}</div><div className="mt-[3px] text-xs text-muted">Срок: {formatDate(task.dueDate)} · {task.assignee.name}</div></Link>)}
+									{!site && <Link href={`/sites/new?contract=${contract.id}`} className="block rounded-tight px-2 py-2 hover:bg-raised"><div className="text-sm font-semibold text-warn">Площадка не создана</div><div className="mt-[3px] text-xs text-muted">Создать площадку из этого договора →</div></Link>}
 								</div>
 							</Card>
 						)}
@@ -501,11 +503,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 
 						<Card>
 							<CardHeader title="Быстрые действия" />
-							<div className="grid grid-cols-2 gap-[8px] p-[12px]">
-								<Link href={`/executive/${contract.id}`} className="rounded-[9px] border border-line bg-surface px-[10px] py-[9px] text-center text-[11.5px] font-semibold hover:bg-raised">Исполнительная документация</Link>
-								<Link href={site ? `/sites/${site.id}` : `/sites/new?contract=${contract.id}`} className="rounded-[9px] border border-line bg-surface px-[10px] py-[9px] text-center text-[11.5px] font-semibold hover:bg-raised">Площадка</Link>
-								<Link href={`/projects?section=KM`} className="rounded-[9px] border border-line bg-surface px-[10px] py-[9px] text-center text-[11.5px] font-semibold hover:bg-raised">Очередь КМ</Link>
-								<Link href={`/projects?section=KZH`} className="rounded-[9px] border border-line bg-surface px-[10px] py-[9px] text-center text-[11.5px] font-semibold hover:bg-raised">Очередь КЖ</Link>
+							<div className="grid grid-cols-2 gap-2 p-3">
+								<Link href={`/executive/${contract.id}`} className="rounded-tight border border-line bg-surface px-2.5 py-2 text-center text-xs font-semibold hover:bg-raised">Исполнительная документация</Link>
+								<Link href={site ? `/sites/${site.id}` : `/sites/new?contract=${contract.id}`} className="rounded-tight border border-line bg-surface px-2.5 py-2 text-center text-xs font-semibold hover:bg-raised">Площадка</Link>
+								<Link href={`/projects?section=KM`} className="rounded-tight border border-line bg-surface px-2.5 py-2 text-center text-xs font-semibold hover:bg-raised">Очередь КМ</Link>
+								<Link href={`/projects?section=KZH`} className="rounded-tight border border-line bg-surface px-2.5 py-2 text-center text-xs font-semibold hover:bg-raised">Очередь КЖ</Link>
 							</div>
 						</Card>
 

@@ -23,16 +23,16 @@ export default async function DepartmentsPage() {
 	return (
 		<>
 			<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Отделы' }]} userName={name.split(' ')[0]} initials={initials(name)} />
-			<div className="workspace-content px-[26px] py-[22px]">
-				<h1 className="text-[22px] font-bold tracking-[-0.02em]">Отделы и чаты</h1>
-				<p className="mt-1 text-[13px] text-muted">Выберите рабочую зону — там открыт чат отдела и сводка по потоку.</p>
-				<div className="mt-5 grid grid-cols-1 gap-[14px] sm:grid-cols-2 xl:grid-cols-4">
+			<div className="workspace-content">
+				<h1 className="text-2xl font-bold tracking-[-0.02em]">Отделы и чаты</h1>
+				<p className="mt-1 text-base text-muted">Выберите рабочую зону — там открыт чат отдела и сводка по потоку.</p>
+				<div className="mt-5 grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
 					{DEPARTMENTS.map((department) => (
 						<Link key={department.key} href={`/departments/${department.key}`} className="block">
-							<Card className="h-full p-[18px] transition hover:border-brand/30 hover:bg-raised">
-								<div className="text-[15px] font-bold">{department.label} отдел</div>
-								<p className="mt-[6px] text-[12px] leading-5 text-muted">{department.description}</p>
-								<div className="mt-[14px] text-[12px] font-semibold text-brand-ink">Открыть рабочую зону →</div>
+							<Card className="h-full p-4 transition hover:border-brand/30 hover:bg-raised">
+								<div className="text-md font-bold">{department.label} отдел</div>
+								<p className="mt-[6px] text-sm leading-5 text-muted">{department.description}</p>
+								<div className="mt-[14px] text-sm font-semibold text-brand-ink">Открыть рабочую зону →</div>
 							</Card>
 						</Link>
 					))}

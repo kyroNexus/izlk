@@ -63,17 +63,17 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 	const name = user.name ?? user.email ?? ''
 	return <>
 		<Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Контрагенты', href: '/contractors' }, { label: 'Новый контрагент' }]} userName={name.split(' ')[0]} initials={initials(name)} />
-		<div className="workspace-content px-[26px] py-[22px]">
-			<div className="mb-[20px]"><h1 className="text-[26px] font-bold tracking-[-0.02em]">Новый контрагент</h1><p className="mt-[5px] text-[13px] text-muted">{returnToContract ? 'После сохранения вернёмся к созданию договора.' : 'Реквизиты и варианты названия для быстрого поиска.'}</p></div>
+		<div className="workspace-content">
+			<div className="mb-[20px]"><h1 className="text-2xl font-bold tracking-[-0.02em]">Новый контрагент</h1><p className="mt-[5px] text-base text-muted">{returnToContract ? 'После сохранения вернёмся к созданию договора.' : 'Реквизиты и варианты названия для быстрого поиска.'}</p></div>
 			<div className="max-w-[680px]"><FormError message={searchParams.error} /><Card className="mt-[14px] p-[22px]">
-				<form action={createContractor} className="flex flex-col gap-[15px]">
+				<form action={createContractor} className="flex flex-col gap-3.5">
 					<Field label="Название организации" required><input name="name" required className={inputClass} placeholder="ООО «Строймонтаж» или ФИО" /></Field>
 					<ContractorTypeFields />
 					<Field label="Другие названия" hint="Каждое с новой строки или через запятую — они будут участвовать в поиске"><textarea name="aliases" className={textareaClass} placeholder={'Строймонтаж\nООО СМ'} /></Field>
-					<div className="grid grid-cols-1 gap-[14px] md:grid-cols-2"><Field label="ИНН"><input name="inn" inputMode="numeric" className={inputClass} placeholder="10 или 12 цифр" /></Field><Field label="Телефон"><input name="phone" className={inputClass} placeholder="+7 900 000-00-00" /></Field></div>
+					<div className="grid grid-cols-1 gap-3.5 md:grid-cols-2"><Field label="ИНН"><input name="inn" inputMode="numeric" className={inputClass} placeholder="10 или 12 цифр" /></Field><Field label="Телефон"><input name="phone" className={inputClass} placeholder="+7 900 000-00-00" /></Field></div>
 					<Field label="Email"><input name="email" type="email" className={inputClass} placeholder="office@company.ru" /></Field>
 					<Field label="Адрес"><input name="address" className={inputClass} /></Field>
-					<div className="mt-[5px] flex gap-[10px]"><button className="brand-gradient inline-flex h-[40px] items-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white">Сохранить контрагента</button><Link href={returnToContract ? '/contracts/new' : '/contractors'} className="inline-flex h-[40px] items-center rounded-[10px] border border-line bg-surface px-[18px] text-[13.5px] font-semibold hover:bg-raised">Отмена</Link></div>
+					<div className="mt-[5px] flex gap-2.5"><button className="brand-gradient inline-flex h-control items-center rounded-control px-4 text-base font-semibold text-white">Сохранить контрагента</button><Link href={returnToContract ? '/contracts/new' : '/contractors'} className="inline-flex h-control items-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised">Отмена</Link></div>
 				</form>
 			</Card></div>
 		</div>

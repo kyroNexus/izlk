@@ -9,7 +9,7 @@ import { agreementSchema, firstIssue, orNull, parseDate } from '@/lib/validation
 import { assertContractAccess, requireUser } from '@/lib/access'
 
 const FIELD_CLASS =
-	'h-[40px] w-full rounded-[10px] border border-line bg-surface px-[13px] text-[13.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
+	'h-control w-full rounded-control border border-line bg-surface px-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
 
 // В Next.js 14 params и searchParams — ОБЫЧНЫЕ объекты, не Promise. Не добавляйте await.
 export default async function NewAgreementPage({
@@ -23,7 +23,7 @@ export default async function NewAgreementPage({
 	const user = session!.user as { id: string; name?: string | null; email?: string | null; role: string }
 
 	if (user.role === 'VIEWER') {
-		return <div className="workspace-content px-[26px] py-[22px] text-[13px] text-faint">{'Доступ ограничен'}</div>
+		return <div className="workspace-content text-base text-faint">{'Доступ ограничен'}</div>
 	}
 
 	const contractId = params.id
@@ -110,33 +110,33 @@ export default async function NewAgreementPage({
 				initials={initials(name)}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 				<div className="mb-[20px]">
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">{'Новое доп. соглашение'}</h1>
-					<div className="mt-[4px] text-[13px] text-faint">{`К договору № ${contract.number}`}</div>
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">{'Новое доп. соглашение'}</h1>
+					<div className="mt-[4px] text-base text-faint">{`К договору № ${contract.number}`}</div>
 				</div>
 
 				{searchParams.error && (
-					<div className="mb-[16px] max-w-[560px] rounded-[10px] border border-danger-bd bg-danger-bg px-[15px] py-[11px] text-[13px] text-danger">
+					<div className="mb-[16px] max-w-[560px] rounded-control border border-danger-bd bg-danger-bg px-3.5 py-2.5 text-base text-danger">
 						{searchParams.error}
 					</div>
 				)}
 
 				<Card className="max-w-[560px] p-[22px]">
-					<form action={createAgreement} className="flex flex-col gap-[16px]">
-						<div className="grid grid-cols-2 gap-[14px]">
+					<form action={createAgreement} className="flex flex-col gap-4">
+						<div className="grid grid-cols-2 gap-3.5">
 							<div>
-								<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Номер *'}</label>
+								<label className="mb-[6px] block text-sm font-medium text-muted">{'Номер *'}</label>
 								<input name="number" required className={FIELD_CLASS} placeholder="ДС №1" />
 							</div>
 							<div>
-								<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Дата *'}</label>
+								<label className="mb-[6px] block text-sm font-medium text-muted">{'Дата *'}</label>
 								<input type="date" name="date" required className={FIELD_CLASS} />
 							</div>
 						</div>
 
 						<div>
-							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">
+							<label className="mb-[6px] block text-sm font-medium text-muted">
 								{'Предыдущее ДС в цепочке'}
 							</label>
 							<select name="parentId" defaultValue="" className={FIELD_CLASS}>
@@ -149,16 +149,16 @@ export default async function NewAgreementPage({
 							</select>
 						</div>
 
-						<div className="mt-[6px] flex gap-[10px]">
+						<div className="mt-[6px] flex gap-2.5">
 							<button
 								type="submit"
-								className="brand-gradient inline-flex h-[40px] items-center justify-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white"
+								className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white"
 							>
 								{'Создать ДС'}
 							</button>
 							<Link
 								href={`/contracts/${contract.id}`}
-								className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-line bg-surface px-[18px] text-[13.5px] font-semibold hover:bg-raised"
+								className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
 							>
 								{'Вернуться к договору'}
 							</Link>

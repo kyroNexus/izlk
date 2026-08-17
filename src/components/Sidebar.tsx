@@ -81,7 +81,7 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 	}
 	const item = (entry: Item) => {
 		const isActive = active(entry.href)
-		return <Link key={entry.href} href={entry.href} onClick={closeMobileDrawer} title={entry.label} aria-label={entry.label} aria-current={isActive ? 'page' : undefined} className={`group relative flex h-control items-center gap-3 rounded-control px-3 text-base font-medium transition-colors duration-200 ${entry.nested && isOpen ? 'ml-2 h-[33px] rounded-tight px-2.5 text-sm' : ''} ${isActive ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted hover:bg-raised hover:text-ink'}`}>
+		return <Link key={entry.href} href={entry.href} onClick={closeMobileDrawer} title={entry.label} aria-label={entry.label} aria-current={isActive ? 'page' : undefined} className={`group relative flex h-control items-center rounded-control text-base font-medium transition-colors duration-200 ${isOpen ? 'gap-3 px-3' : 'justify-center gap-0 px-0'} ${entry.nested && isOpen ? 'ml-2 h-[33px] rounded-tight px-2.5 text-sm' : ''} ${isActive ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted hover:bg-raised hover:text-ink'}`}>
 			{isActive && <span className={`absolute left-[-6px] top-1/2 -translate-y-1/2 rounded-full bg-brand transition-[height] duration-200 ${entry.nested ? 'h-4 w-[3px]' : 'h-5 w-[3px]'}`} aria-hidden="true" />}
 			<span className={`grid flex-none place-items-center rounded-tight transition-colors duration-200 ${entry.nested && isOpen ? 'h-[21px] w-[21px]' : 'h-7 w-7'} ${isActive ? 'bg-brand/12 text-brand-ink' : 'text-faint group-hover:text-muted'}`}>
 				<Icon icon={entry.icon} size={entry.nested && isOpen ? 15 : 17} />
@@ -141,8 +141,8 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 			</div>
 			{role === 'ADMIN' && <div className="mt-auto pt-4">{section('Управление', admin, 'admin')}</div>}
 		</nav>
-		<div className="m-3 mt-0 flex-none">
-			<Link href="/settings" title={!isOpen ? 'Настройки профиля' : undefined} aria-label="Настройки профиля" className="group flex h-[58px] items-center gap-2.5 overflow-hidden rounded-panel bg-raised/70 p-2.5 transition-colors duration-200 hover:bg-brand-soft/60">
+		<div className={`mt-0 flex-none ${isOpen ? 'm-3' : 'mx-2 mb-3'}`}>
+			<Link href="/settings" title={!isOpen ? 'Настройки профиля' : undefined} aria-label="Настройки профиля" className={`group flex h-[58px] items-center overflow-hidden rounded-panel bg-raised/70 transition-colors duration-200 hover:bg-brand-soft/60 ${isOpen ? 'gap-2.5 p-2.5' : 'justify-center p-0'}`}>
 				<span className="brand-gradient grid h-9 w-9 flex-none place-items-center rounded-full text-xs font-bold text-white shadow-[0_4px_10px_rgba(91,55,214,.28)]">{initials}</span>
 				<span className={`${textMotion} flex-1`}><b className="block truncate text-sm text-ink">{userName}</b><span className="block truncate text-2xs text-faint">{roleLabel}</span></span>
 				{isOpen && <Icon icon={ChevronLeft} size={14} strokeWidth={2.4} className="flex-none rotate-180 text-faint opacity-0 transition-opacity duration-200 group-hover:opacity-100" />}

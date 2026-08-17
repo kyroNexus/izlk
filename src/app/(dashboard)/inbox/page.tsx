@@ -257,22 +257,22 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 				notifications={items.length}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 				<div className="mb-[18px] flex items-start gap-4">
 					<div>
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Очередь импорта</h1>
-					<div className="mt-[5px] text-[13px] text-muted">
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">Очередь импорта</h1>
+					<div className="mt-[5px] text-base text-muted">
 						Файлы, найденные сканером во входящей папке. Подтвердите привязку к договору.
 					</div>
 					</div>
 					<div className="ml-auto flex flex-wrap justify-end gap-2">
 						{(statusCount.get('FAILED') ?? 0) > 0 && (
 							<form action={retryFailedItems}>
-								<button type="submit" className="inline-flex h-[38px] items-center rounded-[10px] border border-danger-bd bg-danger-bg px-[15px] text-[13px] font-semibold text-danger hover:brightness-95">Повторить ошибки</button>
+								<button type="submit" className="inline-flex h-control items-center rounded-control border border-danger-bd bg-danger-bg px-3.5 text-base font-semibold text-danger hover:brightness-95">Повторить ошибки</button>
 							</form>
 						)}
 						<form action={runScan}>
-							<button type="submit" className="brand-gradient inline-flex h-[38px] items-center rounded-[10px] px-[15px] text-[13px] font-semibold text-white">Проверить папку сейчас</button>
+							<button type="submit" className="brand-gradient inline-flex h-control items-center rounded-control px-3.5 text-base font-semibold text-white">Проверить папку сейчас</button>
 						</form>
 					</div>
 				</div>
@@ -280,31 +280,31 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 				<div className="mb-[14px] max-w-[720px]">
 					<FormError message={searchParams.error} />
 				</div>
-				<div className="mb-[14px] grid grid-cols-2 gap-[10px] md:grid-cols-4">
-					<div className="rounded-[12px] border border-line bg-surface p-[13px]"><div className="text-[10px] uppercase tracking-wide text-faint">Ждут решения</div><div className="mt-1 text-[21px] font-bold">{(statusCount.get('PENDING') ?? 0) + (statusCount.get('SUGGESTED') ?? 0)}</div></div>
-					<div className="rounded-[12px] border border-ok-bd bg-ok-bg p-[13px]"><div className="text-[10px] uppercase tracking-wide text-muted">Импортировано</div><div className="mt-1 text-[21px] font-bold text-ok">{statusCount.get('MATCHED') ?? 0}</div></div>
-					<div className="rounded-[12px] border border-line bg-surface p-[13px]"><div className="text-[10px] uppercase tracking-wide text-faint">Копии / пропущено</div><div className="mt-1 text-[21px] font-bold">{statusCount.get('IGNORED') ?? 0}</div></div>
-					<div className="rounded-[12px] border border-danger-bd bg-danger-bg p-[13px]"><div className="text-[10px] uppercase tracking-wide text-muted">Ошибки</div><div className="mt-1 text-[21px] font-bold text-danger">{statusCount.get('FAILED') ?? 0}</div></div>
+				<div className="mb-[14px] grid grid-cols-2 gap-2.5 md:grid-cols-4">
+					<div className="rounded-[12px] border border-line bg-surface p-3"><div className="text-2xs uppercase tracking-wide text-faint">Ждут решения</div><div className="mt-1 text-xl font-bold">{(statusCount.get('PENDING') ?? 0) + (statusCount.get('SUGGESTED') ?? 0)}</div></div>
+					<div className="rounded-[12px] border border-ok-bd bg-ok-bg p-3"><div className="text-2xs uppercase tracking-wide text-muted">Импортировано</div><div className="mt-1 text-xl font-bold text-ok">{statusCount.get('MATCHED') ?? 0}</div></div>
+					<div className="rounded-[12px] border border-line bg-surface p-3"><div className="text-2xs uppercase tracking-wide text-faint">Копии / пропущено</div><div className="mt-1 text-xl font-bold">{statusCount.get('IGNORED') ?? 0}</div></div>
+					<div className="rounded-[12px] border border-danger-bd bg-danger-bg p-3"><div className="text-2xs uppercase tracking-wide text-muted">Ошибки</div><div className="mt-1 text-xl font-bold text-danger">{statusCount.get('FAILED') ?? 0}</div></div>
 				</div>
-				<div className={`mb-[14px] flex flex-wrap items-center gap-3 rounded-[12px] border px-[14px] py-[11px] ${watcher.online ? 'border-ok-bd bg-ok-bg' : 'border-warn-bd bg-warn-bg'}`}>
+				<div className={`mb-[14px] flex flex-wrap items-center gap-3 rounded-[12px] border px-3.5 py-2.5 ${watcher.online ? 'border-ok-bd bg-ok-bg' : 'border-warn-bd bg-warn-bg'}`}>
 					<span className={`h-2.5 w-2.5 rounded-full ${watcher.online ? 'bg-ok' : 'bg-warn'}`} />
-					<div><div className="text-[12.5px] font-bold">{watcher.online ? 'Автосканер работает' : 'Автосканер не запущен'}</div><div className="mt-0.5 text-[10.5px] text-muted">{watcher.online ? `Папка проверяется автоматически каждые 5 секунд${watcher.checkedAt ? ` · последняя проверка ${formatDateTime(watcher.checkedAt)}` : ''}` : 'Запустите приложение через START-IZLK.cmd — ручная проверка при этом остаётся доступна'}</div></div>
-					{watcher.online && <div className="ml-auto text-right text-[10.5px] text-muted"><div>Новых: {watcher.result?.queued ?? 0} · копий: {watcher.result?.duplicates ?? 0}</div><div className="max-w-[360px] truncate">{watcher.inboxPath}</div></div>}
+					<div><div className="text-sm font-bold">{watcher.online ? 'Автосканер работает' : 'Автосканер не запущен'}</div><div className="mt-0.5 text-xs text-muted">{watcher.online ? `Папка проверяется автоматически каждые 5 секунд${watcher.checkedAt ? ` · последняя проверка ${formatDateTime(watcher.checkedAt)}` : ''}` : 'Запустите приложение через START-IZLK.cmd — ручная проверка при этом остаётся доступна'}</div></div>
+					{watcher.online && <div className="ml-auto text-right text-xs text-muted"><div>Новых: {watcher.result?.queued ?? 0} · копий: {watcher.result?.duplicates ?? 0}</div><div className="max-w-[360px] truncate">{watcher.inboxPath}</div></div>}
 				</div>
 
 				<Card>
 					<CardHeader
 						title="Ожидают обработки"
-						extra={<span className="text-[12px] text-muted">{items.length}</span>}
+						extra={<span className="text-sm text-muted">{items.length}</span>}
 					/>
 					{items.length === 0 ? (
 						<EmptyState text="Очередь пуста — новых файлов нет" />
 					) : (
 						<div className="flex flex-col">
 							{items.map((item) => (
-								<div key={item.id} className="border-b border-line-soft px-[18px] py-[14px] last:border-b-0">
-									<div className="mb-[8px] flex flex-wrap items-center gap-[9px]">
-										<span className="text-[13.5px] font-medium text-ink">{item.fileName}</span>
+								<div key={item.id} className="border-b border-line-soft px-4 py-3.5 last:border-b-0">
+									<div className="mb-[8px] flex flex-wrap items-center gap-2">
+										<span className="text-base font-medium text-ink">{item.fileName}</span>
 										<Chip tone={item.status === 'FAILED' ? 'danger' : item.status === 'SUGGESTED' ? 'brand' : 'off'}>
 											{item.status === 'FAILED'
 												? 'Ошибка'
@@ -312,31 +312,31 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 													? 'Есть гипотеза'
 													: 'Новый'}
 										</Chip>
-										<span className="tnum text-[12px] text-faint">{formatBytes(item.sizeBytes)}</span>
-										<span className="text-[12px] text-faint">{formatDateTime(item.createdAt)}</span>
+										<span className="tnum text-sm text-faint">{formatBytes(item.sizeBytes)}</span>
+										<span className="text-sm text-faint">{formatDateTime(item.createdAt)}</span>
 									</div>
 
-									<div className="mb-[10px] text-[12px] text-faint">
+									<div className="mb-[10px] text-sm text-faint">
 										{item.parsedContractNumber ? `Распознан договор: ${item.parsedContractNumber}` : 'Номер договора не распознан'}
 										{item.parsedCipher ? ` · шифр ${item.parsedCipher}` : ''}
 									</div>
 									{item.errorMessage && (
-										<div className="mb-[10px] rounded-[8px] border border-danger-bd bg-danger-bg px-3 py-2 text-[12px] text-danger">
+										<div className="mb-[10px] rounded-tight border border-danger-bd bg-danger-bg px-3 py-2 text-sm text-danger">
 											<b>Что произошло:</b> {item.errorMessage}
 										</div>
 									)}
 
-									<div className="flex flex-wrap items-end gap-[10px]">
+									<div className="flex flex-wrap items-end gap-2.5">
 										{item.suggestedKind === 'CONTRACT' && (
 											<form action={createContractFromFile}>
 												<input type="hidden" name="itemId" value={item.id} />
-												<button type="submit" className="brand-gradient inline-flex h-[38px] items-center justify-center rounded-[10px] px-[16px] text-[13px] font-semibold text-white">Создать договор из файла</button>
+												<button type="submit" className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white">Создать договор из файла</button>
 											</form>
 										)}
-										<form action={confirmImport} className="flex flex-wrap items-end gap-[10px]">
+										<form action={confirmImport} className="flex flex-wrap items-end gap-2.5">
 											<input type="hidden" name="itemId" value={item.id} />
 											<div>
-												<label className="mb-[5px] block text-[11.5px] text-faint">Договор</label>
+												<label className="mb-[5px] block text-xs text-faint">Договор</label>
 												<select
 													name="contractId"
 													defaultValue={item.matchedContractId ?? ''}
@@ -352,7 +352,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 												</select>
 											</div>
 											<div>
-												<label className="mb-[5px] block text-[11.5px] text-faint">Тип</label>
+												<label className="mb-[5px] block text-xs text-faint">Тип</label>
 												<select
 													name="kind"
 													defaultValue={item.suggestedKind ?? 'OTHER'}
@@ -367,7 +367,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 											</div>
 											<button
 												type="submit"
-												className="brand-gradient inline-flex h-[38px] items-center justify-center rounded-[10px] px-[16px] text-[13px] font-semibold text-white"
+												className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white"
 											>
 												Привязать
 											</button>
@@ -377,7 +377,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 											<input type="hidden" name="itemId" value={item.id} />
 											<button
 												type="submit"
-												className="inline-flex h-[38px] items-center justify-center rounded-[10px] border border-line bg-surface px-[16px] text-[13px] font-semibold hover:bg-raised"
+												className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
 											>
 												Игнорировать
 											</button>
@@ -389,8 +389,8 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 					)}
 				</Card>
 				<Card className="mt-[14px] overflow-hidden">
-					<CardHeader title="Журнал последних обработок" extra={<span className="text-[11px] text-muted">последние {recent.length}</span>} />
-					{recent.length === 0 ? <EmptyState text="Обработанных файлов пока нет" /> : <div>{recentPrimary.map((item) => { const linked = item.matchedContractId ? contractById.get(item.matchedContractId) : null; return <div key={item.id} className="flex flex-wrap items-center gap-3 border-t border-line-soft px-[18px] py-[11px] first:border-t-0"><Chip tone={item.status === 'MATCHED' ? 'ok' : 'off'}>{item.status === 'MATCHED' ? 'Импортирован' : 'Пропущен'}</Chip><span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{item.fileName}</span>{linked ? <a href={`/contracts/${linked.id}`} className="text-[11.5px] font-semibold text-brand-ink hover:underline">Договор № {linked.number}</a> : <span className="text-[11px] text-faint">Без привязки</span>}<span className="tnum text-[10.5px] text-faint">{formatDateTime(item.updatedAt)}</span></div> })}{recentRest.length > 0 && <details className="border-t border-line-soft"><summary className="cursor-pointer px-[18px] py-[10px] text-[12px] font-semibold text-brand-ink hover:bg-raised">Показать историю: ещё {recentRest.length}</summary>{recentRest.map((item) => { const linked = item.matchedContractId ? contractById.get(item.matchedContractId) : null; return <div key={item.id} className="flex flex-wrap items-center gap-3 border-t border-line-soft px-[18px] py-[11px]"><Chip tone={item.status === 'MATCHED' ? 'ok' : 'off'}>{item.status === 'MATCHED' ? 'Импортирован' : 'Пропущен'}</Chip><span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{item.fileName}</span>{linked ? <a href={`/contracts/${linked.id}`} className="text-[11.5px] font-semibold text-brand-ink hover:underline">Договор № {linked.number}</a> : <span className="text-[11px] text-faint">Без привязки</span>}<span className="tnum text-[10.5px] text-faint">{formatDateTime(item.updatedAt)}</span></div> })}</details>}</div>}
+					<CardHeader title="Журнал последних обработок" extra={<span className="text-xs text-muted">последние {recent.length}</span>} />
+					{recent.length === 0 ? <EmptyState text="Обработанных файлов пока нет" /> : <div>{recentPrimary.map((item) => { const linked = item.matchedContractId ? contractById.get(item.matchedContractId) : null; return <div key={item.id} className="flex flex-wrap items-center gap-3 border-t border-line-soft px-4 py-2.5 first:border-t-0"><Chip tone={item.status === 'MATCHED' ? 'ok' : 'off'}>{item.status === 'MATCHED' ? 'Импортирован' : 'Пропущен'}</Chip><span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.fileName}</span>{linked ? <a href={`/contracts/${linked.id}`} className="text-xs font-semibold text-brand-ink hover:underline">Договор № {linked.number}</a> : <span className="text-xs text-faint">Без привязки</span>}<span className="tnum text-xs text-faint">{formatDateTime(item.updatedAt)}</span></div> })}{recentRest.length > 0 && <details className="border-t border-line-soft"><summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-brand-ink hover:bg-raised">Показать историю: ещё {recentRest.length}</summary>{recentRest.map((item) => { const linked = item.matchedContractId ? contractById.get(item.matchedContractId) : null; return <div key={item.id} className="flex flex-wrap items-center gap-3 border-t border-line-soft px-4 py-2.5"><Chip tone={item.status === 'MATCHED' ? 'ok' : 'off'}>{item.status === 'MATCHED' ? 'Импортирован' : 'Пропущен'}</Chip><span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.fileName}</span>{linked ? <a href={`/contracts/${linked.id}`} className="text-xs font-semibold text-brand-ink hover:underline">Договор № {linked.number}</a> : <span className="text-xs text-faint">Без привязки</span>}<span className="tnum text-xs text-faint">{formatDateTime(item.updatedAt)}</span></div> })}</details>}</div>}
 				</Card>
 			</div>
 		</>

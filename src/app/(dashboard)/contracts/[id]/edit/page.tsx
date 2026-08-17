@@ -163,10 +163,10 @@ export default async function EditContractPage({
 				initials={initials(name)}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 				<div className="mb-[20px]">
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">Редактирование договора</h1>
-					<div className="mt-[4px] text-[13px] text-faint">№ {contract.number}</div>
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">Редактирование договора</h1>
+					<div className="mt-[4px] text-base text-faint">№ {contract.number}</div>
 				</div>
 
 				<div className="max-w-[640px]">
@@ -175,8 +175,8 @@ export default async function EditContractPage({
 					</div>
 
 					<Card className="p-[22px]">
-						<form action={updateContract} className="flex flex-col gap-[15px]">
-							<div className="grid grid-cols-2 gap-[14px]">
+						<form action={updateContract} className="flex flex-col gap-3.5">
+							<div className="grid grid-cols-2 gap-3.5">
 								<Field label="Номер договора" required>
 									<input name="number" required defaultValue={contract.number} className={inputClass} />
 								</Field>
@@ -195,7 +195,7 @@ export default async function EditContractPage({
 								</select>
 							</Field>
 
-							<div className="grid grid-cols-2 gap-[14px]">
+							<div className="grid grid-cols-2 gap-3.5">
 								<Field label="Дата договора" required>
 									<input type="date" name="date" required defaultValue={dateValue} className={inputClass} />
 								</Field>
@@ -204,16 +204,16 @@ export default async function EditContractPage({
 								</Field>
 							</div>
 
-							<div className="rounded-[11px] border border-line bg-raised/40 p-[12px]">
-								<div className="mb-[9px] text-[12.5px] font-semibold">Структура суммы <span className="font-normal text-faint">(необязательно)</span></div>
-								<div className="grid grid-cols-3 gap-[10px]">
+							<div className="rounded-control border border-line bg-raised/40 p-3">
+								<div className="mb-[9px] text-sm font-semibold">Структура суммы <span className="font-normal text-faint">(необязательно)</span></div>
+								<div className="grid grid-cols-3 gap-2.5">
 									<Field label="СМР"><input name="smrAmount" inputMode="decimal" defaultValue={smrAmountValue} className={inputClass} placeholder="0" /></Field>
 									<Field label="МК"><input name="mkAmount" inputMode="decimal" defaultValue={mkAmountValue} className={inputClass} placeholder="0" /></Field>
 									<Field label="Доставка"><input name="deliveryAmount" inputMode="decimal" defaultValue={deliveryAmountValue} className={inputClass} placeholder="0" /></Field>
 								</div>
 							</div>
 
-							<div className="grid grid-cols-4 gap-[14px]">
+							<div className="grid grid-cols-4 gap-3.5">
 								<Field label="Тип договора"><select name="kind" defaultValue={contract.kind} className={selectClass}><option value="SMR">СМР</option><option value="MK">МК</option><option value="PROJECT">Проектный</option></select></Field>
 								<Field label="Валюта">
 									<select name="currency" defaultValue={contract.currency} className={selectClass}>
@@ -246,17 +246,17 @@ export default async function EditContractPage({
 								<input name="objectAddress" defaultValue={contract.objectAddress ?? ''} className={inputClass} />
 							</Field>
 
-							<div className="mt-[6px] flex gap-[10px]">
+							<div className="mt-[6px] flex gap-2.5">
 								<button
 									type="submit"
 									disabled={!canEdit}
-									className="brand-gradient inline-flex h-[40px] items-center justify-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white disabled:opacity-60"
+									className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white disabled:opacity-60"
 								>
 									Сохранить
 								</button>
 								<Link
 									href={`/contracts/${contract.id}`}
-									className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-line bg-surface px-[18px] text-[13.5px] font-semibold hover:bg-raised"
+									className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
 								>
 									Вернуться к договору
 								</Link>

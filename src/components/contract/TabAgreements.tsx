@@ -18,7 +18,7 @@ export default function TabAgreements({
 				title="Дополнительные соглашения"
 				extra={
 					canEdit ? (
-						<span className="flex items-center gap-[12px] text-[12px]">
+						<span className="flex items-center gap-3 text-sm">
 							<Link href={`/contracts/${contract.id}/agreements/new`} className="text-brand-ink hover:underline">
 								+ ДС
 							</Link>
@@ -35,25 +35,25 @@ export default function TabAgreements({
 			{contract.agreements.length === 0 ? (
 				<EmptyState text="Доп. соглашений нет" />
 			) : (
-				<div className="px-[10px] py-[6px]">
+				<div className="px-2.5 py-1.5">
 					{contract.agreements.map((a) => {
 						const est = a.estimates[0]
 						return (
-							<div key={a.id} className="flex items-center gap-[11px] rounded-[10px] px-[8px] py-[9px] hover:bg-raised">
-								<div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-brand-soft text-[9px] font-bold text-brand-ink">
+							<div key={a.id} className="flex items-center gap-2.5 rounded-control px-2 py-2 hover:bg-raised">
+								<div className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-brand-soft text-2xs font-bold text-brand-ink">
 									ДС
 								</div>
 								<div className="min-w-0">
-									<div className="truncate text-[13px] font-medium">
+									<div className="truncate text-base font-medium">
 										{agreementTitle(a.number)}
 									</div>
-									<div className="mt-[2px] text-[11.5px] text-faint">
+									<div className="mt-[2px] text-xs text-faint">
 										{est
 									? `${estimateTitle(est.number)}${canSeeAmounts && est.amount != null ? ` · ${formatMoney(est.amount)}` : ''}`
 											: 'Без сметы'}
 									</div>
 								</div>
-								<div className="tnum ml-auto text-[11.5px] text-faint">{formatDate(a.date)}</div>
+								<div className="tnum ml-auto text-xs text-faint">{formatDate(a.date)}</div>
 							</div>
 						)
 					})}

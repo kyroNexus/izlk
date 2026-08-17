@@ -24,16 +24,21 @@ async function post(request: Request) {
 			if (folderFiles.length > MAX_FOLDER_FILES) return NextResponse.json({ error: `За один раз можно проверить до ${MAX_FOLDER_FILES} файлов в папке.` }, { status: 400 })
 			const totalBytes = folderFiles.reduce((sum, item) => sum + item.size, 0)
 			if (totalBytes > MAX_FOLDER_TOTAL_BYTES) return NextResponse.json({ error: 'Папка больше 750 МБ. Для такого архива используйте Inbox на сервере.' }, { status: 400 })
+			// Reading + validating each file's bytes doesn't depend on any other file,
+			// so a folder of hundreds of files no longer waits on them one at a time —
+			// this was the first sequential bottleneck before parsing even starts.
+			const read = await Promise.all(folderFiles.map(async (item, index) => {
+				const buffer = Buffer.from(await item.arrayBuffer())
+				const relativePath = relativePaths[index] || item.name
+				try { assertFileContentMatchesName(item.name, buffer) }
+				catch { return { ok: false as const, relativePath } }
+				return { ok: true as const, fileName: item.name, relativePath, buffer }
+			}))
 			const uploads = [] as Array<{ fileName: string; relativePath: string; buffer: Buffer }>
 			const rejectedFiles: Array<{ fileName: string; reason: string }> = []
-			for (const [index, item] of folderFiles.entries()) {
-				const buffer = Buffer.from(await item.arrayBuffer())
-				try { assertFileContentMatchesName(item.name, buffer) }
-				catch {
-					rejectedFiles.push({ fileName: relativePaths[index] || item.name, reason: 'расширение не соответствует содержимому — файл пропущен для безопасности' })
-					continue
-				}
-				uploads.push({ fileName: item.name, relativePath: relativePaths[index] || item.name, buffer })
+			for (const item of read) {
+				if (item.ok) uploads.push({ fileName: item.fileName, relativePath: item.relativePath, buffer: item.buffer })
+				else rejectedFiles.push({ fileName: item.relativePath, reason: 'расширение не соответствует содержимому — файл пропущен для безопасности' })
 			}
 			if (!uploads.length) return NextResponse.json({ error: 'Ни один файл в папке не прошёл проверку формата. Проверьте расширения исходных файлов.' }, { status: 400 })
 			const result = await parseContractFolder(uploads)

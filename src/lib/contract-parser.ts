@@ -323,10 +323,18 @@ export async function parseContractFolder(files: FolderParseFile[]): Promise<Fol
 		.filter((file) => !(PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(file.fileName).toLowerCase()) || file.buffer.length > MAX_PARSE_BYTES)
 		.map((file) => ({ fileName: file.relativePath || file.fileName, reason: file.buffer.length > MAX_PARSE_BYTES ? 'больше 25 МБ — прикрепим без распознавания' : 'формат прикрепим без распознавания' }))
 	for (const file of transientFiles) skippedFiles.push({ fileName: file.relativePath || file.fileName, reason: 'служебный временный файл Office — не будет импортирован' })
+	// Each candidate's text extraction (and its own bounded OCR fallback) is
+	// independent of every other file's — running them one at a time was the
+	// main reason a folder with several documents felt slow. MAX_FOLDER_TEXT_CANDIDATES
+	// and MAX_FOLDER_OCR_CANDIDATES already cap how much work this can ever be.
 	const attempts: Array<{ file: FolderParseFile; parsed: ParsedContract }> = []
-	for (const file of readable) {
-		try { attempts.push({ file, parsed: await parseContractFile(file.fileName, file.buffer, !OCR_EXTENSIONS.has(path.extname(file.fileName).toLowerCase()) || ocrCandidates.has(file.relativePath || file.fileName)) }) }
-		catch { skippedFiles.push({ fileName: file.relativePath || file.fileName, reason: 'не удалось извлечь текст' }) }
+	const outcomes = await Promise.all(readable.map(async (file) => {
+		try { return { file, parsed: await parseContractFile(file.fileName, file.buffer, !OCR_EXTENSIONS.has(path.extname(file.fileName).toLowerCase()) || ocrCandidates.has(file.relativePath || file.fileName)) } }
+		catch { return { file, parsed: null } }
+	}))
+	for (const outcome of outcomes) {
+		if (outcome.parsed) attempts.push({ file: outcome.file, parsed: outcome.parsed })
+		else skippedFiles.push({ fileName: outcome.file.relativePath || outcome.file.fileName, reason: 'не удалось извлечь текст' })
 	}
 	if (!attempts.length) throw new Error('В папке не найден читаемый договор. Добавьте DOC, DOCX, XLSX, XLS, PDF, TXT, CSV или скан JPG/PNG.')
 	attempts.sort((a, b) => candidateScore(b.file, b.parsed) - candidateScore(a.file, a.parsed))

@@ -1,6 +1,7 @@
 import type { NotificationType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { formatDate } from '@/lib/format'
 
 type NotifyInput = {
   userId?: string | null
@@ -120,7 +121,7 @@ export async function syncDeadlineNotifications(userId: string) {
       userId,
       type: overdue ? 'WARNING' : 'DEADLINE',
       title: overdue ? `Просрочен раздел ${codeLabel}` : `Срок раздела ${codeLabel} приближается`,
-      message: `Договор № ${section.contract.number} · ${overdue ? 'срок был' : 'завершить до'} ${section.deadline?.toLocaleDateString('ru-RU')}`,
+      message: `Договор № ${section.contract.number} · ${overdue ? 'срок был' : 'завершить до'} ${formatDate(section.deadline)}`,
       href: `/projects?section=${section.code}`,
       dedupeKey: `deadline:${section.id}:${section.deadline?.toISOString().slice(0, 10)}`,
     })
@@ -132,7 +133,7 @@ export async function syncDeadlineNotifications(userId: string) {
       userId,
       type: overdue ? 'WARNING' : 'DEADLINE',
       title: overdue ? `Просрочена задача: ${task.title}` : `Срок задачи приближается: ${task.title}`,
-      message: `${task.contract ? `Договор № ${task.contract.number} · ` : ''}${overdue ? 'срок был' : 'выполнить до'} ${task.dueDate?.toLocaleDateString('ru-RU')}`,
+      message: `${task.contract ? `Договор № ${task.contract.number} · ` : ''}${overdue ? 'срок был' : 'выполнить до'} ${formatDate(task.dueDate)}`,
       href: `/tasks/${task.id}`,
       dedupeKey: `task-deadline:${task.id}:${task.dueDate?.toISOString().slice(0, 10)}`,
     })
@@ -144,7 +145,7 @@ export async function syncDeadlineNotifications(userId: string) {
       userId,
       type: overdue ? 'WARNING' : 'DEADLINE',
       title: overdue ? `Просрочен общий срок договора` : `Срок договора приближается`,
-      message: `Договор № ${contract.number} · ${overdue ? 'срок был' : 'завершить до'} ${contract.deadline?.toLocaleDateString('ru-RU')}`,
+      message: `Договор № ${contract.number} · ${overdue ? 'срок был' : 'завершить до'} ${formatDate(contract.deadline)}`,
       href: `/contracts/${contract.id}`,
       dedupeKey: `contract-deadline:${contract.id}:${contract.deadline?.toISOString().slice(0, 10)}`,
     })
@@ -156,7 +157,7 @@ export async function syncDeadlineNotifications(userId: string) {
       userId,
       type: overdue ? 'WARNING' : 'DEADLINE',
       title: overdue ? `Просрочен счёт ${invoice.number}` : `Скоро оплата счёта ${invoice.number}`,
-      message: `Договор № ${invoice.contract.number} · ${invoice.contract.contractor.name} · ${overdue ? 'срок был' : 'оплатить до'} ${invoice.dueDate?.toLocaleDateString('ru-RU')}`,
+      message: `Договор № ${invoice.contract.number} · ${invoice.contract.contractor.name} · ${overdue ? 'срок был' : 'оплатить до'} ${formatDate(invoice.dueDate)}`,
       href: `/contracts/${invoice.contract.id}`,
       dedupeKey: `invoice-deadline:${invoice.id}:${invoice.dueDate?.toISOString().slice(0, 10)}`,
     })

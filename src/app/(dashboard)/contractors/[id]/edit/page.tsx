@@ -10,7 +10,7 @@ import { Prisma } from '@prisma/client'
 import ContractorTypeFields from '@/components/ContractorTypeFields'
 
 const FIELD_CLASS =
-	'h-[40px] w-full rounded-[10px] border border-line bg-surface px-[13px] text-[13.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
+	'h-control w-full rounded-control border border-line bg-surface px-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
 
 // В Next.js 14 params и searchParams — ОБЫЧНЫЕ объекты, не Promise. Не добавляйте await.
 export default async function EditContractorPage({
@@ -119,22 +119,22 @@ export default async function EditContractorPage({
 				initials={initials(name)}
 			/>
 
-			<div className="workspace-content px-[26px] py-[22px]">
+			<div className="workspace-content">
 				<div className="mb-[20px]">
-					<h1 className="text-[26px] font-bold tracking-[-0.02em]">{'Редактирование контрагента'}</h1>
-					<div className="mt-[4px] text-[13px] text-faint">{contractor.name}</div>
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">{'Редактирование контрагента'}</h1>
+					<div className="mt-[4px] text-base text-faint">{contractor.name}</div>
 				</div>
 
 				{searchParams.error && (
-					<div className="mb-[16px] max-w-[560px] rounded-[10px] border border-danger-bd bg-danger-bg px-[15px] py-[11px] text-[13px] text-danger">
+					<div className="mb-[16px] max-w-[560px] rounded-control border border-danger-bd bg-danger-bg px-3.5 py-2.5 text-base text-danger">
 						{searchParams.error}
 					</div>
 				)}
 
 				<Card className="max-w-[560px] p-[22px]">
-					<form action={updateContractor} className="flex flex-col gap-[16px]">
+					<form action={updateContractor} className="flex flex-col gap-4">
 						<div>
-							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Название *'}</label>
+							<label className="mb-[6px] block text-sm font-medium text-muted">{'Название *'}</label>
 							<input name="name" required defaultValue={contractor.name} className={FIELD_CLASS} />
 						</div>
 						<ContractorTypeFields
@@ -149,38 +149,38 @@ export default async function EditContractorPage({
 							}}
 						/>
 						<div>
-							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">Другие названия</label>
+							<label className="mb-[6px] block text-sm font-medium text-muted">Другие названия</label>
 							<textarea name="aliases" defaultValue={contractor.aliases.join('\n')} className={textareaClass} placeholder="Каждое название с новой строки" />
 						</div>
 						<div>
-							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'ИНН'}</label>
+							<label className="mb-[6px] block text-sm font-medium text-muted">{'ИНН'}</label>
 							<input name="inn" defaultValue={contractor.inn ?? ''} className={FIELD_CLASS} placeholder="10 или 12 цифр" />
 						</div>
 						<div>
-							<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Адрес'}</label>
+							<label className="mb-[6px] block text-sm font-medium text-muted">{'Адрес'}</label>
 							<input name="address" defaultValue={contractor.address ?? ''} className={FIELD_CLASS} />
 						</div>
-						<div className="grid grid-cols-2 gap-[14px]">
+						<div className="grid grid-cols-2 gap-3.5">
 							<div>
-								<label className="mb-[6px] block text-[12.5px] font-medium text-muted">{'Телефон'}</label>
+								<label className="mb-[6px] block text-sm font-medium text-muted">{'Телефон'}</label>
 								<input name="phone" defaultValue={contractor.phone ?? ''} className={FIELD_CLASS} />
 							</div>
 							<div>
-								<label className="mb-[6px] block text-[12.5px] font-medium text-muted">Email</label>
+								<label className="mb-[6px] block text-sm font-medium text-muted">Email</label>
 								<input name="email" type="email" defaultValue={contractor.email ?? ''} className={FIELD_CLASS} />
 							</div>
 						</div>
 
-						<div className="mt-[6px] flex gap-[10px]">
+						<div className="mt-[6px] flex gap-2.5">
 							<button
 								type="submit"
-								className="brand-gradient inline-flex h-[40px] items-center justify-center rounded-[10px] px-[18px] text-[13.5px] font-semibold text-white"
+								className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white"
 							>
 								{'Сохранить'}
 							</button>
 							<Link
 								href={`/contractors/${contractorId}`}
-								className="inline-flex h-[40px] items-center justify-center rounded-[10px] border border-line bg-surface px-[18px] text-[13.5px] font-semibold hover:bg-raised"
+								className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
 							>
 								{'Отмена'}
 							</Link>
