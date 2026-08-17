@@ -42,6 +42,7 @@ export const restoreOrder = [
   'stageComment',
   'chatThread',
   'chatMessage',
+  'chatAttachment',
   'departmentDailySnapshot',
   'contractAccess',
   'backgroundJob',

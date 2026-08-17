@@ -325,12 +325,34 @@ model ChatMessage {
   thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   authorId  String
   author    User       @relation(fields: [authorId], references: [id])
-  text      String     @db.VarChar(4000)
+  /// Необязателен: сообщение может нести только вложение (фото с площадки),
+  /// без подписи (задача C1).
+  text        String?          @db.VarChar(4000)
+  attachments ChatAttachment[]
   createdAt DateTime   @default(now())
   deletedAt DateTime?
 
   @@index([threadId, createdAt])
   @@index([authorId])
+}
+
+/// Вложение к сообщению чата (задача C1) — отдельная модель, не Document:
+/// Document жёстко привязан к contractId, а чаты отделов вообще без
+/// договора. Одно сообщение → много вложений (скрепка обычно даёт выбрать
+/// сразу несколько файлов).
+model ChatAttachment {
+  id          String      @id @default(cuid())
+  messageId   String
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName    String
+  storagePath String
+  mimeType    String?
+  sizeBytes   BigInt
+  sha256      String
+  isImage     Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  @@index([messageId])
 }
 
 enum ProductionPriority {

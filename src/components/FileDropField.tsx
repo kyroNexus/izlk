@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, Archive, Camera, CheckCircle2, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Ruler, Upload, X } from 'lucide-react'
 import Icon from '@/components/Icon'
 import { ProgressBar } from '@/components/ui'
@@ -61,6 +61,13 @@ export type FileDropFieldResult = {
 
 type PerFileResult = { fileName: string; status: string; message?: string }
 
+/** Задача C1: чат вставляет файлы из буфера прямо в текстовое поле сообщения,
+ *  а не в само FileDropField (у них разный фокус — паста в textarea браузер
+ *  не отдаёт полю выбора файлов). addFiles — минимальный внешний доступ к уже
+ *  существующей внутренней addFiles, чтобы чат мог переслать вставленные
+ *  файлы в уже открытое поле, не дублируя её логику у себя. */
+export type FileDropFieldHandle = { addFiles: (files: File[]) => void }
+
 type Props = {
 	/** Куда шлём файлы: multipart/form-data, поле "files". */
 	endpoint: string
@@ -106,6 +113,12 @@ type Props = {
 	 *  новая функция на каждый рендер родителя не вызывает лишних срабатываний —
 	 *  эффект зависит только от самого items. */
 	onFilesChange?: (items: SelectedFile[]) => void
+	/** Задача C1: чат отправляет текст и вложения одним сообщением — своей
+	 *  кнопкой "Отправить", а не отдельным запросом на загрузку. В этом режиме
+	 *  поле только выбирает/показывает файлы (onFilesChange отдаёт их родителю),
+	 *  а свою кнопку "Загрузить"/"Очистить всё" не рисует — иначе на одном
+	 *  экране было бы два разных действия отправки одновременно. */
+	hideUploadButton?: boolean
 }
 
 const DEFAULT_MAX_FILES = 100
@@ -173,7 +186,7 @@ function Row({ item, onRemove, disabled, extra }: { item: SelectedFile; onRemove
 	)
 }
 
-export default function FileDropField({
+const FileDropField = forwardRef<FileDropFieldHandle, Props>(function FileDropField({
 	endpoint,
 	accept = [],
 	maxFiles = DEFAULT_MAX_FILES,
@@ -190,7 +203,8 @@ export default function FileDropField({
 	renderItemExtra,
 	itemFields,
 	onFilesChange,
-}: Props) {
+	hideUploadButton = false,
+}: Props, forwardedRef) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
 	const xhrRef = useRef<XMLHttpRequest | null>(null)
@@ -239,6 +253,8 @@ export default function FileDropField({
 			return [...current, ...additions]
 		})
 	}, [acceptSet, maxBytes, maxFiles])
+
+	useImperativeHandle(forwardedRef, () => ({ addFiles: (files: File[]) => addFiles(files.map((file) => ({ file }))) }), [addFiles])
 
 	function onInputChange(event: React.ChangeEvent<HTMLInputElement>) {
 		addFiles(Array.from(event.target.files ?? []).map((file) => ({ file })))
@@ -451,7 +467,17 @@ export default function FileDropField({
 				</div>
 			)}
 
-			{items.length > 0 && (
+			{items.length > 0 && hideUploadButton && (
+				// Отправку в этом режиме делает сам родитель (чат — своей кнопкой
+				// "Отправить", одним запросом вместе с текстом) — тут только
+				// возможность передумать и очистить выбор целиком.
+				<div className="flex flex-wrap items-center gap-2">
+					<button type="button" onClick={clearAll} disabled={disabled} className="inline-flex h-9 items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-semibold text-muted transition hover:border-danger/35 hover:text-danger disabled:opacity-50">
+						Очистить всё
+					</button>
+				</div>
+			)}
+			{items.length > 0 && !hideUploadButton && (
 				<div className="flex flex-wrap items-center gap-2">
 					{!uploading ? (
 						<>
@@ -475,4 +501,6 @@ export default function FileDropField({
 			)}
 		</div>
 	)
-}
+})
+
+export default FileDropField

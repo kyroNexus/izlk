@@ -22,6 +22,16 @@ export async function requireChatWrite(user: SessionUser, scope: 'department' | 
 	return Boolean(await chatThread(user, scope, value))
 }
 
+/** Задача C1: скачивание вложения проверяет доступ к треду напрямую по уже
+ *  известному thread (без chatThread — тот принимает "сырое" значение из URL
+ *  и делает upsert, здесь достаточно чтения). Та же ролевая логика, что и в
+ *  chatThread выше, только без побочного эффекта создания треда. */
+export async function canReadChatThread(user: SessionUser, thread: { scope: 'DEPARTMENT' | 'CONTRACT'; department: string | null; contractId: string | null }): Promise<boolean> {
+	if (thread.scope === 'DEPARTMENT') return Boolean(thread.department && DEPARTMENTS.has(thread.department) && user.role !== 'VIEWER')
+	if (thread.scope === 'CONTRACT') return Boolean(thread.contractId && await findContractInScope(thread.contractId, user))
+	return false
+}
+
 export function chatError() {
 	return NextResponse.json({ error: 'Нет доступа к чату' }, { status: 403 })
 }
