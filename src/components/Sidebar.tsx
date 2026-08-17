@@ -130,7 +130,7 @@ export default function Sidebar({ userName, roleLabel, initials, role, isOpen, o
 			</Link>}
 		</header>
 		<div className={`mx-4 flex-none border-t border-line-soft ${isOpen ? '' : 'mx-3'}`} />
-		<button type="button" onClick={() => onOpenChange(!isOpen)} title={isOpen ? 'Свернуть меню' : 'Открыть меню'} aria-label={isOpen ? 'Свернуть меню' : 'Открыть меню'} className="sidebar-toggle group absolute -right-[18px] top-1/2 z-20 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-brand/35 bg-surface text-brand shadow-[0_5px_18px_rgba(73,47,175,.28)] transition-[transform,box-shadow,background-color] duration-300 hover:scale-110 hover:bg-brand hover:text-white hover:shadow-[0_8px_24px_rgba(73,47,175,.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
+		<button type="button" onClick={() => onOpenChange(!isOpen)} title={isOpen ? 'Свернуть меню' : 'Открыть меню'} aria-label={isOpen ? 'Свернуть меню' : 'Открыть меню'} className="sidebar-toggle group grid place-items-center border border-brand/35 bg-gradient-to-b from-surface to-raised text-brand shadow-[0_5px_18px_rgba(73,47,175,.28)] transition-[transform,box-shadow,background-color] duration-300 hover:scale-110 hover:bg-brand hover:text-white hover:shadow-[0_8px_24px_rgba(73,47,175,.42)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
 			<Icon icon={ChevronLeft} size={17} strokeWidth={2.4} className={`transition-transform duration-300 ${isOpen ? '' : 'rotate-180'}`} />
 		</button>
 		<nav className="flex min-h-0 flex-1 flex-col px-3 py-4">

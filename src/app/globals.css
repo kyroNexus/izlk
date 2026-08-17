@@ -397,14 +397,30 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 .app-sidebar > header,
 .app-sidebar > nav,
 .app-sidebar > a { position: relative; z-index: 1; }
-.app-sidebar > button {
+.sidebar-toggle {
 	position: absolute;
 	z-index: 3;
-	width: 32px;
-	height: 40px;
-	right: -16px;
-	border-radius: 0 12px 12px 0;
-	box-shadow: 8px 6px 20px rgba(73, 47, 175, .16);
+	top: 50%;
+	right: -18px;
+	width: 36px;
+	height: 36px;
+	transform: translateY(-50%);
+	border-radius: 999px;
+}
+/* Тихое «дышащее» кольцо вокруг кнопки — привлекает взгляд к рельсу сворачивания
+   без текста. Один цикл ~2.6с, глушится глобально в prefers-reduced-motion. */
+.sidebar-toggle::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--brand) 35%, transparent);
+	animation: sidebar-toggle-breathe 2.6s ease-in-out infinite;
+	pointer-events: none;
+}
+@keyframes sidebar-toggle-breathe {
+	0%, 100% { transform: scale(1); opacity: .55; }
+	70% { transform: scale(1.55); opacity: 0; }
 }
 .app-sidebar nav {
 	scrollbar-width: thin;
@@ -474,7 +490,7 @@ a[href^="/api/site-photos/"]:hover::after { opacity: 1; transform: translateY(0)
 	.app-sidebar { box-shadow: 10px 0 36px rgba(15, 12, 40, .16); }
 	.app-sidebar.w-16 { width: 0; border-right-color: transparent; box-shadow: none; }
 	.app-sidebar.w-16 > :not(button) { pointer-events: none; opacity: 0; }
-	.app-sidebar.w-16 > button { right: -48px; top: 31px; transform: none; }
+	.app-sidebar.w-16 .sidebar-toggle { right: -48px; top: 31px; transform: none; }
 }
 
 .department-panel-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--brand) 55%, transparent) transparent; }
