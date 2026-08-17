@@ -15,8 +15,8 @@ import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
  * настоящими — это fallback без JavaScript: без гидратации сработает
  * обычная нативная отправка через кнопку в <noscript> внизу. С JS кнопка
  * загрузки внутри FileDropField отправляет те же данные через XHR
- * (extraFields) и сама решает, куда перейти дальше — по responseUrl,
- * который сервер вернул после редиректа (см. комментарий у onDone).
+ * (extraFields), сервер отвечает JSON (задача A3), а onDone переходит
+ * по redirectUrl из ответа — туда же, куда ушла бы обычная форма.
  */
 
 type ExecutiveDoc = { id: string; name: string }
@@ -76,12 +76,15 @@ export default function SmartDocumentUpload({
 	}
 
 	function onDone(result: FileDropFieldResult) {
-		// Эндпоинт пока отвечает 303-редиректом (JSON — задача A3), а XHR
-		// прозрачно проходит редирект и оставляет итоговый адрес в responseURL —
-		// именно туда сервер отправил бы обычную форму: карточку договора,
-		// /projects?section=... или снова эту страницу с ?error=.
-		if (result.responseUrl) { router.push(result.responseUrl); router.refresh(); return }
-		setStatus(result.ok ? `Загружено файлов: ${result.uploadedCount}` : 'Не удалось загрузить файлы. Повторите попытку.')
+		// С задачи A3 эндпоинт отвечает JSON напрямую (200, без редиректа) —
+		// redirectUrl в теле ответа несёт тот же адрес, куда ушла бы обычная
+		// форма: карточка договора, /projects?section=... или снова эта
+		// страница с ?error=. responseUrl (xhr.responseURL) — запасной вариант
+		// для эндпоинтов, которые пока просто редиректят и JSON не отдают.
+		const raw = result.raw as { redirectUrl?: string; error?: string } | undefined
+		const target = raw?.redirectUrl ?? result.responseUrl
+		if (target) { router.push(target); router.refresh(); return }
+		setStatus(raw?.error || (result.ok ? `Загружено файлов: ${result.uploadedCount}` : 'Не удалось загрузить файлы. Повторите попытку.'))
 	}
 
 	const extraFields: Record<string, string> = {

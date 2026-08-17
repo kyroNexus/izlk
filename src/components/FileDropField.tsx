@@ -99,7 +99,7 @@ function ExtIcon({ fileName }: { fileName: string }) {
 function StatusText({ item }: { item: SelectedFile }) {
 	if (item.status === 'pending') return <span className="text-faint">Ожидает</span>
 	if (item.status === 'uploading') return <span className="inline-flex items-center gap-1 text-brand-ink"><Icon icon={Loader2} size={11} className="animate-spin" />Загружается…</span>
-	if (item.status === 'done') return <span className="inline-flex items-center gap-1 text-ok"><Icon icon={CheckCircle2} size={11} />Готово</span>
+	if (item.status === 'done') return <span className="inline-flex items-center gap-1 text-ok"><Icon icon={CheckCircle2} size={11} />{item.message ?? 'Готово'}</span>
 	return <span className="inline-flex items-center gap-1 text-danger" title={item.message}><Icon icon={AlertCircle} size={11} />{item.message ?? 'Ошибка'}</span>
 }
 
@@ -241,16 +241,19 @@ export default function FileDropField({
 			const ok = xhr.status >= 200 && xhr.status < 300
 			let raw: unknown
 			try { raw = xhr.responseText ? JSON.parse(xhr.responseText) : undefined } catch { raw = undefined }
-			// Пока конечная точка не отдаёт perFile (см. задачу A3), любой ответ 2xx
-			// считается успехом для всей пачки — это уточнится, когда сервер начнёт
-			// присылать построчный результат.
+			// perFile — построчный результат сервера (задача A3). Эндпоинты, которые
+			// его ещё не отдают, просто не пришлют это поле — тогда весь ответ 2xx
+			// считается успехом для всей пачки, как и было в A1.
 			const perFile = raw && typeof raw === 'object' && Array.isArray((raw as { perFile?: unknown }).perFile) ? (raw as { perFile: PerFileResult[] }).perFile : null
 			let uploadedCount = 0
 			let failedCount = 0
 			setItems((current) => current.map((item) => {
 				if (item.status !== 'uploading') return item
 				const match = perFile?.find((entry) => entry.fileName === item.file.name)
-				const nextStatus: FileStatus = match ? (/success|ok/i.test(match.status) ? 'done' : 'error') : ok ? 'done' : 'error'
+				// FAILED — единственный статус, который действительно означает ошибку;
+				// IGNORED (точная копия уже в системе) — не ошибка пользователя, файл
+				// в системе есть, просто не был загружен повторно.
+				const nextStatus: FileStatus = match ? (match.status === 'FAILED' ? 'error' : 'done') : ok ? 'done' : 'error'
 				if (nextStatus === 'done') uploadedCount += 1
 				else failedCount += 1
 				return { ...item, status: nextStatus, message: match?.message ?? (nextStatus === 'error' ? `Сервер ответил ошибкой (${xhr.status})` : undefined) }
