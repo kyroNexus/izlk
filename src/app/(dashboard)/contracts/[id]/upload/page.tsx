@@ -5,6 +5,7 @@ import { Card, FormError } from '@/components/ui'
 import SmartDocumentUpload from '@/components/SmartDocumentUpload'
 import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatBytes, initials } from '@/lib/format'
 import { assertContractAccess, contractScope, requireUser } from '@/lib/access'
+import { agreementTitle } from '@/components/contract/shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export default async function UploadDocumentPage({
 	searchParams,
 }: {
 	params: { id: string }
-	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; pr1?: string }
+	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; pr1?: string; agreement?: string }
 }) {
 	const user = await requireUser()
 	const contractId = params.id
@@ -25,6 +26,9 @@ export default async function UploadDocumentPage({
 	const requestedKind = DOCUMENT_KIND_ORDER.find((kind) => kind === searchParams.kind) ?? ''
 	const pr1Mode = searchParams.pr1 === '1'
 	const projectSection = searchParams.project ? await prisma.projectSection.findFirst({ where: { id: searchParams.project, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
+	// Задача C2: скан к конкретному доп. соглашению — та же проверка "id
+	// принадлежит этому договору", что уже есть для projectSection выше.
+	const agreement = searchParams.agreement ? await prisma.agreement.findFirst({ where: { id: searchParams.agreement, contractId, deletedAt: null }, select: { id: true, number: true } }) : null
 	const contract = user.role === 'DESIGNER'
 		? projectSection && await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null }, select: { id: true, number: true, managerId: true } })
 		: user.role === 'BUILDER'
@@ -58,7 +62,7 @@ export default async function UploadDocumentPage({
 
 			<div className="workspace-content">
 				<div className="work-hero mb-[20px] px-5 py-4">
-					<h1 className="text-2xl font-bold tracking-[-0.02em]">{pr1Mode ? 'Подписанное Приложение №1' : 'Загрузка документа'}</h1>
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">{pr1Mode ? 'Подписанное Приложение №1' : agreement ? `Скан к ${agreementTitle(agreement.number)}` : 'Загрузка документа'}</h1>
 					<div className="mt-[4px] text-base text-faint">К договору № {contract.number}</div>
 				</div>
 
@@ -77,6 +81,7 @@ export default async function UploadDocumentPage({
 							requestedState={requestedState}
 							requestedKind={requestedKind}
 							pr1Mode={pr1Mode}
+							agreement={agreement}
 						/>
 					</Card>
 
