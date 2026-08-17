@@ -1,8 +1,7 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import Topbar from '@/components/Topbar'
-import { Card, Field, FormError, inputClass, selectClass } from '@/components/ui'
+import { Card, FormError } from '@/components/ui'
 import SmartDocumentUpload from '@/components/SmartDocumentUpload'
 import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatBytes, initials } from '@/lib/format'
 import { assertContractAccess, contractScope, requireUser } from '@/lib/access'
@@ -38,57 +37,6 @@ export default async function UploadDocumentPage({
 		orderBy: { createdAt: 'desc' },
 		take: 8,
 	}), prisma.executiveDoc.findMany({ where: { contractId, deletedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } })])
-
-	/* Legacy server action kept here was never used by the form (the API route below is
-	 * the actual uploader).  Keeping it inside this page made Next serialize its closure
-	 * and crash the render with "Functions cannot be passed to Client Components".
-	async function uploadDocument(formData: FormData) {
-		'use server'
-		const actingUser = await requireUser()
-		await assertContractAccess(contractId, actingUser, { write: true })
-
-		// Явный тип never нужен для корректного сужения типов после fail().
-		const requestedExecutiveId = String(formData.get('executiveDocId') ?? '')
-		const fail: (message: string) => never = (message) =>
-			redirect(`/contracts/${contractId}/upload?${requestedExecutiveId ? `executive=${encodeURIComponent(requestedExecutiveId)}&` : ''}error=${encodeURIComponent(message)}`)
-
-		const uploads = formData.getAll('files').filter((file): file is File => file instanceof File && file.size > 0)
-		if (uploads.length === 0) fail('Выберите хотя бы один файл для загрузки')
-		if (uploads.length > 30) fail('За один раз можно загрузить не больше 30 файлов')
-		const oversized = uploads.find((file) => file.size > MAX_UPLOAD_BYTES)
-		if (oversized) fail(`Файл «${oversized.name}» больше допустимых ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} МБ`)
-
-		const kindRaw = String(formData.get('kind') ?? 'OTHER')
-		const kind = (DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw)
-			? (kindRaw as DocumentKind)
-			: ('OTHER' as DocumentKind)
-
-		const signedAtRaw = orNull(String(formData.get('signedAt') ?? ''))
-		const signedAt = signedAtRaw ? parseDate(signedAtRaw) : null
-		const isConfidential = formData.get('isConfidential') === 'on'
-		const executiveDocId = requestedExecutiveId && executiveDocs.some((item) => item.id === requestedExecutiveId) ? requestedExecutiveId : null
-
-		let uploadedCount = 0
-		let skippedCount = 0
-		for (const upload of uploads) {
-			const buffer = Buffer.from(await upload.arrayBuffer())
-			const digest = sha256Buffer(buffer)
-			const existing = await prisma.document.findFirst({ where: { contractId, sha256: digest }, select: { id: true } })
-			if (existing) { skippedCount += 1; continue }
-
-			const saved = await saveContractFile({ contractId, fileName: upload.name, buffer })
-			const created = await prisma.document.create({
-				data: { contractId, kind, fileName: upload.name, storagePath: saved.storagePath, mimeType: upload.type || saved.mimeType, sizeBytes: BigInt(saved.sizeBytes), sha256: saved.sha256, signedAt, isConfidential, executiveDocId, uploadedById: actingUser.id },
-				select: { id: true },
-			})
-			await writeAudit({ userId: actingUser.id, action: 'UPLOAD', entityType: 'Document', entityId: created.id })
-			uploadedCount += 1
-		}
-
-		const destination = executiveDocId ? `/executive/${contractId}` : `/contracts/${contractId}`
-		const summary = `Загружено файлов: ${uploadedCount}${skippedCount ? `. Пропущено копий: ${skippedCount}` : ''}`
-		redirect(`${destination}?success=${encodeURIComponent(summary)}`)
-	} */
 
 	const name = user.name ?? user.email ?? ''
 
@@ -127,74 +75,6 @@ export default async function UploadDocumentPage({
 							requestedKind={requestedKind}
 							pr1Mode={pr1Mode}
 						/>
-						{false && <form action={`/api/contracts/${contractId}/documents`} method="post" encType="multipart/form-data" className="flex flex-col gap-3.5">
-							{projectSection && <input type="hidden" name="projectSectionId" value={projectSection?.id ?? ''} />}
-							<div className="rounded-[12px] border border-brand/20 bg-brand/5 px-3.5 py-3 text-sm leading-5 text-muted"><b className="text-ink">Три шага:</b> выберите один или несколько файлов, укажите раздел/тип, затем нажмите «Загрузить». Все дополнительные параметры необязательны и применяются ко всей выбранной пачке.</div>
-							<Field label="Файлы" required hint="До 30 файлов за раз. Настройки ниже применятся ко всей пачке.">
-								<input
-									type="file"
-									name="files"
-									required
-									multiple
-									className="w-full rounded-control border border-line bg-surface px-3 py-2 text-base text-ink file:mr-3 file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-1 file:text-sm file:text-ink"
-								/>
-							</Field>
-
-							{!projectSection && executiveDocs.length > 0 && (
-								<Field label="Раздел исполнительной документации" hint="Файл появится в выбранной карточке исполняшки">
-									<select name="executiveDocId" defaultValue={searchParams.executive ?? ''} className={selectClass}>
-										<option value="">Не привязывать к разделу</option>
-										{executiveDocs.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-									</select>
-								</Field>
-							)}
-
-							<div className={`grid gap-3.5 ${projectSection ? 'grid-cols-1' : 'grid-cols-3'}`}>
-								<Field label="Тип документа" required>
-									<select name="kind" defaultValue={projectSection ? 'PROJECT_PDF' : searchParams.executive ? 'EXECUTIVE' : 'CONTRACT'} className={selectClass}>
-										{(projectSection ? (['PROJECT_PDF', 'PROJECT_DWG'] as const) : DOCUMENT_KIND_ORDER).map((k) => (
-											<option key={k} value={k}>
-												{DOCUMENT_KIND_LABELS[k]}
-											</option>
-										))}
-									</select>
-								</Field>
-								{!projectSection && <Field label="Дата подписания" hint="По ней считается этап «ПР1 подписан»">
-									<input type="date" name="signedAt" className={inputClass} />
-								</Field>}
-								{!projectSection && <Field label="Рабочих дней" hint="Для срока по подписанному ПР1">
-									<input type="number" name="workingDays" min="1" max="730" className={inputClass} placeholder="Например, 20" />
-								</Field>}
-							</div>
-
-							{!projectSection && <details className="rounded-control border border-line bg-raised/40 px-3 py-2.5"><summary className="cursor-pointer text-sm font-semibold text-ink">Дополнительные настройки: подпись, версия и доступ</summary><div className="mt-[13px] flex flex-col gap-3.5"><Field label="Состояние версии" hint="Так исходники, подписанные и старые варианты не смешиваются">
-								<select name="state" defaultValue={requestedState} className={selectClass}><option value="SOURCE">Актуальный исходник</option><option value="SIGNED">Подписанная версия</option><option value="ARCHIVE">Архивная версия</option></select>
-							</Field>
-
-							{!projectSection && <label className="flex items-center gap-2 text-base text-muted">
-								<input type="checkbox" name="isConfidential" className="h-[15px] w-[15px]" />
-								Конфиденциально — не выдавать наблюдателям
-							</label>}</div></details>}
-
-							{!projectSection && !searchParams.executive && <label className="rounded-control border border-brand/25 bg-brand/5 p-3">
-								<span className="flex items-start gap-2.5"><input type="checkbox" name="confirmPr1Signed" className="mt-[2px] h-[16px] w-[16px] accent-[#7047e8]" /><span><span className="block text-sm font-bold text-ink">Подтверждаю: Приложение №1 подписано заказчиком</span><span className="mt-1 block text-xs leading-5 text-muted">Файл будет сохранён как ПР1, договор автоматически появится в «Площадках» и в очереди проектирования КМ/КЖ.</span></span></span>
-							</label>}
-
-							<div className="mt-[6px] flex gap-2.5">
-								<button
-									type="submit"
-									className="brand-gradient inline-flex h-control items-center justify-center rounded-control px-4 text-base font-semibold text-white"
-								>
-									Загрузить
-								</button>
-								<Link
-									href={projectSection ? `/projects?section=${projectSection?.code ?? ''}` : `/contracts/${contractId}`}
-									className="inline-flex h-control items-center justify-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised"
-								>
-									Вернуться к договору
-								</Link>
-							</div>
-						</form>}
 					</Card>
 
 					{recent.length > 0 && (
