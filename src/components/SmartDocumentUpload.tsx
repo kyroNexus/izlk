@@ -3,7 +3,10 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import FileDropField, { type FileDropFieldResult } from '@/components/FileDropField'
+import type { DocumentKind } from '@prisma/client'
+import FileDropField, { type FileDropFieldResult, type SelectedFile } from '@/components/FileDropField'
+import { classifyDocumentPath } from '@/lib/document-classifier'
+import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
 
 /**
@@ -17,6 +20,14 @@ import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
  * загрузки внутри FileDropField отправляет те же данные через XHR
  * (extraFields), сервер отвечает JSON (задача A3), а onDone переходит
  * по redirectUrl из ответа — туда же, куда ушла бы обычная форма.
+ *
+ * Задача B2: пока пачка не переопределена явно через "Что загружаем",
+ * рядом с каждым файлом показывается чип с предполагаемым видом
+ * (classifyDocumentPath — тот же классификатор, что и на сервере, теперь
+ * изоморфный) — его можно поправить прямо на файле. Итоговые виды уходят
+ * на сервер массивом kinds[], параллельным files[] (через itemFields
+ * у FileDropField); сервер их только проверяет (валидный enum, ограничение
+ * роли DESIGNER), а не выдумывает заново.
  */
 
 type ExecutiveDoc = { id: string; name: string }
@@ -65,6 +76,44 @@ export default function SmartDocumentUpload({
 	const [state, setState] = useState(requestedState || 'AUTO')
 	const [isConfidential, setIsConfidential] = useState(false)
 	const [status, setStatus] = useState('')
+	// Ручные правки чипа вида на отдельных файлах — ключ: id файла в FileDropField.
+	const [kindOverrides, setKindOverrides] = useState<Record<string, DocumentKind>>({})
+	// Чип вида уместен только там, где вид вообще неоднозначен: в проектном
+	// режиме и ПР1 вид жёстко фиксирован форматом/ролью, там нечего уточнять.
+	const showKindChip = !isProject && !pr1Mode
+
+	function classifiedKind(item: { file: File; relativePath?: string }): DocumentKind {
+		return classifyDocumentPath(item.relativePath || item.file.name)
+	}
+
+	function resolvedKind(item: { id: string; file: File; relativePath?: string }): DocumentKind {
+		// Явное переопределение на всю пачку (кроме AUTO) побеждает — как и на
+		// сервере: смысла показывать/слать разные чипы, когда всё равно
+		// применится один и тот же вид для всех файлов, нет.
+		if (kind !== 'AUTO') return kind as DocumentKind
+		return kindOverrides[item.id] ?? classifiedKind(item)
+	}
+
+	function renderKindChip(item: SelectedFile) {
+		if (!showKindChip) return null
+		const forced = kind !== 'AUTO'
+		const value = resolvedKind(item)
+		return (
+			<select
+				value={value}
+				disabled={forced || item.status !== 'pending'}
+				onChange={(event) => setKindOverrides((current) => ({ ...current, [item.id]: event.target.value as DocumentKind }))}
+				title={forced ? 'Вид переопределён для всей пачки полем «Что загружаем» выше' : 'Определено автоматически — можно поправить'}
+				className="h-5 rounded-full border border-brand/25 bg-brand-soft px-1.5 text-2xs font-semibold text-brand-ink outline-none disabled:cursor-not-allowed disabled:opacity-70"
+			>
+				{DOCUMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{DOCUMENT_KIND_LABELS[k]}</option>)}
+			</select>
+		)
+	}
+
+	function itemFields(item: SelectedFile): Record<string, string> {
+		return showKindChip ? { kinds: resolvedKind(item) } : {}
+	}
 
 	// required у обычного <input type=date> действует только при нативной
 	// отправке — кнопка загрузки внутри FileDropField её не проходит, поэтому
@@ -122,6 +171,8 @@ export default function SmartDocumentUpload({
 				extraFields={extraFields}
 				beforeUpload={beforeUpload}
 				onDone={onDone}
+				renderItemExtra={renderKindChip}
+				itemFields={itemFields}
 				uploadLabel={confirmPr1 ? 'Загрузить и запустить договор' : 'Загрузить файлы'}
 				hint="До 100 файлов за раз · PDF, DOCX, XLSX, DWG, изображения и архивы"
 			/>

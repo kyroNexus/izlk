@@ -1,5 +1,28 @@
-import path from 'path'
 import type { DocumentKind, DocumentState, SectionCode } from '@prisma/client'
+
+/**
+ * Изоморфный модуль (задача B2): классификация работает по строке —
+ * имени файла и пути — поэтому её можно посчитать и в браузере, чтобы
+ * показать предполагаемый вид ещё до отправки (SmartDocumentUpload).
+ * Раньше basename/extname брались из node:path, из-за чего модуль нельзя
+ * было импортировать в клиентский компонент. Ниже — свои чистые аналоги
+ * с тем же поведением (path.extname('.gitignore') === '' и т.п.), без
+ * какой-либо серверной зависимости.
+ */
+
+function basenameOf(filePath: string): string {
+	const normalized = filePath.replace(/\\/g, '/')
+	const idx = normalized.lastIndexOf('/')
+	return idx === -1 ? normalized : normalized.slice(idx + 1)
+}
+
+function extnameOf(filePath: string): string {
+	const base = basenameOf(filePath)
+	const dot = base.lastIndexOf('.')
+	// dot <= 0: точки нет вообще, либо это скрытый файл вида ".gitignore" —
+	// в обоих случаях node:path.extname тоже вернул бы пустую строку.
+	return dot <= 0 ? '' : base.slice(dot)
+}
 
 /**
  * Нормализуем и имя файла, и относительный путь. Папки часто содержат
@@ -15,7 +38,7 @@ export function normalizeDocumentPath(filePath: string) {
 
 /** Files created by Office/desktop systems that are never real documents. */
 export function isTransientSystemFile(filePath: string) {
-	const fileName = path.basename(filePath.replace(/\\/g, '/'))
+	const fileName = basenameOf(filePath)
 	return /^~\$/.test(fileName) || /^\.~lock\..+#$/i.test(fileName) || ['thumbs.db', 'desktop.ini', '.ds_store'].includes(fileName.toLowerCase())
 }
 
@@ -29,10 +52,10 @@ export function detectProjectSectionCode(filePath: string): SectionCode | null {
 	return null
 }
 
-/** Предсказуемая классификация для веб-импорта и Inbox-сканера. */
+/** Предсказуемая классификация для веб-импорта, обычной загрузки и Inbox-сканера. */
 export function classifyDocumentPath(filePath: string): DocumentKind {
 	const lower = normalizeDocumentPath(filePath)
-	const ext = path.extname(lower)
+	const ext = extnameOf(lower)
 	if (/(?:\bиги\b|инженерн(?:о|ые)[ -]?геолог|\bгпзу\b|градостроительн|топос[ъь]ем|топограф|геоподоснов|геодезическ(?:ая|ий)?\s+основ|стеснен|исходн(?:ые)?[ -]?данн)/u.test(lower)) return 'SOURCE_DATA'
 	if (/(смет|локальн.*расч[ее]т)/u.test(lower)) return 'ESTIMATE'
 	if (/(доп\.?\s*соглаш|дс\s*[№_\d])/u.test(lower)) return 'AGREEMENT'

@@ -74,6 +74,12 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		const kindRaw = String(formData.get('kind') ?? 'AUTO')
 		const selectedKind: DocumentKind = (DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw) ? kindRaw as DocumentKind : 'OTHER'
 		const isAutoKind = !(DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw)
+		// Задача B2: с JS клиент уже посчитал вид каждого файла (тем же изоморфным
+		// классификатором) и прислал его явно — сервер просто проверяет, что это
+		// валидный DocumentKind, а не пересчитывает классификатор заново. Без JS
+		// (обычная форма) это поле пустое — тогда работает сервер-side автоопределение
+		// из задачи B1, ниже в цикле.
+		const kindsRaw = formData.getAll('kinds').map((value) => String(value))
 		const signedAtRaw = user.role === 'DESIGNER' ? null : orNull(String(formData.get('signedAt') ?? ''))
 		const signedAt = signedAtRaw ? parseDate(signedAtRaw) : confirmPr1Signed ? new Date() : null
 		const workingDaysRaw = String(formData.get('workingDays') ?? '').trim()
@@ -99,22 +105,27 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		// смешанной автоопределённой пачки оказался договор — берём его состояние;
 		// SIGNED важнее SOURCE, если договорных файлов оказалось несколько.
 		let contractUploadState: DocumentState | null = null
-		for (const upload of uploads) {
+		for (const [index, upload] of uploads.entries()) {
 			let savedPath: string | null = null
 			try {
 				if (upload.size > MAX_UPLOAD_BYTES) throw new Error(`Файл больше допустимых ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} МБ`)
 				assertSafeDocumentUpload(upload.name)
-				// DESIGNER и подтверждение ПР1 — это не догадки, а обязывающий выбор
-				// пользователя/роли, побеждает всегда. Явный выбор из селекта (не AUTO)
-				// побеждает для всей пачки. Иначе — вид и версия каждого файла решаются
-				// классификатором по имени, отдельно для каждого файла.
+				// Приоритет (высокий → низкий): DESIGNER и подтверждение ПР1 — это не
+				// догадки, а обязывающий выбор пользователя/роли, побеждают всегда.
+				// Явный выбор из селекта на всю пачку (не AUTO) — вторым приоритетом.
+				// Дальше — вид, который прислал клиент для конкретно этого файла
+				// (kinds[i], задача B2: уже посчитан классификатором в браузере, тут
+				// только проверяется валидность enum). Если и его нет (форма без JS) —
+				// сервер сам классифицирует по имени (задача B1).
+				const sentKind = kindsRaw[index]
+				const validSentKind: DocumentKind | null = sentKind && (DOCUMENT_KIND_ORDER as readonly string[]).includes(sentKind) ? sentKind as DocumentKind : null
 				const kind: DocumentKind = user.role === 'DESIGNER'
 					? (selectedKind === 'PROJECT_DWG' ? 'PROJECT_DWG' : 'PROJECT_PDF')
 					: confirmPr1Signed
 					? 'APPENDIX'
-					: isAutoKind
-					? classifyDocumentPath(upload.name)
-					: selectedKind
+					: !isAutoKind
+					? selectedKind
+					: validSentKind ?? classifyDocumentPath(upload.name)
 				const state: DocumentState = user.role === 'DESIGNER'
 					? 'SOURCE'
 					: confirmPr1Signed || signedAt

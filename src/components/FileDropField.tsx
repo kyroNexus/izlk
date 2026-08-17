@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, Archive, Camera, CheckCircle2, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Ruler, Upload, X } from 'lucide-react'
 import Icon from '@/components/Icon'
 import { ProgressBar } from '@/components/ui'
@@ -22,9 +22,9 @@ import { MAX_UPLOAD_BYTES } from '@/lib/upload-constants'
  * A2 для SmartDocumentUpload), сам компонент от наличия form не зависит.
  */
 
-type FileStatus = 'pending' | 'uploading' | 'done' | 'error'
+export type FileStatus = 'pending' | 'uploading' | 'done' | 'error'
 
-type SelectedFile = {
+export type SelectedFile = {
 	id: string
 	file: File
 	/** Путь внутри перетащенной папки (например, "Сметы/смета.xlsx").
@@ -80,6 +80,17 @@ type Props = {
 	 *  нативной отправке формы, а кнопка внутри поля её не делает). Непустая
 	 *  строка — сообщение показывается вместо notice, загрузка не начинается. */
 	beforeUpload?: () => string | null | undefined
+	/** Задача B2: доп. разметка в строке файла — например, чип вида документа
+	 *  с селектом для правки. FileDropField ничего не знает о её смысле,
+	 *  просто рендерит рядом с именем/статусом каждого файла. */
+	renderItemExtra?: (item: SelectedFile) => ReactNode
+	/** Доп. поля НА КАЖДЫЙ файл (в отличие от extraFields — те на всю пачку).
+	 *  Вызывается для каждого файла перед отправкой; возвращённые пары
+	 *  дописываются в FormData под тем же именем сразу после самого файла —
+	 *  сервер должен читать их как параллельный массив (getAll('kinds')[i]
+	 *  относится к getAll('files')[i]). Нужно возвращать значение для КАЖДОГО
+	 *  файла последовательно, иначе массивы разъедутся. */
+	itemFields?: (item: SelectedFile) => Record<string, string>
 }
 
 const DEFAULT_MAX_FILES = 100
@@ -151,7 +162,7 @@ function StatusText({ item }: { item: SelectedFile }) {
 	return <span className="inline-flex items-center gap-1 text-danger" title={item.message}><Icon icon={AlertCircle} size={11} />{item.message ?? 'Ошибка'}</span>
 }
 
-function Row({ item, onRemove, disabled }: { item: SelectedFile; onRemove: () => void; disabled: boolean }) {
+function Row({ item, onRemove, disabled, extra }: { item: SelectedFile; onRemove: () => void; disabled: boolean; extra?: ReactNode }) {
 	// Из папки могут прийти два разных файла с одинаковым именем в разных
 	// подпапках — показываем путь целиком, чтобы их было видно различие.
 	const displayName = item.relativePath && item.relativePath !== item.file.name ? item.relativePath : item.file.name
@@ -160,10 +171,11 @@ function Row({ item, onRemove, disabled }: { item: SelectedFile; onRemove: () =>
 			<span className="grid h-7 w-7 flex-none place-items-center rounded-tight bg-raised text-muted"><ExtIcon fileName={item.file.name} /></span>
 			<div className="min-w-0 flex-1">
 				<div className="truncate font-medium text-ink" title={displayName}>{displayName}</div>
-				<div className="mt-0.5 flex items-center gap-1.5 text-xs">
+				<div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
 					<span className="tnum text-faint">{formatBytes(item.file.size)}</span>
 					<span className="text-faint">·</span>
 					<StatusText item={item} />
+					{extra}
 				</div>
 			</div>
 			{item.status !== 'uploading' && (
@@ -189,6 +201,8 @@ export default function FileDropField({
 	uploadLabel = 'Загрузить',
 	beforeUpload,
 	required = false,
+	renderItemExtra,
+	itemFields,
 }: Props) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -301,7 +315,11 @@ export default function FileDropField({
 		setItems((current) => current.map((item) => (item.status === 'pending' ? { ...item, status: 'uploading' } : item)))
 
 		const body = new FormData()
-		for (const item of pending) body.append('files', item.file, item.file.name)
+		for (const item of pending) {
+			body.append('files', item.file, item.file.name)
+			const perItem = itemFields?.(item)
+			if (perItem) for (const [key, value] of Object.entries(perItem)) body.append(key, value)
+		}
 		for (const [key, value] of Object.entries(extraFields)) body.append(key, value)
 
 		const xhr = new XMLHttpRequest()
@@ -385,7 +403,7 @@ export default function FileDropField({
 			{items.length > 0 && (
 				<div className="max-h-64 overflow-y-auto rounded-control border border-line-soft">
 					<div className="divide-y divide-line-soft">
-						{items.map((item) => <Row key={item.id} item={item} onRemove={() => removeItem(item.id)} disabled={disabled || uploading} />)}
+						{items.map((item) => <Row key={item.id} item={item} onRemove={() => removeItem(item.id)} disabled={disabled || uploading} extra={renderItemExtra?.(item)} />)}
 					</div>
 				</div>
 			)}
