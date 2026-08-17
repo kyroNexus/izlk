@@ -24,6 +24,39 @@ function validWorkingDays(value: number | null): value is number {
 	return value != null && Number.isInteger(value) && value >= 1 && value <= 730
 }
 
+const ZIP_SIGNATURES = [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]]
+const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+
+function startsWith(buffer: Buffer, bytes: number[]): boolean {
+	return bytes.every((byte, index) => buffer[index] === byte)
+}
+
+/** .xlsx (zip) и старый .xls (OLE compound file) — бинарные форматы со своей
+ *  сигнатурой; всё остальное, что сюда доходит (.csv), — обычный текст. */
+function looksLikeBinaryWorkbook(buffer: Buffer): boolean {
+	return ZIP_SIGNATURES.some((signature) => startsWith(buffer, signature)) || startsWith(buffer, OLE_SIGNATURE)
+}
+
+/**
+ * XLSX.read без явной кодировки сам гадает codepage у CSV — на кириллице без
+ * UTF-8 BOM гадает неверно и превращает текст в кашу (проверено: тот же файл
+ * с BOM читается верно, без — нет), из-за чего срок/сумма молча не находятся.
+ * Раз бинарной сигнатуры нет — декодируем сами: сначала как UTF-8 (это верно
+ * для CSV из современных инструментов и "CSV UTF-8" экспорта Excel), а если
+ * получилась каша (U+FFFD — признак невалидных UTF-8 байт) — как
+ * Windows-1251, самую частую кириллическую кодировку у CSV из старых
+ * экспортов 1С/Excel.
+ */
+function decodeCsvText(buffer: Buffer): string {
+	const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
+	if (!utf8.includes('�')) return utf8
+	try {
+		return new TextDecoder('windows-1251', { fatal: false }).decode(buffer)
+	} catch {
+		return utf8
+	}
+}
+
 /**
  * Извлекает из типовой сметы итог и длительность работ. Формат у смет разный,
  * поэтому результат всегда можно перепроверить/исправить в карточке договора.
@@ -35,7 +68,9 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 	let workbook: XLSX.WorkBook
 
 	try {
-		workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+		workbook = looksLikeBinaryWorkbook(buffer)
+			? XLSX.read(buffer, { type: 'buffer', cellDates: true })
+			: XLSX.read(decodeCsvText(buffer), { type: 'string', cellDates: true })
 	} catch {
 		return { workingDays, amount, warnings: ['Не удалось прочитать таблицу как Excel-файл'] }
 	}
