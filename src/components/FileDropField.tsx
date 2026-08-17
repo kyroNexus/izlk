@@ -5,6 +5,7 @@ import { AlertCircle, Archive, Camera, CheckCircle2, FileImage, FileSpreadsheet,
 import Icon from '@/components/Icon'
 import { ProgressBar } from '@/components/ui'
 import { formatBytes } from '@/lib/format'
+import { MAX_UPLOAD_BYTES } from '@/lib/upload-constants'
 
 /**
  * Единое переиспользуемое поле загрузки файлов на всё приложение (задача A1).
@@ -35,6 +36,11 @@ export type FileDropFieldResult = {
 	raw?: unknown
 	uploadedCount: number
 	failedCount: number
+	/** Итоговый URL после серверного редиректа (XHR его прозрачно проходит).
+	 *  Пока эндпоинты не отдают JSON (см. A3), это единственный способ узнать,
+	 *  куда сервер решил перенаправить — на карточку договора или обратно на
+	 *  форму с ?error=. */
+	responseUrl?: string
 }
 
 type PerFileResult = { fileName: string; status: string; message?: string }
@@ -54,10 +60,21 @@ type Props = {
 	label?: string
 	hint?: string
 	disabled?: boolean
+	/** required на нативном input — работает только для no-JS отправки формы,
+	 *  на кнопку загрузки внутри поля не влияет (её проверяет beforeUpload). */
+	required?: boolean
+	/** Текст кнопки загрузки без счётчика — сам компонент добавит " (N)".
+	 *  По умолчанию «Загрузить». Экран может передать, например,
+	 *  «Загрузить и запустить договор», когда это уместно в его контексте. */
+	uploadLabel?: string
+	/** Вызывается перед стартом загрузки — например, чтобы проверить обязательные
+	 *  поля формы вокруг поля (required у обычного <input> работает только при
+	 *  нативной отправке формы, а кнопка внутри поля её не делает). Непустая
+	 *  строка — сообщение показывается вместо notice, загрузка не начинается. */
+	beforeUpload?: () => string | null | undefined
 }
 
 const DEFAULT_MAX_FILES = 100
-const DEFAULT_MAX_BYTES = 200 * 1024 * 1024
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.heic'])
 
 function extOf(name: string): string {
@@ -111,13 +128,16 @@ export default function FileDropField({
 	endpoint,
 	accept = [],
 	maxFiles = DEFAULT_MAX_FILES,
-	maxBytes = DEFAULT_MAX_BYTES,
+	maxBytes = MAX_UPLOAD_BYTES,
 	multiple = true,
 	extraFields = {},
 	onDone,
 	label,
 	hint,
 	disabled = false,
+	uploadLabel = 'Загрузить',
+	beforeUpload,
+	required = false,
 }: Props) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -200,6 +220,8 @@ export default function FileDropField({
 	function startUpload() {
 		const pending = items.filter((item) => item.status === 'pending')
 		if (!pending.length || uploading) return
+		const validationError = beforeUpload?.()
+		if (validationError) { setNotice(validationError); return }
 		setUploading(true)
 		setProgress(0)
 		setItems((current) => current.map((item) => (item.status === 'pending' ? { ...item, status: 'uploading' } : item)))
@@ -235,7 +257,7 @@ export default function FileDropField({
 			}))
 			setUploading(false)
 			setProgress(100)
-			onDone?.({ ok, status: xhr.status, raw, uploadedCount, failedCount })
+			onDone?.({ ok, status: xhr.status, raw, uploadedCount, failedCount, responseUrl: xhr.responseURL || undefined })
 			xhrRef.current = null
 		}
 		xhr.onerror = () => {
@@ -264,7 +286,7 @@ export default function FileDropField({
 				onDragLeave={() => setDragging(false)}
 				onDrop={onDrop}
 			>
-				<input ref={fileInputRef} type="file" name="files" multiple={multiple} accept={acceptAttr} disabled={disabled} className="sr-only" onChange={onInputChange} />
+				<input ref={fileInputRef} type="file" name="files" multiple={multiple} accept={acceptAttr} required={required} disabled={disabled} className="sr-only" onChange={onInputChange} />
 				<div className="grid h-10 w-10 place-items-center rounded-tight bg-brand-soft text-brand-ink transition-transform duration-200 group-hover:-translate-y-0.5"><Icon icon={Upload} size={18} /></div>
 				<div className="text-sm font-bold text-ink">Перетащите файлы, нажмите или вставьте (Ctrl+V)</div>
 				{accept.length > 0 && <div className="text-xs text-muted">{accept.map((ext) => ext.replace('.', '').toUpperCase()).join(', ')} · до {formatBytes(maxBytes)} на файл</div>}
@@ -294,7 +316,7 @@ export default function FileDropField({
 					{!uploading ? (
 						<>
 							<button type="button" onClick={startUpload} disabled={disabled || pendingCount === 0} className="brand-gradient inline-flex h-9 items-center justify-center rounded-control px-4 text-xs font-bold text-white disabled:opacity-50">
-								{pendingCount > 0 ? `Загрузить (${pendingCount})` : 'Загружено'}
+								{pendingCount > 0 ? `${uploadLabel} (${pendingCount})` : 'Загружено'}
 							</button>
 							<button type="button" onClick={clearAll} disabled={disabled} className="inline-flex h-9 items-center justify-center rounded-control border border-line bg-surface px-3 text-xs font-semibold text-muted transition hover:border-danger/35 hover:text-danger disabled:opacity-50">
 								Очистить всё
