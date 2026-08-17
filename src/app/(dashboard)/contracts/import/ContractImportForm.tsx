@@ -4,14 +4,26 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, Field, inputClass, ProgressBar, selectClass } from '@/components/ui'
 import ContractorTypeFields from '@/components/ContractorTypeFields'
+import { collectEntries, readEntriesFromDataTransfer } from '@/lib/file-system-entries'
 import { formatBytes } from '@/lib/format'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-constants'
 import type { FolderParseReport, ParsedContract } from '@/lib/contract-parser'
 
 type Mode = 'file' | 'folder' | 'attach'
+/** file + путь внутри выбранной папки. Не берём file.webkitRelativePath —
+ *  браузер выставляет его только для файлов из <input webkitdirectory>,
+ *  а не для тех, что пришли через drag&drop (задача: подключить drag&drop
+ *  к этой же папочной области — раньше там не было ни одного обработчика,
+ *  несмотря на то что рамка выглядела как настоящая дропзона). */
+type FolderFile = { file: File; relativePath: string }
 
 const MAX_FOLDER_FILES = 1000
 const MAX_FOLDER_BYTES = 750 * 1024 * 1024
+// Общий потолок на обход перетащенной папки — защита от случайно
+// перетащенной гигантской директории. Чуть щедрее MAX_FOLDER_FILES, чтобы
+// усечение до реального лимита с понятным сообщением происходило ниже
+// (folderHasLimitIssue), а не тихо на середине обхода.
+const MAX_TRAVERSED_ENTRIES = MAX_FOLDER_FILES + 100
 // Режим "Один файл" — это ОСНОВНОЙ читаемый документ договора, не архив и не
 // чертёж (для них — "Новый договор"/папка). Единственный источник для accept
 // у input'а и для реальной проверки ниже — раньше accept был только у
@@ -21,9 +33,9 @@ const MAX_FOLDER_BYTES = 750 * 1024 * 1024
 // получить 400 с сервера — задача найдена по жалобе "0% минуту, потом бабах".
 const SINGLE_FILE_EXTENSIONS = ['.doc', '.docx', '.xlsx', '.xls', '.pdf', '.txt', '.csv', '.jpg', '.jpeg', '.png']
 
-function chooseMainFile(files: File[]) {
-	const parsable = files.filter((file) => /\.(doc|docx|xlsx?|pdf|txt|csv|png|jpe?g)$/i.test(file.name))
-	return parsable.find((file) => /договор|контракт/i.test(file.name)) ?? parsable[0] ?? files[0]
+function chooseMainFile(files: FolderFile[]) {
+	const parsable = files.filter(({ file }) => /\.(doc|docx|xlsx?|pdf|txt|csv|png|jpe?g)$/i.test(file.name))
+	return (parsable.find(({ file }) => /договор|контракт/i.test(file.name)) ?? parsable[0] ?? files[0])?.file
 }
 
 /**
@@ -61,11 +73,13 @@ export default function ContractImportForm() {
 	const router = useRouter()
 	const formRef = useRef<HTMLFormElement>(null)
 	const [mode, setMode] = useState<Mode>('folder')
-	const [folderFiles, setFolderFiles] = useState<File[]>([])
+	const [folderFiles, setFolderFiles] = useState<FolderFile[]>([])
 	const [parsed, setParsed] = useState<ParsedContract | null>(null)
 	const [folderReport, setFolderReport] = useState<FolderParseReport | null>(null)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
+	const [dragging, setDragging] = useState(false)
+	const [reading, setReading] = useState(false)
 	const [uploadPercent, setUploadPercent] = useState(0)
 	const [uploaded, setUploaded] = useState(false)
 
@@ -106,16 +120,48 @@ export default function ContractImportForm() {
 		setError('')
 	}
 
+	function acceptFolderFiles(files: FolderFile[]) {
+		setFolderFiles(files)
+		setParsed(null); setFolderReport(null); setError('')
+	}
+
+	// Область "Выбрать папку" визуально выглядела как настоящая дропзона
+	// (пунктирная рамка, как у FileDropField), но drag&drop сюда не был
+	// подключён вообще — перетаскивание либо ничего не делало, либо браузер
+	// пытался открыть папку как обычную навигацию. Тот же приём обхода папки,
+	// что и в FileDropField (задача A1), теперь общий модуль
+	// src/lib/file-system-entries.ts.
+	async function onFolderDrop(event: React.DragEvent<HTMLLabelElement>) {
+		event.preventDefault()
+		setDragging(false)
+		if (reading) return
+		const entries = readEntriesFromDataTransfer(event.dataTransfer.items)
+		if (entries) {
+			setReading(true)
+			try {
+				const collected = await collectEntries(entries, MAX_TRAVERSED_ENTRIES)
+				acceptFolderFiles(collected.map(({ file, relativePath }) => ({ file, relativePath })))
+			} finally {
+				setReading(false)
+			}
+			return
+		}
+		// Браузер не поддерживает entries API или перетащили не файлы/папку из
+		// проводника (например, содержимое другой вкладки) — плоский список
+		// без раскрытия структуры, как максимум, на который тут можно рассчитывать.
+		acceptFolderFiles(Array.from(event.dataTransfer.files).map((file) => ({ file, relativePath: file.name })))
+	}
+
 	function payload(form: HTMLFormElement) {
 		const data = new FormData(form)
 		if (mode === 'folder' || mode === 'attach') {
-			const main = folderReport ? folderFiles.find((item) => (item.webkitRelativePath || item.name) === folderReport.primaryFile) ?? chooseMainFile(folderFiles) : chooseMainFile(folderFiles)
+			const main = folderReport ? folderFiles.find((item) => item.relativePath === folderReport.primaryFile)?.file ?? chooseMainFile(folderFiles) : chooseMainFile(folderFiles)
 			data.delete('file')
 			if (mode === 'folder' && main) data.append('file', main, main.name)
 			if (mode === 'attach') data.set('operation', 'attach')
-			for (const file of folderFiles) {
+			for (const { file, relativePath } of folderFiles) {
 				data.append('files', file, file.name)
-				data.append('relativePaths', file.webkitRelativePath || file.name)
+				data.append('relativePaths', relativePath)
 			}
 		}
 		return data
@@ -153,7 +199,7 @@ export default function ContractImportForm() {
 	}
 
 	const isFolder = mode === 'folder' || mode === 'attach'
-	const folderTotalBytes = folderFiles.reduce((total, file) => total + file.size, 0)
+	const folderTotalBytes = folderFiles.reduce((total, { file }) => total + file.size, 0)
 	const folderHasLimitIssue = folderFiles.length > MAX_FOLDER_FILES || folderTotalBytes > MAX_FOLDER_BYTES
 	return <form ref={formRef} onSubmit={create} className="grid gap-4 xl:grid-cols-[420px_1fr]">
 		<Card className="h-fit p-5">
@@ -165,10 +211,16 @@ export default function ContractImportForm() {
 			</div>
 			{!isFolder ? <><div className="mt-[14px] text-sm leading-5 text-muted">Загрузите основной договор в DOC, DOCX, XLSX, PDF, TXT, CSV или скан JPG/PNG.</div><input name="file" type="file" required accept={SINGLE_FILE_EXTENSIONS.join(',')} onChange={onSingleFileChange} className="mt-[14px] block w-full rounded-control border border-dashed border-line bg-raised p-3.5 text-sm" /></> : <>
 				<div className="mt-[14px] rounded-control border border-brand/20 bg-brand/5 p-3 text-sm leading-5 text-muted">{mode === 'attach' ? 'Положите в папку документы с номером договора в названии: «765 — смета.xlsx», «765 — ДС №1.docx», «765 — КМ.dwg». Система найдёт договор и разложит файлы сама.' : 'Выберите папку нового договора. Система найдёт основной файл, распознает реквизиты и распределит остальные документы.'}</div>
-				<label className="group mt-[14px] flex min-h-[112px] cursor-pointer items-center gap-3 rounded-[12px] border-2 border-dashed border-line bg-raised/45 px-4 py-4 transition-all duration-200 hover:border-brand/50 hover:bg-brand/5 hover:shadow-[0_10px_26px_rgba(93,63,210,.08)]">
-					<input ref={(element) => { if (element) { element.setAttribute('webkitdirectory', ''); element.setAttribute('directory', '') } }} type="file" multiple className="sr-only" onChange={(event) => { setFolderFiles(Array.from(event.target.files ?? [])); setParsed(null); setFolderReport(null); setError('') }} />
-					<span className="grid h-11 w-11 flex-none place-items-center rounded-xl bg-brand-soft text-brand-ink transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-105"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" /><path d="M12 9v6m0-6-2 2m2-2 2 2" /></svg></span>
-					<span className="min-w-0"><b className="block text-base text-ink">{mode === 'attach' ? 'Выбрать папку для прикрепления' : 'Выбрать папку нового договора'}</b><span className="mt-1 block text-xs leading-4 text-muted">До {MAX_FOLDER_FILES} файлов и 750 МБ. Структура папок и названия файлов сохраняются для автоматического распределения.</span><span className="mt-2 inline-flex rounded-md bg-surface px-2 py-1 text-xs font-semibold text-brand-ink shadow-sm">Открыть проводник →</span></span>
+				<label
+					className={`group mt-[14px] flex min-h-[112px] items-center gap-3 rounded-[12px] border-2 border-dashed px-4 py-4 transition-all duration-200 ${reading ? 'cursor-wait opacity-70' : 'cursor-pointer'} ${dragging ? 'scale-[1.01] border-brand bg-brand/10 shadow-[0_10px_26px_rgba(93,63,210,.08)]' : 'border-line bg-raised/45 hover:border-brand/50 hover:bg-brand/5 hover:shadow-[0_10px_26px_rgba(93,63,210,.08)]'}`}
+					onDragEnter={(event) => { event.preventDefault(); if (!reading) setDragging(true) }}
+					onDragOver={(event) => event.preventDefault()}
+					onDragLeave={() => setDragging(false)}
+					onDrop={onFolderDrop}
+				>
+					<input ref={(element) => { if (element) { element.setAttribute('webkitdirectory', ''); element.setAttribute('directory', '') } }} type="file" multiple disabled={reading} className="sr-only" onChange={(event) => acceptFolderFiles(Array.from(event.target.files ?? []).map((file) => ({ file, relativePath: file.webkitRelativePath || file.name })))} />
+					<span className="grid h-11 w-11 flex-none place-items-center rounded-xl bg-brand-soft text-brand-ink transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-105">{reading ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9" strokeLinecap="round" /></svg> : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" /><path d="M12 9v6m0-6-2 2m2-2 2 2" /></svg>}</span>
+					<span className="min-w-0"><b className="block text-base text-ink">{reading ? 'Читаю папку…' : mode === 'attach' ? 'Перетащите или выберите папку для прикрепления' : 'Перетащите или выберите папку нового договора'}</b><span className="mt-1 block text-xs leading-4 text-muted">До {MAX_FOLDER_FILES} файлов и 750 МБ. Структура папок и названия файлов сохраняются для автоматического распределения.</span>{!reading && <span className="mt-2 inline-flex rounded-md bg-surface px-2 py-1 text-xs font-semibold text-brand-ink shadow-sm">Открыть проводник →</span>}</span>
 				</label>
 				{folderFiles.length > 0 && <div className="mt-[10px] rounded-tight bg-ok-bg px-2.5 py-2 text-sm font-medium text-ok">Выбрано файлов: {folderFiles.length} из 1000<br/><span className="font-normal">{mode === 'attach' ? 'Автопоиск номера по названиям файлов' : `Предварительный основной: ${chooseMainFile(folderFiles)?.name}`}</span></div>}
 			</>}

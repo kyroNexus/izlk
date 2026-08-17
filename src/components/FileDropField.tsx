@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, Archive, Camera, CheckCircle2, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Ruler, Upload, X } from 'lucide-react'
 import Icon from '@/components/Icon'
 import { ProgressBar } from '@/components/ui'
+import { collectEntries, readEntriesFromDataTransfer } from '@/lib/file-system-entries'
 import { formatBytes } from '@/lib/format'
 import { MAX_UPLOAD_BYTES } from '@/lib/upload-constants'
 
@@ -109,40 +110,6 @@ function extOf(name: string): string {
 
 function randomId(): string {
 	return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)
-}
-
-function readDirectoryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
-	return new Promise((resolve, reject) => reader.readEntries(resolve, reject))
-}
-
-/**
- * Рекурсивно обходит перетащенную папку через File and Directory Entries API
- * (webkitGetAsEntry — де-факто стандарт во всех современных браузерах, не
- * только на движке WebKit). readEntries отдаёт записи пачками не больше
- * ~100 за вызов, поэтому его нужно звать в цикле, пока не вернётся пусто.
- */
-async function collectEntry(entry: FileSystemEntry, basePath: string, budget: { left: number }): Promise<IncomingFile[]> {
-	if (budget.left <= 0) return []
-	if (entry.isFile) {
-		budget.left -= 1
-		const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject))
-		return [{ file, relativePath: `${basePath}${entry.name}` }]
-	}
-	if (!entry.isDirectory) return []
-	const reader = (entry as FileSystemDirectoryEntry).createReader()
-	const children: FileSystemEntry[] = []
-	for (;;) {
-		const batch = await readDirectoryBatch(reader)
-		if (!batch.length) break
-		children.push(...batch)
-		if (children.length >= budget.left) break
-	}
-	const collected: IncomingFile[] = []
-	for (const child of children) {
-		if (budget.left <= 0) break
-		collected.push(...(await collectEntry(child, `${basePath}${entry.name}/`, budget)))
-	}
-	return collected
 }
 
 function ExtIcon({ fileName }: { fileName: string }) {
@@ -268,26 +235,15 @@ export default function FileDropField({
 		event.preventDefault()
 		setDragging(false)
 		if (disabled || reading) return
-		const items = event.dataTransfer.items
-		const canUseEntries = items && items.length > 0 && typeof items[0]?.webkitGetAsEntry === 'function'
-		if (canUseEntries) {
-			// webkitGetAsEntry() нужно вызвать синхронно, до первого await —
-			// иначе браузер успевает очистить drag data store, и обход вернёт
-			// пусто. Сам обход (entry.file()/readEntries()) можно делать асинхронно.
-			const entries = Array.from(items)
-				.map((item) => item.webkitGetAsEntry())
-				.filter((entry): entry is FileSystemEntry => Boolean(entry))
-			if (entries.length) {
-				setReading(true)
-				try {
-					const budget = { left: MAX_TRAVERSED_ENTRIES }
-					const collected = (await Promise.all(entries.map((entry) => collectEntry(entry, '', budget)))).flat()
-					addFiles(collected)
-				} finally {
-					setReading(false)
-				}
-				return
+		const entries = readEntriesFromDataTransfer(event.dataTransfer.items)
+		if (entries) {
+			setReading(true)
+			try {
+				addFiles(await collectEntries(entries, MAX_TRAVERSED_ENTRIES))
+			} finally {
+				setReading(false)
 			}
+			return
 		}
 		addFiles(Array.from(event.dataTransfer.files).map((file) => ({ file })))
 	}
