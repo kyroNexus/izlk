@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, Field, inputClass, selectClass } from '@/components/ui'
+import { Card, Field, inputClass, ProgressBar, selectClass } from '@/components/ui'
 import ContractorTypeFields from '@/components/ContractorTypeFields'
 import type { FolderParseReport, ParsedContract } from '@/lib/contract-parser'
 
@@ -16,6 +16,37 @@ function chooseMainFile(files: File[]) {
 	return parsable.find((file) => /договор|контракт/i.test(file.name)) ?? parsable[0] ?? files[0]
 }
 
+/**
+ * И "Распознать папку", и "Создать договор" отправляют весь комплект файлов
+ * (payload() ниже включает все folderFiles в обоих случаях) — на большой
+ * папке это ощутимая по времени сетевая передача, а fetch() не даёт следить
+ * за её прогрессом (нет upload.onprogress). XHR — тот же приём, что уже
+ * используется в FileDropField (задача A1). Отдельно от процента показываем
+ * фазу "Обрабатываю на сервере…" после того как тело запроса ушло целиком —
+ * реального прогресса разбора на сервере без очереди (задача D1, не сделана)
+ * нет, но человек хотя бы видит, что дело не в зависшей загрузке.
+ */
+function submitWithProgress(url: string, body: FormData, onProgress: (percent: number) => void, onUploaded: () => void): Promise<any> {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest()
+		xhr.open('POST', url)
+		xhr.setRequestHeader('Accept', 'application/json')
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
+		}
+		xhr.upload.onload = () => { onProgress(100); onUploaded() }
+		xhr.onload = () => {
+			let data: unknown
+			try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {} }
+			catch { reject(new Error('Распознавание не завершилось: сервер вернул неполный ответ. Повторите попытку — повреждённые файлы будут пропущены, остальные сохранятся.')); return }
+			if (xhr.status < 200 || xhr.status >= 300) { reject(new Error((data as { error?: string })?.error || 'Запрос не выполнен')); return }
+			resolve(data)
+		}
+		xhr.onerror = () => reject(new Error('Сбой сети — повторите попытку'))
+		xhr.send(body)
+	})
+}
+
 export default function ContractImportForm() {
 	const router = useRouter()
 	const formRef = useRef<HTMLFormElement>(null)
@@ -25,6 +56,15 @@ export default function ContractImportForm() {
 	const [folderReport, setFolderReport] = useState<FolderParseReport | null>(null)
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState('')
+	const [uploadPercent, setUploadPercent] = useState(0)
+	const [uploaded, setUploaded] = useState(false)
+
+	// Общий текст для кнопки, пока идёт запрос: сначала реальный процент
+	// передачи файлов, после — что сервер уже читает/сохраняет присланное.
+	function busyLabel(base: string) {
+		if (!busy) return base
+		return uploaded ? 'Обрабатываю на сервере…' : `Загружаю: ${uploadPercent}%`
+	}
 
 	function fillManually() {
 		setParsed({ fileName: 'manual-entry', contractNumber: '', contractDate: '', amount: '', currency: 'RUB', contractorName: '', contractorType: '', inn: '', cipher: '', objectAddress: '', confidence: 0, foundFields: [], warnings: ['Автораспознавание пропущено. Заполните реквизиты по документу вручную и сохраните файл.'], preview: '' })
@@ -54,16 +94,11 @@ export default function ContractImportForm() {
 		if (mode === 'folder' && !folderFiles.length) { setError('Выберите папку договора'); return }
 		if (folderHasLimitIssue && folderFiles.length > MAX_FOLDER_FILES) { setError(`В одной папке можно проверить до ${MAX_FOLDER_FILES} файлов. Для большей базы используйте Inbox на сервере.`); return }
 		if (folderTotalBytes > MAX_FOLDER_BYTES) { setError('Папка больше 750 МБ. Для такого архива используйте Inbox на сервере.'); return }
-		setBusy(true); setError(''); setParsed(null); setFolderReport(null)
+		setBusy(true); setError(''); setParsed(null); setFolderReport(null); setUploadPercent(0); setUploaded(false)
 		try {
 			const data = payload(form)
 			if (mode !== 'folder') for (const key of ['files', 'relativePaths']) data.delete(key)
-			const response = await fetch('/api/contracts/parse', { method: 'POST', body: data })
-			const responseText = await response.text()
-			let result: Partial<ParsedContract> & { error?: string; parsed?: ParsedContract; folder?: FolderParseReport }
-			try { result = responseText ? JSON.parse(responseText) : {} }
-			catch { throw new Error('Распознавание не завершилось: сервер вернул неполный ответ. Повторите попытку — повреждённые файлы будут пропущены, остальные сохранятся.') }
-			if (!response.ok) throw new Error(result.error || 'Не удалось распознать основной договор')
+			const result = await submitWithProgress('/api/contracts/parse', data, setUploadPercent, () => setUploaded(true)) as Partial<ParsedContract> & { error?: string; parsed?: ParsedContract; folder?: FolderParseReport }
 			setParsed(result.parsed ?? result as ParsedContract)
 			setFolderReport(result.folder ?? null)
 		} catch (cause) { setError(cause instanceof Error ? cause.message : 'Ошибка распознавания') } finally { setBusy(false) }
@@ -73,11 +108,9 @@ export default function ContractImportForm() {
 		event.preventDefault()
 		if (isFolder && folderHasLimitIssue && folderFiles.length > MAX_FOLDER_FILES) { setError(`В одной папке можно загрузить до ${MAX_FOLDER_FILES} файлов.`); return }
 		if (isFolder && folderTotalBytes > MAX_FOLDER_BYTES) { setError('Папка больше 750 МБ. Перенесите её в Inbox на сервере.'); return }
-		setBusy(true); setError('')
+		setBusy(true); setError(''); setUploadPercent(0); setUploaded(false)
 		try {
-			const response = await fetch('/api/contracts/import', { method: 'POST', body: payload(event.currentTarget) })
-			const data = await response.json()
-			if (!response.ok) throw new Error(data.error || 'Не удалось обработать документы')
+			const data = await submitWithProgress('/api/contracts/import', payload(event.currentTarget), setUploadPercent, () => setUploaded(true))
 			const imported = Number(data.importedFiles ?? 0)
 			const skipped = Number(data.skippedFiles ?? 0)
 			const summary = `Загружено файлов: ${imported}${skipped ? `. Пропущено: ${skipped}; причины есть в журнале импорта.` : ''}${data.contractorMatched ? '. Контрагент найден в базе и повторно не создан.' : ''}`
@@ -106,7 +139,8 @@ export default function ContractImportForm() {
 				</label>
 				{folderFiles.length > 0 && <div className="mt-[10px] rounded-tight bg-ok-bg px-2.5 py-2 text-sm font-medium text-ok">Выбрано файлов: {folderFiles.length} из 1000<br/><span className="font-normal">{mode === 'attach' ? 'Автопоиск номера по названиям файлов' : `Предварительный основной: ${chooseMainFile(folderFiles)?.name}`}</span></div>}
 			</>}
-			{mode !== 'attach' && <button type="button" disabled={busy} onClick={parse} className="brand-gradient mt-[12px] h-control w-full rounded-control text-base font-semibold text-white disabled:opacity-60">{busy ? 'Читаю комплект…' : mode === 'folder' ? 'Распознать папку' : 'Распознать реквизиты'}</button>}
+			{mode !== 'attach' && <button type="button" disabled={busy} onClick={parse} className="brand-gradient mt-[12px] h-control w-full rounded-control text-base font-semibold text-white disabled:opacity-60">{busyLabel(mode === 'folder' ? 'Распознать папку' : 'Распознать реквизиты')}</button>}
+			{busy && <div className="mt-2"><ProgressBar percent={uploaded ? 100 : uploadPercent} tone={uploaded ? 'muted' : 'brand'} /></div>}
 			{error && <div className="mt-[12px] rounded-control border border-danger-bd bg-danger-bg p-2.5 text-sm text-danger">{error}</div>}
 			{mode !== 'attach' && !parsed && <button type="button" onClick={fillManually} className="mt-[9px] text-sm font-semibold text-brand hover:underline">Заполнить реквизиты вручную →</button>}
 			{parsed && <div className="mt-[14px] rounded-control border border-line bg-raised p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">Распознано: {parsed.confidence}%</span><span className="text-xs text-muted">{parsed.foundFields.length} полей</span></div><div className="mt-[8px] text-xs leading-5 text-muted">{parsed.foundFields.join(' · ') || 'Поля не найдены'}</div>{parsed.warnings.map((warning) => <div key={warning} className="mt-[5px] text-xs text-warn">• {warning}</div>)}</div>}
@@ -115,14 +149,15 @@ export default function ContractImportForm() {
 
 		<Card className="p-5">
 			<div className="mb-[16px]"><div className="text-md font-semibold">2. {mode === 'attach' ? 'Проверить привязку файлов' : 'Проверить и сохранить'}</div><div className="mt-[4px] text-sm text-muted">{mode === 'attach' ? 'Номер можно оставить пустым: система найдёт его в названиях файлов.' : 'Система заполнила реквизиты из файлов. Перед сохранением их можно поправить.'}</div></div>
-			{mode === 'attach' ? <div className="flex min-h-[300px] flex-col justify-center gap-3.5 rounded-control border border-dashed border-brand/30 bg-brand/5 p-6"><div><div className="text-md font-semibold text-brand-ink">Автопривязка папки</div><p className="mt-2 text-sm leading-5 text-muted">Система проверяет названия, находит существующий договор и присваивает документам типы: смета, ДС, счёт, КМ/КЖ/АР, акты и исполнительная документация. Копии пропускаются.</p></div><Field label="Номер договора, если хотите указать вручную"><input name="targetContractNumber" placeholder="Например, 765 или ТЕСТ-701" className={inputClass} /></Field><button type="submit" disabled={busy || !folderFiles.length} className="brand-gradient h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busy ? 'Распределяю файлы…' : `Прикрепить ${folderFiles.length} файлов автоматически`}</button></div> : !parsed ? <div className="grid min-h-[300px] place-items-center rounded-[12px] border border-dashed border-brand/20 bg-[radial-gradient(circle_at_top,rgba(112,71,232,.08),transparent_55%)] px-6 text-center"><div className="max-w-[360px]"><div className="mx-auto grid h-12 w-12 place-items-center rounded-[14px] bg-brand-soft text-xl text-brand-ink">✦</div><b className="mt-4 block text-base text-ink">Карточка появится здесь</b><p className="mt-2 text-sm leading-5 text-muted">Выберите файл или папку слева, запустите распознавание и проверьте найденные реквизиты перед сохранением.</p><div className="mt-4 grid grid-cols-3 gap-2 text-2xs font-semibold text-muted"><span className="rounded-lg bg-surface/85 px-2 py-2">1. Выбрать</span><span className="rounded-lg bg-surface/85 px-2 py-2">2. Проверить</span><span className="rounded-lg bg-surface/85 px-2 py-2">3. Сохранить</span></div></div></div> : <div className="flex flex-col gap-3.5" key={`${parsed.fileName}-${parsed.confidence}`}>
+			{mode === 'attach' ? <div className="flex min-h-[300px] flex-col justify-center gap-3.5 rounded-control border border-dashed border-brand/30 bg-brand/5 p-6"><div><div className="text-md font-semibold text-brand-ink">Автопривязка папки</div><p className="mt-2 text-sm leading-5 text-muted">Система проверяет названия, находит существующий договор и присваивает документам типы: смета, ДС, счёт, КМ/КЖ/АР, акты и исполнительная документация. Копии пропускаются.</p></div><Field label="Номер договора, если хотите указать вручную"><input name="targetContractNumber" placeholder="Например, 765 или ТЕСТ-701" className={inputClass} /></Field><button type="submit" disabled={busy || !folderFiles.length} className="brand-gradient h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busyLabel(`Прикрепить ${folderFiles.length} файлов автоматически`)}</button>{busy && <ProgressBar percent={uploaded ? 100 : uploadPercent} tone={uploaded ? 'muted' : 'brand'} />}</div> : !parsed ? <div className="grid min-h-[300px] place-items-center rounded-[12px] border border-dashed border-brand/20 bg-[radial-gradient(circle_at_top,rgba(112,71,232,.08),transparent_55%)] px-6 text-center"><div className="max-w-[360px]"><div className="mx-auto grid h-12 w-12 place-items-center rounded-[14px] bg-brand-soft text-xl text-brand-ink">✦</div><b className="mt-4 block text-base text-ink">Карточка появится здесь</b><p className="mt-2 text-sm leading-5 text-muted">Выберите файл или папку слева, запустите распознавание и проверьте найденные реквизиты перед сохранением.</p><div className="mt-4 grid grid-cols-3 gap-2 text-2xs font-semibold text-muted"><span className="rounded-lg bg-surface/85 px-2 py-2">1. Выбрать</span><span className="rounded-lg bg-surface/85 px-2 py-2">2. Проверить</span><span className="rounded-lg bg-surface/85 px-2 py-2">3. Сохранить</span></div></div></div> : <div className="flex flex-col gap-3.5" key={`${parsed.fileName}-${parsed.confidence}`}>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Номер договора" required><input name="contractNumber" required defaultValue={parsed.contractNumber} className={inputClass} /></Field><Field label="Дата договора" required><input name="contractDate" type="date" required defaultValue={parsed.contractDate} className={inputClass} /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-[1fr_120px]"><Field label="Сумма" required><input name="amount" required defaultValue={parsed.amount} className={inputClass} /></Field><Field label="Валюта"><select name="currency" defaultValue={parsed.currency} className={selectClass}><option>RUB</option><option>USD</option><option>EUR</option><option>CNY</option></select></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Контрагент" required><input name="contractorName" defaultValue={parsed.contractorName} className={inputClass} /></Field><Field label="ИНН"><input name="inn" defaultValue={parsed.inn} className={inputClass} inputMode="numeric" /></Field></div>
 				<ContractorTypeFields defaultType={parsed.contractorType || 'LEGAL'} />
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Телефон контрагента"><input name="contractorPhone" defaultValue={parsed.phone} className={inputClass} inputMode="tel" /></Field><Field label="Email контрагента"><input name="contractorEmail" defaultValue={parsed.email} className={inputClass} inputMode="email" /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Шифр"><input name="cipher" defaultValue={parsed.cipher} className={inputClass} /></Field><Field label="Тип договора"><select name="kind" defaultValue="SMR" className={selectClass}><option value="SMR">СМР</option><option value="MK">МК</option><option value="PROJECT">Проектный</option></select></Field></div>
-				<Field label="Адрес объекта"><input name="objectAddress" defaultValue={parsed.objectAddress} className={inputClass} /></Field><button type="submit" disabled={busy} className="brand-gradient mt-[4px] h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busy ? 'Создаю…' : mode === 'folder' ? `Создать договор и загрузить ${folderFiles.length} файлов` : 'Создать договор и прикрепить файл'}</button>
+				<Field label="Адрес объекта"><input name="objectAddress" defaultValue={parsed.objectAddress} className={inputClass} /></Field><button type="submit" disabled={busy} className="brand-gradient mt-[4px] h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busyLabel(mode === 'folder' ? `Создать договор и загрузить ${folderFiles.length} файлов` : 'Создать договор и прикрепить файл')}</button>
+				{busy && <ProgressBar percent={uploaded ? 100 : uploadPercent} tone={uploaded ? 'muted' : 'brand'} />}
 			</div>}
 		</Card>
 	</form>
