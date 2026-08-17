@@ -150,6 +150,19 @@ model Contractor {
   passportIssuedBy   String?
   passportIssuedAt   DateTime?
   passportDeptCode   String?
+  /// Представитель по доверенности — отдельный человек, не сам заказчик.
+  /// Заполняется, только если физ. лицо (type = INDIVIDUAL) в договоре
+  /// действует через представителя; для юр. лиц и для физ. лиц без
+  /// представителя все поля ниже пустые.
+  representativeName                String?
+  representativeSnils               String?
+  representativePassportSeries      String?
+  representativePassportNumber      String?
+  representativePassportIssuedBy    String?
+  representativePassportIssuedAt    DateTime?
+  representativePassportDeptCode    String?
+  representativeProxyNumber         String?
+  representativeProxyDate           DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

@@ -76,6 +76,18 @@ export const contractImportSchema = z.object({
 	passportIssuedBy: z.string().trim().max(300).optional(),
 	passportIssuedAt: z.string().trim().optional(),
 	passportDeptCode: z.string().trim().max(20).optional(),
+	// Представитель по доверенности — необязателен: у физ. лица он может
+	// вообще отсутствовать (заказчик подписывает сам), поэтому в отличие от
+	// snils/passport* выше requireIndividualFields их не требует.
+	representativeName: z.string().trim().max(300).optional(),
+	representativeSnils: z.string().trim().max(20).optional(),
+	representativePassportSeries: z.string().trim().max(10).optional(),
+	representativePassportNumber: z.string().trim().max(20).optional(),
+	representativePassportIssuedBy: z.string().trim().max(300).optional(),
+	representativePassportIssuedAt: z.string().trim().optional(),
+	representativePassportDeptCode: z.string().trim().max(20).optional(),
+	representativeProxyNumber: z.string().trim().max(120).optional(),
+	representativeProxyDate: z.string().trim().optional(),
 }).superRefine((data, context) => {
 	if (!data.contractorName && !data.inn) context.addIssue({ code: 'custom', path: ['contractorName'], message: 'Укажите контрагента или ИНН.' })
 	requireIndividualFields(data, context)
@@ -120,6 +132,16 @@ export const contractorSchema = z
 		passportIssuedBy: z.string().trim().max(300).optional(),
 		passportIssuedAt: z.string().trim().optional(),
 		passportDeptCode: z.string().trim().max(20).optional(),
+		// Представитель по доверенности — необязателен, см. contractImportSchema выше.
+		representativeName: z.string().trim().max(300).optional(),
+		representativeSnils: z.string().trim().max(20).optional(),
+		representativePassportSeries: z.string().trim().max(10).optional(),
+		representativePassportNumber: z.string().trim().max(20).optional(),
+		representativePassportIssuedBy: z.string().trim().max(300).optional(),
+		representativePassportIssuedAt: z.string().trim().optional(),
+		representativePassportDeptCode: z.string().trim().max(20).optional(),
+		representativeProxyNumber: z.string().trim().max(120).optional(),
+		representativeProxyDate: z.string().trim().optional(),
 	})
 	.superRefine(requireIndividualFields)
 

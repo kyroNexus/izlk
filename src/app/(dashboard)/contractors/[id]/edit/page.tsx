@@ -28,7 +28,13 @@ export default async function EditContractorPage({
 
 	const contractor = await prisma.contractor.findFirst({
 		where: { id: contractorId, deletedAt: null },
-		select: { id: true, name: true, aliases: true, type: true, inn: true, address: true, phone: true, email: true, snils: true, passportSeries: true, passportNumber: true, passportIssuedBy: true, passportIssuedAt: true, passportDeptCode: true },
+		select: {
+			id: true, name: true, aliases: true, type: true, inn: true, address: true, phone: true, email: true,
+			snils: true, passportSeries: true, passportNumber: true, passportIssuedBy: true, passportIssuedAt: true, passportDeptCode: true,
+			representativeName: true, representativeSnils: true, representativePassportSeries: true, representativePassportNumber: true,
+			representativePassportIssuedBy: true, representativePassportIssuedAt: true, representativePassportDeptCode: true,
+			representativeProxyNumber: true, representativeProxyDate: true,
+		},
 	})
 
 	if (!contractor) redirect('/contractors')
@@ -52,6 +58,15 @@ export default async function EditContractorPage({
 			passportIssuedBy: String(formData.get('passportIssuedBy') ?? ''),
 			passportIssuedAt: String(formData.get('passportIssuedAt') ?? ''),
 			passportDeptCode: String(formData.get('passportDeptCode') ?? ''),
+			representativeName: String(formData.get('representativeName') ?? ''),
+			representativeSnils: String(formData.get('representativeSnils') ?? ''),
+			representativePassportSeries: String(formData.get('representativePassportSeries') ?? ''),
+			representativePassportNumber: String(formData.get('representativePassportNumber') ?? ''),
+			representativePassportIssuedBy: String(formData.get('representativePassportIssuedBy') ?? ''),
+			representativePassportIssuedAt: String(formData.get('representativePassportIssuedAt') ?? ''),
+			representativePassportDeptCode: String(formData.get('representativePassportDeptCode') ?? ''),
+			representativeProxyNumber: String(formData.get('representativeProxyNumber') ?? ''),
+			representativeProxyDate: String(formData.get('representativeProxyDate') ?? ''),
 		})
 		if (!parsed.success) {
 			redirect(
@@ -91,6 +106,15 @@ export default async function EditContractorPage({
 					passportIssuedBy: orNull(data.passportIssuedBy),
 					passportIssuedAt: data.passportIssuedAt ? new Date(`${data.passportIssuedAt}T12:00:00`) : null,
 					passportDeptCode: orNull(data.passportDeptCode),
+					representativeName: orNull(data.representativeName),
+					representativeSnils: orNull(data.representativeSnils),
+					representativePassportSeries: orNull(data.representativePassportSeries),
+					representativePassportNumber: orNull(data.representativePassportNumber),
+					representativePassportIssuedBy: orNull(data.representativePassportIssuedBy),
+					representativePassportIssuedAt: data.representativePassportIssuedAt ? new Date(`${data.representativePassportIssuedAt}T12:00:00`) : null,
+					representativePassportDeptCode: orNull(data.representativePassportDeptCode),
+					representativeProxyNumber: orNull(data.representativeProxyNumber),
+					representativeProxyDate: data.representativeProxyDate ? new Date(`${data.representativeProxyDate}T12:00:00`) : null,
 				},
 			})
 		} catch (e) {
@@ -146,6 +170,15 @@ export default async function EditContractorPage({
 								passportIssuedBy: contractor.passportIssuedBy,
 								passportIssuedAt: contractor.passportIssuedAt ? contractor.passportIssuedAt.toISOString().slice(0, 10) : null,
 								passportDeptCode: contractor.passportDeptCode,
+								representativeName: contractor.representativeName,
+								representativeSnils: contractor.representativeSnils,
+								representativePassportSeries: contractor.representativePassportSeries,
+								representativePassportNumber: contractor.representativePassportNumber,
+								representativePassportIssuedBy: contractor.representativePassportIssuedBy,
+								representativePassportIssuedAt: contractor.representativePassportIssuedAt ? contractor.representativePassportIssuedAt.toISOString().slice(0, 10) : null,
+								representativePassportDeptCode: contractor.representativePassportDeptCode,
+								representativeProxyNumber: contractor.representativeProxyNumber,
+								representativeProxyDate: contractor.representativeProxyDate ? contractor.representativeProxyDate.toISOString().slice(0, 10) : null,
 							}}
 						/>
 						<div>

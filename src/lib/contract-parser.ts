@@ -76,6 +76,32 @@ export type ParsedContract = {
 	email?: string
 	cipher: string
 	objectAddress: string
+	/** Реквизиты физ. лица — заказчика. Ищутся только когда сам заказчик
+	 *  назван формулой "Гражданин РФ" (contractorType === 'INDIVIDUAL');
+	 *  для юр. лиц всегда пустые. */
+	snils: string
+	passportSeries: string
+	passportNumber: string
+	passportIssuedBy: string
+	passportIssuedAt: string
+	passportDeptCode: string
+	/** Представитель по доверенности — отдельный человек, не сам заказчик.
+	 *  Заполняется, только если в клаузуле заказчика после его формулы
+	 *  "Гражданин РФ ..." встречается упоминание доверенности. Реквизиты
+	 *  ищутся в тексте ПОСЛЕ этого упоминания — не тем же способом, что и
+	 *  реквизиты заказчика (та же логика, что уже отделяет Заказчика от
+	 *  Подрядчика по позиции в тексте, а не пытается угадывать регэкспом,
+	 *  чей это паспорт: спутать паспортные данные двух разных людей —
+	 *  испорченные юридически значимые данные, не опечатка). */
+	representativeName: string
+	representativeSnils: string
+	representativePassportSeries: string
+	representativePassportNumber: string
+	representativePassportIssuedBy: string
+	representativePassportIssuedAt: string
+	representativePassportDeptCode: string
+	representativeProxyNumber: string
+	representativeProxyDate: string
 	confidence: number
 	foundFields: string[]
 	warnings: string[]
@@ -184,6 +210,30 @@ export function detectContractorType(rawText: string): 'LEGAL' | 'INDIVIDUAL' | 
 	return null
 }
 
+type PersonIdentity = { snils: string; passportSeries: string; passportNumber: string; passportIssuedBy: string; passportIssuedAt: string; passportDeptCode: string }
+const BLANK_IDENTITY: PersonIdentity = { snils: '', passportSeries: '', passportNumber: '', passportIssuedBy: '', passportIssuedAt: '', passportDeptCode: '' }
+
+/**
+ * СНИЛС и паспорт по формуле «... паспорт серия SSSS № NNNNNN, выдан ...,
+ * ДД.ММ.ГГГГ, код подразделения NNN-NNN ..., СНИЛС NNN-NNN-NNN NN». Ищет
+ * только внутри переданного фрагмента текста — вызывающий код сам решает,
+ * какой это фрагмент (сам заказчик или его представитель по доверенности),
+ * а не пытается угадать регэкспом, чей это паспорт, когда в тексте названы
+ * два разных человека.
+ */
+function extractPersonIdentity(segment: string): PersonIdentity {
+	const passportMatch = segment.match(/паспорт\s*(?:серия)?\s*[:№]?\s*(\d{2}\s?\d{2})\s*(?:№|номер)?\s*(\d{6})/iu)
+	const deptCodeRaw = firstMatch(segment, [/код\s+подразделения\s*[:№]?\s*(\d{3}[-\s]?\d{3})/iu])
+	return {
+		snils: firstMatch(segment, [/снилс\s*[:№]?\s*(\d{3}[-\s]?\d{3}[-\s]?\d{3}[-\s]?\d{2})/iu]).replace(/\s+/g, ' '),
+		passportSeries: passportMatch?.[1] ? cleanField(passportMatch[1]).replace(/\s+/g, ' ') : '',
+		passportNumber: passportMatch?.[2] ?? '',
+		passportIssuedBy: firstMatch(segment, [/выдан[а-яё]*\s+([^\n,;]{5,150}?)(?=\s*(?:\d{1,2}[.\/]\d{1,2}[.\/]\d{2,4}|,|;|код\s+подразделения|$))/iu]),
+		passportIssuedAt: isoDate(firstMatch(segment, [/выдан[а-яё]*[^\n]{0,150}?(\d{1,2}[.\/]\d{1,2}[.\/]\d{2,4})/iu])),
+		passportDeptCode: deptCodeRaw.replace(/\s+/g, ''),
+	}
+}
+
 function categorize(fileName: string, relativePath?: string) {
 	const searchable = `${relativePath ?? ''} ${fileName}`.toLocaleLowerCase('ru-RU')
 	return FOLDER_CATEGORIES.find((category) => category.expression.test(searchable)) ?? { key: 'other', label: 'Прочие файлы', expression: /./ }
@@ -290,9 +340,50 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	// имя доставалось пустым. ФИО сразу после этой формулы, до запятой (дальше
 	// в тексте — дата рождения) — это сама сторона договора, а не представитель
 	// по доверенности (тот называется дальше, после «в лице»).
-	const individualCustomerName = firstMatch(textBeforeContractorParty, [
-		/гражданин(?:ин|ка)?\s+(?:рф|российской\s+федерации)\s+([А-ЯЁ][а-яёА-ЯЁ-]+\s+[А-ЯЁ][а-яёА-ЯЁ-]+(?:\s+[А-ЯЁ][а-яёА-ЯЁ-]+)?)(?=\s*,)/iu,
-	])
+	const individualMatch = textBeforeContractorParty.match(/гражданин(?:ин|ка)?\s+(?:рф|российской\s+федерации)\s+([А-ЯЁ][а-яёА-ЯЁ-]+\s+[А-ЯЁ][а-яёА-ЯЁ-]+(?:\s+[А-ЯЁ][а-яёА-ЯЁ-]+)?)(?=\s*,)/iu)
+	const individualCustomerName = individualMatch?.[1] ? cleanField(individualMatch[1]) : ''
+	// Здесь же, а не только по строке "снилс"/"гражданин" из detectContractorType
+	// выше: contractorType уже посчитан по всему документу, переиспользуем его,
+	// а не гадаем заново.
+	const contractorType = detectContractorType(text)
+	// СНИЛС/паспорт — только когда сам заказчик назван формулой «Гражданин РФ»
+	// (contractorType === INDIVIDUAL): для юр. лица «в лице генерального
+	// директора ..., действующего на основании доверенности» — обычная и
+	// безобидная формулировка, там нет второго человека с личным документом,
+	// который можно с кем-то перепутать.
+	let identity: PersonIdentity = BLANK_IDENTITY
+	let representativeName = ''
+	let representativeIdentity: PersonIdentity = BLANK_IDENTITY
+	let representativeProxyNumber = ''
+	let representativeProxyDate = ''
+	if (contractorType === 'INDIVIDUAL') {
+		const clause = textBeforeContractorParty.slice(individualMatch?.index ?? 0)
+		// Представитель по доверенности называется дальше в этой же клаузуле,
+		// после самого заказчика, по формуле «..., в лице ФИО, действующ...
+		// на основании доверенности № ... от ДД.ММ.ГГГГ, паспорт ...». Делим
+		// ИМЕННО по «в лице», а не по слову «доверенности»: паспорт
+		// представителя в тексте обычно стоит ПЕРЕД словом «доверенности»
+		// (сначала называют, кто действует, потом — на каком основании) —
+		// раздели мы по «доверенности», паспорт представителя достался бы
+		// заказчику. Реквизиты заказчика ищем ТОЛЬКО до «в лице», реквизиты
+		// представителя — ТОЛЬКО после: та же логика, что уже отделяет
+		// Заказчика от Подрядчика по позиции в тексте, а не пытается угадать
+		// регэкспом, чей это паспорт — спутать паспортные данные двух разных
+		// людей — испорченные юридически значимые данные, не опечатка.
+		const proxyIndex = clause.search(/в\s+лице\s+(?:представител[яь]\s+)?[А-ЯЁ]/iu)
+		const customerSegment = proxyIndex === -1 ? clause : clause.slice(0, proxyIndex)
+		identity = extractPersonIdentity(customerSegment)
+		if (proxyIndex !== -1) {
+			const representativeSegment = clause.slice(proxyIndex)
+			representativeIdentity = extractPersonIdentity(representativeSegment)
+			representativeName = firstMatch(representativeSegment, [
+				/в\s+лице\s+(?:представител[яь]\s+)?([А-ЯЁ][а-яёА-ЯЁ-]+\s+[А-ЯЁ][а-яёА-ЯЁ-]+(?:\s+[А-ЯЁ][а-яёА-ЯЁ-]+)?)/iu,
+			])
+			const proxyMatch = representativeSegment.match(/довереннос[а-яё]*\s*(?:№|N|номер)?\s*[:]?\s*([0-9A-ZА-ЯЁ][0-9A-ZА-ЯЁ .\/-]{0,40}?)\s*от\s*[«"]?\s*(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})/iu)
+			representativeProxyNumber = proxyMatch?.[1] ? cleanField(proxyMatch[1]) : ''
+			representativeProxyDate = proxyMatch?.[2] ? isoDate(proxyMatch[2]) : ''
+		}
+	}
 	const contractorName = [
 		firstMatch(textBeforeContractorParty, [
 		/(?:заказчик|покупатель|контрагент)\s*[:—-]\s*([^\n]{3,140})/iu,
@@ -309,11 +400,10 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 		/(?:адрес\s+(?:объекта|строительства)|место\s+выполнения\s+работ|по\s+адресу)\s*[:—-]?\s*([^\n]{5,220})/iu,
 	])
 	const currency: ParsedContract['currency'] = /(?:USD|доллар)/iu.test(text) ? 'USD' : /(?:EUR|евро)/iu.test(text) ? 'EUR' : /(?:CNY|юан)/iu.test(text) ? 'CNY' : 'RUB'
-	// Не участвует в values/confidence — как и currency ниже, это отдельный,
-	// не входящий в "обязательные поля" признак: раньше его не было вовсе,
-	// и менять формулу уверенности распознавания заодно не стоит (проверяется
-	// точным числом в scripts/test-contract-parser.ts).
-	const contractorType = detectContractorType(text)
+	// contractorType/identity/representative* не участвуют в values/confidence —
+	// как и currency, это отдельные, не входящие в "обязательные поля" признаки:
+	// раньше их не было вовсе, и менять формулу уверенности распознавания
+	// заодно не стоит (проверяется точным числом в scripts/test-contract-parser.ts).
 	const values = { contractNumber, contractDate: isoDate(dateRaw), amount: normalizeAmount(amountRaw), contractorName, inn, phone, email, cipher, objectAddress }
 	const labels: Record<keyof typeof values, string> = { contractNumber: 'номер договора', contractDate: 'дата', amount: 'сумма', contractorName: 'контрагент', inn: 'ИНН', phone: 'телефон', email: 'email', cipher: 'шифр', objectAddress: 'адрес объекта' }
 	const foundFields = (Object.keys(values) as (keyof typeof values)[]).filter((key) => values[key]).map((key) => labels[key])
@@ -324,8 +414,25 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	if (!values.amount) warnings.push('Не найдена сумма договора')
 	if (!values.contractorName && !values.inn) warnings.push('Не найден контрагент или ИНН')
 	if (compact(text).length < 40) warnings.push('В файле почти нет текста: вероятно, это скан без текстового слоя. Его можно приложить, но реквизиты нужно заполнить вручную.')
+	// СНИЛС/паспорт — юридически значимые данные: спутать их с чужими — не
+	// опечатка, которую легко заметить. Автораспознанные значения всегда
+	// просим перепроверить перед сохранением, а не подставляем молча.
+	if (identity.snils || identity.passportNumber) warnings.push('СНИЛС/паспорт заказчика распознаны автоматически — сверьте с документом перед сохранением.')
+	if (representativeName || representativeIdentity.snils || representativeIdentity.passportNumber) warnings.push('В договоре упомянут представитель по доверенности — сверьте его данные и саму доверенность перед сохранением.')
 	const confidence = Math.min(100, Math.round((essential.filter(Boolean).length / essential.length) * 80 + (foundFields.length / Object.keys(values).length) * 20))
-	return { fileName, ...values, contractorType: contractorType ?? '', currency, confidence, foundFields, warnings, preview: compact(text).slice(0, 1200) }
+	return {
+		fileName, ...values, contractorType: contractorType ?? '', currency,
+		...identity,
+		representativeName,
+		representativeSnils: representativeIdentity.snils,
+		representativePassportSeries: representativeIdentity.passportSeries,
+		representativePassportNumber: representativeIdentity.passportNumber,
+		representativePassportIssuedBy: representativeIdentity.passportIssuedBy,
+		representativePassportIssuedAt: representativeIdentity.passportIssuedAt,
+		representativePassportDeptCode: representativeIdentity.passportDeptCode,
+		representativeProxyNumber, representativeProxyDate,
+		confidence, foundFields, warnings, preview: compact(text).slice(0, 1200),
+	}
 }
 
 export async function parseContractFile(fileName: string, buffer: Buffer, allowOcr = true) {

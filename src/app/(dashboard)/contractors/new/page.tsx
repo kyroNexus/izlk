@@ -32,6 +32,11 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 			snils: String(formData.get('snils') ?? ''), passportSeries: String(formData.get('passportSeries') ?? ''),
 			passportNumber: String(formData.get('passportNumber') ?? ''), passportIssuedBy: String(formData.get('passportIssuedBy') ?? ''),
 			passportIssuedAt: String(formData.get('passportIssuedAt') ?? ''), passportDeptCode: String(formData.get('passportDeptCode') ?? ''),
+			representativeName: String(formData.get('representativeName') ?? ''), representativeSnils: String(formData.get('representativeSnils') ?? ''),
+			representativePassportSeries: String(formData.get('representativePassportSeries') ?? ''), representativePassportNumber: String(formData.get('representativePassportNumber') ?? ''),
+			representativePassportIssuedBy: String(formData.get('representativePassportIssuedBy') ?? ''), representativePassportIssuedAt: String(formData.get('representativePassportIssuedAt') ?? ''),
+			representativePassportDeptCode: String(formData.get('representativePassportDeptCode') ?? ''),
+			representativeProxyNumber: String(formData.get('representativeProxyNumber') ?? ''), representativeProxyDate: String(formData.get('representativeProxyDate') ?? ''),
 		})
 		const suffix = returnToContract ? '&returnTo=contract' : ''
 		if (!parsed.success) redirect(`/contractors/new?error=${encodeURIComponent(firstIssue(parsed.error))}${suffix}`)
@@ -49,6 +54,13 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 					name: data.name, aliases: parseAliases(data.aliases ?? ''), type: data.type, inn, address: orNull(data.address), phone: orNull(data.phone), email: orNull(data.email),
 					snils: orNull(data.snils), passportSeries: orNull(data.passportSeries), passportNumber: orNull(data.passportNumber),
 					passportIssuedBy: orNull(data.passportIssuedBy), passportIssuedAt: data.passportIssuedAt ? new Date(`${data.passportIssuedAt}T12:00:00`) : null, passportDeptCode: orNull(data.passportDeptCode),
+					representativeName: orNull(data.representativeName), representativeSnils: orNull(data.representativeSnils),
+					representativePassportSeries: orNull(data.representativePassportSeries), representativePassportNumber: orNull(data.representativePassportNumber),
+					representativePassportIssuedBy: orNull(data.representativePassportIssuedBy),
+					representativePassportIssuedAt: data.representativePassportIssuedAt ? new Date(`${data.representativePassportIssuedAt}T12:00:00`) : null,
+					representativePassportDeptCode: orNull(data.representativePassportDeptCode),
+					representativeProxyNumber: orNull(data.representativeProxyNumber),
+					representativeProxyDate: data.representativeProxyDate ? new Date(`${data.representativeProxyDate}T12:00:00`) : null,
 				},
 				select: { id: true },
 			})

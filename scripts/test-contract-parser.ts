@@ -74,5 +74,37 @@ const individualCustomerContract = parseContractText('731-ИЗЛКРус-СМР-
 assert.equal(individualCustomerContract.contractorName, 'Могилевич Алла Федоровна')
 assert.equal(individualCustomerContract.contractorType, 'INDIVIDUAL')
 assert.equal(individualCustomerContract.inn, '', 'ИНН Подрядчика (ИЗЛК) из реквизитов не должен попадать в поле заказчика')
+// Без представителя — паспорт/СНИЛС находятся и относятся к самому заказчику,
+// поле представителя остаётся пустым.
+assert.equal(individualCustomerContract.snils, '024-787-983-99')
+assert.equal(individualCustomerContract.passportSeries, '29 97')
+assert.equal(individualCustomerContract.passportNumber, '031923')
+assert.equal(individualCustomerContract.representativeName, '', 'без "в лице" в тексте представителя быть не должно')
+
+// Регрессия/новая задача: заказчик физ. лицо действует через представителя по
+// доверенности — у представителя в той же клаузуле тоже указан свой паспорт.
+// Паспорт представителя (55 66 778899) в тексте стоит РАНЬШЕ слова
+// "доверенности" — делить по этому слову означало бы приписать его
+// заказчику. Правильное деление — по "в лице": реквизиты заказчика ищутся до
+// него, реквизиты представителя — после. Спутать эти данные — испорченные
+// юридически значимые данные, не опечатка, поэтому проверяем оба набора
+// раздельно и точно.
+const proxyContract = parseContractText('proxy-contract.doc', `
+Гражданин РФ Иванов Иван Иванович, 01.01.1970 года рождения, СНИЛС: 111-222-333 44,
+паспорт 11 22 334455, в лице Петровой Марии Сергеевны, 02.02.1985 года рождения,
+паспорт 55 66 778899, действующей на основании доверенности, именуемая в дальнейшем
+«Заказчик» с одной стороны, и Общество с ограниченной ответственностью «ИЗЛК РУС»,
+именуемое в дальнейшем «Подрядчик», в лице Генерального директора, действующего на
+основании Устава, с другой стороны, заключили настоящий Договор.
+`)
+assert.equal(proxyContract.contractorType, 'INDIVIDUAL')
+assert.equal(proxyContract.snils, '111-222-333 44', 'СНИЛС заказчика (Иванова), не представителя')
+assert.equal(proxyContract.passportSeries, '11 22', 'паспорт заказчика (Иванова), не представителя')
+assert.equal(proxyContract.passportNumber, '334455')
+assert.equal(proxyContract.representativeName, 'Петровой Марии Сергеевны')
+assert.equal(proxyContract.representativeSnils, '', 'у представителя в тексте СНИЛС не указан')
+assert.equal(proxyContract.representativePassportSeries, '55 66', 'паспорт представителя (Петровой), не заказчика')
+assert.equal(proxyContract.representativePassportNumber, '778899')
+assert.ok(proxyContract.warnings.some((w) => w.includes('представитель')), 'должно быть предупреждение сверить данные представителя')
 
 console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%; contractor type detection: OK`)

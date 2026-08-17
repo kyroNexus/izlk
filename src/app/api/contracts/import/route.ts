@@ -162,9 +162,18 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 			type: value(form, 'type') || 'LEGAL',
 			snils: value(form, 'snils'), passportSeries: value(form, 'passportSeries'), passportNumber: value(form, 'passportNumber'),
 			passportIssuedBy: value(form, 'passportIssuedBy'), passportIssuedAt: value(form, 'passportIssuedAt'), passportDeptCode: value(form, 'passportDeptCode'),
+			representativeName: value(form, 'representativeName'), representativeSnils: value(form, 'representativeSnils'),
+			representativePassportSeries: value(form, 'representativePassportSeries'), representativePassportNumber: value(form, 'representativePassportNumber'),
+			representativePassportIssuedBy: value(form, 'representativePassportIssuedBy'), representativePassportIssuedAt: value(form, 'representativePassportIssuedAt'),
+			representativePassportDeptCode: value(form, 'representativePassportDeptCode'),
+			representativeProxyNumber: value(form, 'representativeProxyNumber'), representativeProxyDate: value(form, 'representativeProxyDate'),
 		})
 		if (!validation.success) return rejectImport(firstIssue(validation.error), 400, { fileName: file.name })
-		const { number, date, contractorName, inn, cipher, objectAddress, currency, kind, type, snils, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt, passportDeptCode } = validation.data
+		const {
+			number, date, contractorName, inn, cipher, objectAddress, currency, kind, type, snils, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt, passportDeptCode,
+			representativeName, representativeSnils, representativePassportSeries, representativePassportNumber, representativePassportIssuedBy, representativePassportIssuedAt, representativePassportDeptCode,
+			representativeProxyNumber, representativeProxyDate,
+		} = validation.data
 		const amountText = value(form, 'amount').replace(/\s/g, '').replace(',', '.')
 		const amount = Number(amountText)
 		const duplicate = await prisma.contract.findUnique({ where: { number }, select: { id: true } })
@@ -190,6 +199,13 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 					...(type === 'INDIVIDUAL' ? {
 						snils: orNull(snils), passportSeries: orNull(passportSeries), passportNumber: orNull(passportNumber),
 						passportIssuedBy: orNull(passportIssuedBy), passportIssuedAt: passportIssuedAt ? new Date(`${passportIssuedAt}T12:00:00`) : null, passportDeptCode: orNull(passportDeptCode),
+						representativeName: orNull(representativeName), representativeSnils: orNull(representativeSnils),
+						representativePassportSeries: orNull(representativePassportSeries), representativePassportNumber: orNull(representativePassportNumber),
+						representativePassportIssuedBy: orNull(representativePassportIssuedBy),
+						representativePassportIssuedAt: representativePassportIssuedAt ? new Date(`${representativePassportIssuedAt}T12:00:00`) : null,
+						representativePassportDeptCode: orNull(representativePassportDeptCode),
+						representativeProxyNumber: orNull(representativeProxyNumber),
+						representativeProxyDate: representativeProxyDate ? new Date(`${representativeProxyDate}T12:00:00`) : null,
 					} : {}),
 				},
 				select: { id: true, phone: true, email: true, aliases: true, name: true },
