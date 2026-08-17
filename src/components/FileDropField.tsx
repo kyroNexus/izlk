@@ -50,6 +50,13 @@ export type FileDropFieldResult = {
 	 *  куда сервер решил перенаправить — на карточку договора или обратно на
 	 *  форму с ?error=. */
 	responseUrl?: string
+	/** Задача A4: сколько запросов реально ушло (порциями по UPLOAD_CHUNK_SIZE).
+	 *  raw — это ответ ТОЛЬКО последнего запроса: его собственный текст
+	 *  "Загружено файлов: N" считает файлы только этой порции, а не всей
+	 *  пачки. При chunkCount > 1 родитель должен посчитать сумму сам
+	 *  (uploadedCount/failedCount тут уже честно просуммированы по всем
+	 *  порциям), а не доверять числу внутри raw.redirectUrl как есть. */
+	chunkCount: number
 }
 
 type PerFileResult = { fileName: string; status: string; message?: string }
@@ -109,6 +116,11 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.heic'])
 // с notice всё равно происходит в addFiles ниже, а этот предел — только
 // от бесконтрольного обхода.
 const MAX_TRAVERSED_ENTRIES = 800
+// Задача A4: до 100 файлов по 200 МБ одним HTTP-запросом почти гарантированно
+// упирались в таймаут — сервер читает и сохраняет их последовательным циклом,
+// не параллельно. Отправляем порциями, чтобы ни одна порция не была тяжелее
+// пяти файлов; лимит на всю операцию (maxFiles) не меняется.
+const UPLOAD_CHUNK_SIZE = 5
 
 function extOf(name: string): string {
 	const i = name.lastIndexOf('.')
@@ -182,6 +194,9 @@ export default function FileDropField({
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
 	const xhrRef = useRef<XMLHttpRequest | null>(null)
+	// Порции идут одна за другой (задача A4) — cancelUpload() успевает оборвать
+	// только ту, что уже в полёте; этот флаг останавливает и очередь оставшихся.
+	const cancelledRef = useRef(false)
 	const [items, setItems] = useState<SelectedFile[]>([])
 	const onFilesChangeRef = useRef(onFilesChange)
 	onFilesChangeRef.current = onFilesChange
@@ -269,71 +284,132 @@ export default function FileDropField({
 	}
 
 	function cancelUpload() {
+		cancelledRef.current = true
 		xhrRef.current?.abort()
 	}
 
-	function startUpload() {
+	/**
+	 * Одна порция (задача A4): до 100 файлов по 200 МБ одним запросом почти
+	 * гарантированно упирались в таймаут — сервер как раз читает и сохраняет
+	 * каждый файл последовательно (см. цикл в /api/contracts/[id]/documents),
+	 * а не параллельно. Серверный маршрут при этом НЕ меняется — он и так
+	 * принимает от одного файла до целой пачки в одном запросе; чанкование —
+	 * чисто клиентская мера. Отправляет один чанк и обновляет статус только
+	 * его файлов (остальные чанки к этому моменту ещё не отправлены, но уже
+	 * помечены 'uploading' — их трогать рано).
+	 */
+	function uploadChunk(chunk: SelectedFile[], onBytes: (loaded: number) => void): Promise<{ status: number; raw: unknown; uploadedCount: number; failedCount: number; responseUrl?: string; networkError: boolean }> {
+		return new Promise((resolve) => {
+			const chunkIds = new Set(chunk.map((item) => item.id))
+			const body = new FormData()
+			for (const item of chunk) {
+				body.append('files', item.file, item.file.name)
+				const perItem = itemFields?.(item)
+				if (perItem) for (const [key, value] of Object.entries(perItem)) body.append(key, value)
+			}
+			for (const [key, value] of Object.entries(extraFields)) body.append(key, value)
+
+			const xhr = new XMLHttpRequest()
+			xhrRef.current = xhr
+			xhr.open('POST', endpoint)
+			xhr.setRequestHeader('Accept', 'application/json')
+			xhr.upload.onprogress = (event) => {
+				if (event.lengthComputable) onBytes(event.loaded)
+			}
+			xhr.onload = () => {
+				const ok = xhr.status >= 200 && xhr.status < 300
+				let raw: unknown
+				try { raw = xhr.responseText ? JSON.parse(xhr.responseText) : undefined } catch { raw = undefined }
+				// perFile — построчный результат сервера (задача A3). Эндпоинты, которые
+				// его ещё не отдают, просто не пришлют это поле — тогда весь ответ 2xx
+				// считается успехом для всей пачки, как и было в A1.
+				const perFile = raw && typeof raw === 'object' && Array.isArray((raw as { perFile?: unknown }).perFile) ? (raw as { perFile: PerFileResult[] }).perFile : null
+				// Счёт строим из `chunk` (обычный массив, известен заранее), а не
+				// побочным эффектом внутри апдейтера setItems — апдейтер вызывается
+				// не синхронно с этим вызовом (React сам решает, когда его прогнать),
+				// так что uploadedCount/failedCount, посчитанные там, ещё не готовы
+				// к моменту resolve() ниже (проверено: без этого оба всегда были 0,
+				// просто это было незаметно, пока задача A4 не начала их читать).
+				const outcomes = new Map<string, { status: FileStatus; message?: string }>()
+				let uploadedCount = 0
+				let failedCount = 0
+				for (const item of chunk) {
+					const match = perFile?.find((entry) => entry.fileName === item.file.name)
+					// FAILED — единственный статус, который действительно означает ошибку;
+					// IGNORED (точная копия уже в системе) — не ошибка пользователя, файл
+					// в системе есть, просто не был загружен повторно.
+					const nextStatus: FileStatus = match ? (match.status === 'FAILED' ? 'error' : 'done') : ok ? 'done' : 'error'
+					if (nextStatus === 'done') uploadedCount += 1
+					else failedCount += 1
+					outcomes.set(item.id, { status: nextStatus, message: match?.message ?? (nextStatus === 'error' ? `Сервер ответил ошибкой (${xhr.status})` : undefined) })
+				}
+				setItems((current) => current.map((item) => {
+					const outcome = outcomes.get(item.id)
+					return outcome && item.status === 'uploading' ? { ...item, ...outcome } : item
+				}))
+				xhrRef.current = null
+				resolve({ status: xhr.status, raw, uploadedCount, failedCount, responseUrl: xhr.responseURL || undefined, networkError: false })
+			}
+			xhr.onerror = () => {
+				setItems((current) => current.map((item) => (item.status === 'uploading' && chunkIds.has(item.id) ? { ...item, status: 'error', message: 'Сбой сети — повторите попытку' } : item)))
+				xhrRef.current = null
+				resolve({ status: 0, raw: undefined, uploadedCount: 0, failedCount: chunk.length, networkError: true })
+			}
+			xhr.onabort = () => {
+				setItems((current) => current.map((item) => (item.status === 'uploading' && chunkIds.has(item.id) ? { ...item, status: 'error', message: 'Отменено' } : item)))
+				xhrRef.current = null
+				resolve({ status: 0, raw: undefined, uploadedCount: 0, failedCount: chunk.length, networkError: true })
+			}
+			xhr.send(body)
+		})
+	}
+
+	async function startUpload() {
 		const pending = items.filter((item) => item.status === 'pending')
 		if (!pending.length || uploading) return
 		const validationError = beforeUpload?.()
 		if (validationError) { setNotice(validationError); return }
+		cancelledRef.current = false
 		setUploading(true)
 		setProgress(0)
 		setItems((current) => current.map((item) => (item.status === 'pending' ? { ...item, status: 'uploading' } : item)))
 
-		const body = new FormData()
-		for (const item of pending) {
-			body.append('files', item.file, item.file.name)
-			const perItem = itemFields?.(item)
-			if (perItem) for (const [key, value] of Object.entries(perItem)) body.append(key, value)
+		const totalBytes = pending.reduce((sum, item) => sum + item.file.size, 0) || 1
+		let bytesDone = 0
+		let uploadedCount = 0
+		let failedCount = 0
+		let lastRaw: unknown
+		let lastStatus = 0
+		let lastResponseUrl: string | undefined
+		let chunkCount = 0
+		for (let start = 0; start < pending.length; start += UPLOAD_CHUNK_SIZE) {
+			if (cancelledRef.current) break
+			const chunk = pending.slice(start, start + UPLOAD_CHUNK_SIZE)
+			const chunkBytes = chunk.reduce((sum, item) => sum + item.file.size, 0)
+			// Порции отправляются последовательно (задача A4), не параллельно —
+			// await внутри цикла тут осознанный выбор, а не забытая оптимизация.
+			const result = await uploadChunk(chunk, (loaded) => setProgress(Math.round(((bytesDone + loaded) / totalBytes) * 100)))
+			chunkCount += 1
+			bytesDone += chunkBytes
+			uploadedCount += result.uploadedCount
+			failedCount += result.failedCount
+			lastStatus = result.status
+			lastResponseUrl = result.responseUrl
+			if (result.raw !== undefined) lastRaw = result.raw
+			// Сбой сети/отмена обрывает всю очередь — нет смысла слать оставшиеся
+			// порции, когда соединения уже нет. HTTP-ошибка ответа (4xx/5xx) внутри
+			// одной порции, наоборот, не блокирует остальные — сервер уже обработал
+			// эту порцию файл за файлом и мог часть из них принять.
+			if (result.networkError) { failedCount += pending.length - start - chunk.length; break }
 		}
-		for (const [key, value] of Object.entries(extraFields)) body.append(key, value)
 
-		const xhr = new XMLHttpRequest()
-		xhrRef.current = xhr
-		xhr.open('POST', endpoint)
-		xhr.setRequestHeader('Accept', 'application/json')
-		xhr.upload.onprogress = (event) => {
-			if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100))
-		}
-		xhr.onload = () => {
-			const ok = xhr.status >= 200 && xhr.status < 300
-			let raw: unknown
-			try { raw = xhr.responseText ? JSON.parse(xhr.responseText) : undefined } catch { raw = undefined }
-			// perFile — построчный результат сервера (задача A3). Эндпоинты, которые
-			// его ещё не отдают, просто не пришлют это поле — тогда весь ответ 2xx
-			// считается успехом для всей пачки, как и было в A1.
-			const perFile = raw && typeof raw === 'object' && Array.isArray((raw as { perFile?: unknown }).perFile) ? (raw as { perFile: PerFileResult[] }).perFile : null
-			let uploadedCount = 0
-			let failedCount = 0
-			setItems((current) => current.map((item) => {
-				if (item.status !== 'uploading') return item
-				const match = perFile?.find((entry) => entry.fileName === item.file.name)
-				// FAILED — единственный статус, который действительно означает ошибку;
-				// IGNORED (точная копия уже в системе) — не ошибка пользователя, файл
-				// в системе есть, просто не был загружен повторно.
-				const nextStatus: FileStatus = match ? (match.status === 'FAILED' ? 'error' : 'done') : ok ? 'done' : 'error'
-				if (nextStatus === 'done') uploadedCount += 1
-				else failedCount += 1
-				return { ...item, status: nextStatus, message: match?.message ?? (nextStatus === 'error' ? `Сервер ответил ошибкой (${xhr.status})` : undefined) }
-			}))
-			setUploading(false)
-			setProgress(100)
-			onDone?.({ ok, status: xhr.status, raw, uploadedCount, failedCount, responseUrl: xhr.responseURL || undefined })
-			xhrRef.current = null
-		}
-		xhr.onerror = () => {
-			setItems((current) => current.map((item) => (item.status === 'uploading' ? { ...item, status: 'error', message: 'Сбой сети — повторите попытку' } : item)))
-			setUploading(false)
-			onDone?.({ ok: false, status: 0, uploadedCount: 0, failedCount: pending.length })
-			xhrRef.current = null
-		}
-		xhr.onabort = () => {
-			setItems((current) => current.map((item) => (item.status === 'uploading' ? { ...item, status: 'error', message: 'Отменено' } : item)))
-			setUploading(false)
-			xhrRef.current = null
-		}
-		xhr.send(body)
+		// Порции, до которых очередь не дошла (сеть отвалилась/отмена раньше),
+		// так и остаются помеченными 'uploading' с самого начала функции —
+		// без этого они бы зависли в интерфейсе как "загружается" навсегда.
+		setItems((current) => current.map((item) => (item.status === 'uploading' ? { ...item, status: 'error', message: 'Не отправлено' } : item)))
+		setUploading(false)
+		setProgress(100)
+		onDone?.({ ok: failedCount === 0, status: lastStatus, raw: lastRaw, uploadedCount, failedCount, responseUrl: lastResponseUrl, chunkCount })
 	}
 
 	return (

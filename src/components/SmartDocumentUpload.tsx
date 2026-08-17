@@ -185,7 +185,21 @@ export default function SmartDocumentUpload({
 		// для эндпоинтов, которые пока просто редиректят и JSON не отдают.
 		const raw = result.raw as { redirectUrl?: string; error?: string } | undefined
 		const target = raw?.redirectUrl ?? result.responseUrl
-		if (target) { router.push(target); router.refresh(); return }
+		if (target) {
+			// Задача A4: при пачке больше UPLOAD_CHUNK_SIZE файлов уходит несколько
+			// запросов подряд, а текст "Загружено файлов: N" внутри redirectUrl
+			// посчитан сервером только для ПОСЛЕДНЕГО из них — остальные порции
+			// в это число не попадают. Само вложение файлов не пострадало (каждая
+			// порция сохраняется независимо), это только цифра в баннере успеха.
+			const url = result.chunkCount > 1 ? new URL(target, window.location.origin) : null
+			if (url?.searchParams.has('success')) {
+				const total = `Загружено файлов: ${result.uploadedCount}${result.failedCount ? `. Ошибок: ${result.failedCount}` : ''}.`
+				url.searchParams.set('success', total)
+			}
+			router.push(url ? `${url.pathname}${url.search}` : target)
+			router.refresh()
+			return
+		}
 		setStatus(raw?.error || (result.ok ? `Загружено файлов: ${result.uploadedCount}` : 'Не удалось загрузить файлы. Повторите попытку.'))
 	}
 
