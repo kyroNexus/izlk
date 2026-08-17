@@ -44,6 +44,16 @@ export function isValidInn(value: string): boolean {
 const importDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату договора.')
 	.refine((value) => !Number.isNaN(Date.parse(`${value}T12:00:00Z`)), 'Дата договора некорректна.')
 
+/** Общая для contractorSchema и contractImportSchema проверка обязательных
+ *  для физ. лица реквизитов — вынесена, чтобы правило не разъезжалось между
+ *  ручным созданием контрагента и автоимпортом из распознанного договора. */
+function requireIndividualFields(data: { type: string; snils?: string; passportSeries?: string; passportNumber?: string; passportIssuedBy?: string }, ctx: z.RefinementCtx) {
+	if (data.type !== 'INDIVIDUAL') return
+	if (!data.snils) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите СНИЛС', path: ['snils'] })
+	if (!data.passportSeries || !data.passportNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите серию и номер паспорта', path: ['passportNumber'] })
+	if (!data.passportIssuedBy) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите, кем выдан паспорт', path: ['passportIssuedBy'] })
+}
+
 /** Strict server-side validation for data obtained from a parser or entered manually. */
 export const contractImportSchema = z.object({
 	number: z.string().trim().min(2, 'Укажите номер договора.').max(120, 'Слишком длинный номер договора.')
@@ -51,13 +61,24 @@ export const contractImportSchema = z.object({
 	date: importDate,
 	amount: z.string().trim().refine((value) => parseAmount(value) !== null, 'Сумма должна быть положительной и не превышать 9 999 999 999 999.'),
 	contractorName: z.string().trim().max(300, 'Слишком длинное название контрагента.'),
+	// Тип контрагента (задача: определять физ./юр. лицо по распознанному
+	// договору) — как и остальные распознанные поля, это переопределяемое
+	// человеком предположение, а не жёсткое решение сервера.
+	type: z.enum(['LEGAL', 'INDIVIDUAL']).default('LEGAL'),
 	inn: z.string().trim().optional().refine((value) => !value || isValidInn(value), 'ИНН не прошёл контрольную проверку.'),
 	cipher: z.string().trim().max(120, 'Слишком длинный шифр.').optional(),
 	objectAddress: z.string().trim().max(500, 'Слишком длинный адрес.').optional(),
 	currency: z.enum(['RUB', 'USD', 'EUR', 'CNY']),
 	kind: z.enum(['SMR', 'MK', 'PROJECT']),
+	snils: z.string().trim().max(20).optional(),
+	passportSeries: z.string().trim().max(10).optional(),
+	passportNumber: z.string().trim().max(20).optional(),
+	passportIssuedBy: z.string().trim().max(300).optional(),
+	passportIssuedAt: z.string().trim().optional(),
+	passportDeptCode: z.string().trim().max(20).optional(),
 }).superRefine((data, context) => {
 	if (!data.contractorName && !data.inn) context.addIssue({ code: 'custom', path: ['contractorName'], message: 'Укажите контрагента или ИНН.' })
+	requireIndividualFields(data, context)
 })
 
 export const contractSchema = z.object({
@@ -100,12 +121,7 @@ export const contractorSchema = z
 		passportIssuedAt: z.string().trim().optional(),
 		passportDeptCode: z.string().trim().max(20).optional(),
 	})
-	.superRefine((data, ctx) => {
-		if (data.type !== 'INDIVIDUAL') return
-		if (!data.snils) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите СНИЛС', path: ['snils'] })
-		if (!data.passportSeries || !data.passportNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите серию и номер паспорта', path: ['passportNumber'] })
-		if (!data.passportIssuedBy) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Укажите, кем выдан паспорт', path: ['passportIssuedBy'] })
-	})
+	.superRefine(requireIndividualFields)
 
 export const agreementSchema = z.object({
 	number: z.string().trim().min(1, 'Укажите номер доп. соглашения').max(120),

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { parseContractText } from '../src/lib/contract-parser'
+import { detectContractorType, parseContractText } from '../src/lib/contract-parser'
 import { classifyDocumentPath } from '../src/lib/document-classifier'
 
 const parsed = parseContractText('Договор_ТЕСТ-701-ИЗЛК-СМР-2026.docx', `
@@ -39,4 +39,20 @@ assert.equal(classifyDocumentPath('Заказчик/Исходные данны�
 assert.equal(classifyDocumentPath('ИГИ/инженерно-геологические изыскания.pdf'), 'SOURCE_DATA')
 assert.equal(classifyDocumentPath('Заказчик/Геоподоснова участка.pdf'), 'SOURCE_DATA')
 
-console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%`)
+// Формулировка по образцу реального договора (ФИО вымышленное) — заказчик
+// физ. лицо, действующее через представителя по доверенности; у представителя
+// в той же клаузуле тоже есть свой паспорт, поэтому важно, что детектор не
+// путает их и не переключается на подрядчика (ООО), упомянутого дальше в тексте.
+assert.equal(detectContractorType(`
+Гражданин РФ Иванов Иван Иванович, 01.01.1970 года рождения, СНИЛС: 111-222-333 44,
+паспорт 11 22 334455, в лице Петровой Марии Сергеевны, 02.02.1985 года рождения,
+паспорт 55 66 778899, действующей на основании доверенности, именуемая в дальнейшем
+«Заказчик» с одной стороны, и Общество с ограниченной ответственностью «ИЗЛК РУС»,
+именуемое в дальнейшем «Подрядчик», в лице Генерального директора, действующего на
+основании Устава, с другой стороны, заключили настоящий Договор.
+`), 'INDIVIDUAL')
+assert.equal(detectContractorType('Общество с ограниченной ответственностью «СтройИнвест», именуемое в дальнейшем «Заказчик», в лице Генерального директора Иванова И.И., действующего на основании Устава'), 'LEGAL')
+assert.equal(detectContractorType('Индивидуальный предприниматель Сидоров Сидор Сидорович, именуемый в дальнейшем «Заказчик»'), 'LEGAL')
+assert.equal(detectContractorType('Просто текст без явных маркеров стороны договора и без слова на «З»'), null)
+
+console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%; contractor type detection: OK`)

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, Field, inputClass, selectClass } from '@/components/ui'
+import ContractorTypeFields from '@/components/ContractorTypeFields'
 import type { FolderParseReport, ParsedContract } from '@/lib/contract-parser'
 
 type Mode = 'file' | 'folder' | 'attach'
@@ -26,7 +27,7 @@ export default function ContractImportForm() {
 	const [error, setError] = useState('')
 
 	function fillManually() {
-		setParsed({ fileName: 'manual-entry', contractNumber: '', contractDate: '', amount: '', currency: 'RUB', contractorName: '', inn: '', cipher: '', objectAddress: '', confidence: 0, foundFields: [], warnings: ['Автораспознавание пропущено. Заполните реквизиты по документу вручную и сохраните файл.'], preview: '' })
+		setParsed({ fileName: 'manual-entry', contractNumber: '', contractDate: '', amount: '', currency: 'RUB', contractorName: '', contractorType: '', inn: '', cipher: '', objectAddress: '', confidence: 0, foundFields: [], warnings: ['Автораспознавание пропущено. Заполните реквизиты по документу вручную и сохраните файл.'], preview: '' })
 		setError('')
 	}
 
@@ -118,6 +119,7 @@ export default function ContractImportForm() {
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Номер договора" required><input name="contractNumber" required defaultValue={parsed.contractNumber} className={inputClass} /></Field><Field label="Дата договора" required><input name="contractDate" type="date" required defaultValue={parsed.contractDate} className={inputClass} /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-[1fr_120px]"><Field label="Сумма" required><input name="amount" required defaultValue={parsed.amount} className={inputClass} /></Field><Field label="Валюта"><select name="currency" defaultValue={parsed.currency} className={selectClass}><option>RUB</option><option>USD</option><option>EUR</option><option>CNY</option></select></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Контрагент" required><input name="contractorName" defaultValue={parsed.contractorName} className={inputClass} /></Field><Field label="ИНН"><input name="inn" defaultValue={parsed.inn} className={inputClass} inputMode="numeric" /></Field></div>
+				<ContractorTypeFields defaultType={parsed.contractorType || 'LEGAL'} />
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Телефон контрагента"><input name="contractorPhone" defaultValue={parsed.phone} className={inputClass} inputMode="tel" /></Field><Field label="Email контрагента"><input name="contractorEmail" defaultValue={parsed.email} className={inputClass} inputMode="email" /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Шифр"><input name="cipher" defaultValue={parsed.cipher} className={inputClass} /></Field><Field label="Тип договора"><select name="kind" defaultValue="SMR" className={selectClass}><option value="SMR">СМР</option><option value="MK">МК</option><option value="PROJECT">Проектный</option></select></Field></div>
 				<Field label="Адрес объекта"><input name="objectAddress" defaultValue={parsed.objectAddress} className={inputClass} /></Field><button type="submit" disabled={busy} className="brand-gradient mt-[4px] h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busy ? 'Создаю…' : mode === 'folder' ? `Создать договор и загрузить ${folderFiles.length} файлов` : 'Создать договор и прикрепить файл'}</button>

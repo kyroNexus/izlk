@@ -5,7 +5,7 @@ import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buf
 import { EXEC_TEMPLATES } from '@/lib/executive'
 import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath, isTransientSystemFile } from '@/lib/document-classifier'
 import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
-import { contractImportSchema, firstIssue } from '@/lib/validation'
+import { contractImportSchema, firstIssue, orNull } from '@/lib/validation'
 import { grantDesignReadAccess, type SessionUser } from '@/lib/access'
 import { withApiAuth } from '@/lib/api-auth'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
@@ -159,9 +159,12 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 			number: value(form, 'contractNumber'), date: value(form, 'contractDate'), amount: value(form, 'amount'),
 			contractorName: value(form, 'contractorName'), inn: value(form, 'inn'), cipher: value(form, 'cipher'),
 			objectAddress: value(form, 'objectAddress'), currency: value(form, 'currency') || 'RUB', kind: value(form, 'kind') || 'SMR',
+			type: value(form, 'type') || 'LEGAL',
+			snils: value(form, 'snils'), passportSeries: value(form, 'passportSeries'), passportNumber: value(form, 'passportNumber'),
+			passportIssuedBy: value(form, 'passportIssuedBy'), passportIssuedAt: value(form, 'passportIssuedAt'), passportDeptCode: value(form, 'passportDeptCode'),
 		})
 		if (!validation.success) return rejectImport(firstIssue(validation.error), 400, { fileName: file.name })
-		const { number, date, contractorName, inn, cipher, objectAddress, currency, kind } = validation.data
+		const { number, date, contractorName, inn, cipher, objectAddress, currency, kind, type, snils, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt, passportDeptCode } = validation.data
 		const amountText = value(form, 'amount').replace(/\s/g, '').replace(',', '.')
 		const amount = Number(amountText)
 		const duplicate = await prisma.contract.findUnique({ where: { number }, select: { id: true } })
@@ -177,7 +180,20 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		const match = await findMatchingContractor({ name: contractorName, inn, phone: contractorPhone, email: contractorEmail })
 		let contractor = match ? { id: match.id, phone: match.phone, email: match.email, aliases: match.aliases, name: match.name } : null
 		if (!contractor) {
-			contractor = await prisma.contractor.create({ data: { name: contractorName || `Контрагент ИНН ${inn}`, inn: inn || null, phone: contractorPhone, email: contractorEmail }, select: { id: true, phone: true, email: true, aliases: true, name: true } })
+			// type/паспортные данные — только для НОВОГО контрагента. Уже существующего
+			// (найден по имени/ИНН/телефону/email выше) не трогаем: свежая догадка
+			// парсера по одному документу не должна тихо переписывать реквизиты записи,
+			// которая уже подтверждена раньше.
+			contractor = await prisma.contractor.create({
+				data: {
+					name: contractorName || `Контрагент ИНН ${inn}`, inn: inn || null, phone: contractorPhone, email: contractorEmail, type,
+					...(type === 'INDIVIDUAL' ? {
+						snils: orNull(snils), passportSeries: orNull(passportSeries), passportNumber: orNull(passportNumber),
+						passportIssuedBy: orNull(passportIssuedBy), passportIssuedAt: passportIssuedAt ? new Date(`${passportIssuedAt}T12:00:00`) : null, passportDeptCode: orNull(passportDeptCode),
+					} : {}),
+				},
+				select: { id: true, phone: true, email: true, aliases: true, name: true },
+			})
 			createdContractorId = contractor.id
 		} else {
 			const alias = contractorName.trim()

@@ -69,6 +69,8 @@ export type ParsedContract = {
 	amount: string
 	currency: 'RUB' | 'USD' | 'EUR' | 'CNY'
 	contractorName: string
+	/** '' — не удалось определить, форма подставит дефолт LEGAL и даст поправить вручную. */
+	contractorType: 'LEGAL' | 'INDIVIDUAL' | ''
 	inn: string
 	phone?: string
 	email?: string
@@ -157,6 +159,31 @@ function plausibleContractorName(value: string) {
 	return /стоимост|изготовлен|монтаж|фундамент|настоящ(?:ий|его)s+договор|составляет/i.test(cleaned) ? '' : cleaned
 }
 
+/**
+ * Физ. лицо в типовом договоре открывается формулой «Гражданин(ка) РФ Фамилия
+ * Имя Отчество, ДД.ММ.ГГГГ года рождения ... СНИЛС ... паспорт ...» — иногда
+ * действующее через представителя по доверенности (у представителя тоже
+ * может быть указан свой паспорт, поэтому смотрим только на клаузулу ДО
+ * первого упоминания «Заказчик», где называется сама сторона договора, а не
+ * весь текст: иначе «ООО» из клаузулы Подрядчика ложно перевесило бы «Гражданин»
+ * заказчика, стоящего раньше в тексте, и наоборот).
+ * Юр. лицо — ООО/АО/ПАО/ЗАО или ИП, действующие на основании устава/свидетельства.
+ * Если ни один маркер не найден — возвращаем null: пусть решает человек,
+ * а не молчаливый дефолт на LEGAL, который до этой функции стоял всегда.
+ */
+export function detectContractorType(rawText: string): 'LEGAL' | 'INDIVIDUAL' | null {
+	const text = rawText.replace(/\s+/g, ' ')
+	const labelIndex = text.search(/заказчик/iu)
+	const clause = labelIndex === -1 ? text.slice(0, 1200) : text.slice(0, labelIndex + 20)
+	// \b не годится для кириллицы (в JS "словом" для \b считаются только
+	// [A-Za-z0-9_]) — та же граница явными не-буквенными символами по краям,
+	// что и в detectProjectSectionCode выше, а не \b.
+	const hasToken = (pattern: string) => new RegExp(`(^|[^\\p{L}\\p{N}])(?:${pattern})(?=$|[^\\p{L}\\p{N}])`, 'iu').test(clause)
+	if (hasToken('гражданин(?:ин|ка)?\\s+(?:рф|российской\\s+федерации)') || hasToken('снилс')) return 'INDIVIDUAL'
+	if (hasToken('ооо|ао|пао|зао|общество\\s+с\\s+ограниченной\\s+ответственностью|акционерное\\s+общество|индивидуальн[\\p{L}]*\\s+предпринимател[\\p{L}]*|ип')) return 'LEGAL'
+	return null
+}
+
 function categorize(fileName: string, relativePath?: string) {
 	const searchable = `${relativePath ?? ''} ${fileName}`.toLocaleLowerCase('ru-RU')
 	return FOLDER_CATEGORIES.find((category) => category.expression.test(searchable)) ?? { key: 'other', label: 'Прочие файлы', expression: /./ }
@@ -240,6 +267,14 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 		/((?:ИЗЛК\s*Рус\s*)?КБ[-–—]\s*\d+(?:\.\d+){2,})/iu,
 		/(?:шифр(?:\s+объекта)?)\s*[:№]?\s*([^\n,;]{3,80})/iu,
 	])
+	// Физ. лицо называется по формуле «Гражданин(ка) РФ Фамилия Имя Отчество»,
+	// а не ООО/заказчик-с-двоеточием — ни один из паттернов выше его не ловит,
+	// имя доставалось пустым. ФИО сразу после этой формулы, до запятой (дальше
+	// в тексте — дата рождения) — это сама сторона договора, а не представитель
+	// по доверенности (тот называется дальше, после «в лице»).
+	const individualCustomerName = firstMatch(text, [
+		/гражданин(?:ин|ка)?\s+(?:рф|российской\s+федерации)\s+([А-ЯЁ][а-яёА-ЯЁ-]+\s+[А-ЯЁ][а-яёА-ЯЁ-]+(?:\s+[А-ЯЁ][а-яёА-ЯЁ-]+)?)(?=\s*,)/iu,
+	])
 	const contractorName = [
 		firstMatch(text, [
 		/(?:заказчик|покупатель|контрагент)\s*[:—-]\s*([^\n]{3,140})/iu,
@@ -248,6 +283,7 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 		/((?:ООО|АО|ПАО|ИП)\s+[«"]?[^\n,»"]{2,100}[»"]?)/iu,
 		]),
 		customerParty,
+		individualCustomerName,
 	].map(plausibleContractorName).find(Boolean) ?? ''
 	const email = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu)?.[0] ?? ''
 	const phone = text.match(/(?:\+7|8)[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/u)?.[0]?.replace(/\s+/g, ' ').trim() ?? ''
@@ -255,6 +291,11 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 		/(?:адрес\s+(?:объекта|строительства)|место\s+выполнения\s+работ|по\s+адресу)\s*[:—-]?\s*([^\n]{5,220})/iu,
 	])
 	const currency: ParsedContract['currency'] = /(?:USD|доллар)/iu.test(text) ? 'USD' : /(?:EUR|евро)/iu.test(text) ? 'EUR' : /(?:CNY|юан)/iu.test(text) ? 'CNY' : 'RUB'
+	// Не участвует в values/confidence — как и currency ниже, это отдельный,
+	// не входящий в "обязательные поля" признак: раньше его не было вовсе,
+	// и менять формулу уверенности распознавания заодно не стоит (проверяется
+	// точным числом в scripts/test-contract-parser.ts).
+	const contractorType = detectContractorType(text)
 	const values = { contractNumber, contractDate: isoDate(dateRaw), amount: normalizeAmount(amountRaw), contractorName, inn, phone, email, cipher, objectAddress }
 	const labels: Record<keyof typeof values, string> = { contractNumber: 'номер договора', contractDate: 'дата', amount: 'сумма', contractorName: 'контрагент', inn: 'ИНН', phone: 'телефон', email: 'email', cipher: 'шифр', objectAddress: 'адрес объекта' }
 	const foundFields = (Object.keys(values) as (keyof typeof values)[]).filter((key) => values[key]).map((key) => labels[key])
@@ -266,7 +307,7 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	if (!values.contractorName && !values.inn) warnings.push('Не найден контрагент или ИНН')
 	if (compact(text).length < 40) warnings.push('В файле почти нет текста: вероятно, это скан без текстового слоя. Его можно приложить, но реквизиты нужно заполнить вручную.')
 	const confidence = Math.min(100, Math.round((essential.filter(Boolean).length / essential.length) * 80 + (foundFields.length / Object.keys(values).length) * 20))
-	return { fileName, ...values, currency, confidence, foundFields, warnings, preview: compact(text).slice(0, 1200) }
+	return { fileName, ...values, contractorType: contractorType ?? '', currency, confidence, foundFields, warnings, preview: compact(text).slice(0, 1200) }
 }
 
 export async function parseContractFile(fileName: string, buffer: Buffer, allowOcr = true) {
