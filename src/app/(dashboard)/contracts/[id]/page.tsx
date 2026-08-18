@@ -32,6 +32,14 @@ import TabProject from '@/components/contract/TabProject'
 import TabTasks from '@/components/contract/TabTasks'
 import TabExecutive from '@/components/contract/TabExecutive'
 
+// Страница набита мутирующими server actions (удаление/архив документа,
+// перевод этапа, комментарии и т.д.), каждый редиректит сам на себя —
+// без force-dynamic Next.js может отдать закэшированный RSC-payload этого
+// же адреса, и правка в базе происходит, а на экране как будто ничего не
+// изменилось. Тот же приём уже стоит на upload/inbox/edit и других
+// страницах с похожими action — тут его просто не хватало.
+export const dynamic = 'force-dynamic'
+
 // Порядок разделов — по приоритету из рабочих заметок: подписанные заказчиком
 // версии юридически значимее черновиков, поэтому идут первыми.
 const DOCUMENT_STATES: { key: DocumentState; label: string; hint: string }[] = [

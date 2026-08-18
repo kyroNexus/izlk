@@ -20,6 +20,13 @@ import { notify } from '@/lib/notifications'
 import TaskAttachmentsBox from '@/components/TaskAttachmentsBox'
 import TaskCommentsBox from '@/components/TaskCommentsBox'
 
+// Server actions ниже (обновление/удаление задачи) редиректят сами на себя —
+// без force-dynamic Next.js мог бы отдать закэшированный RSC-payload этого
+// же адреса вместо свежих данных (тот же класс проблемы нашли и починили
+// на карточке договора — там были жалобы, что "Удалить" ничего не менял на
+// экране, хотя запись в базе исчезала).
+export const dynamic = 'force-dynamic'
+
 const taskStatuses: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']
 const taskPriorities: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 const taskAttachmentUrl = (id: string) => `/api/tasks/attachments/${id}`
