@@ -4,6 +4,7 @@ import { DOCUMENT_KIND_LABELS, formatBytes, formatDate, plural } from '@/lib/for
 import type { DocumentState } from '@prisma/client'
 import type { ContractWithRelations } from './shared'
 import DocumentsDropzone from './DocumentsDropzone'
+import DocumentFolderDropOverlay from './DocumentFolderDropOverlay'
 
 type DocumentRow = ContractWithRelations['documents'][number]
 type DocumentSection = {
@@ -68,7 +69,8 @@ export default function TabDocuments({
 				<EmptyState text="Файлов пока нет" />
 			) : (
 				<div className="space-y-[9px] p-2.5">
-					{documentSections.map((section) => <details key={section.key} open={section.key === 'SOURCE' && section.documents.length <= 6} className="overflow-hidden rounded-control border border-line-soft">
+					{canEdit && <DocumentFolderDropOverlay contractId={contract.id} />}
+					{documentSections.map((section) => <details key={section.key} data-drop-state={canEdit ? section.key : undefined} open={section.key === 'SOURCE' && section.documents.length <= 6} className="overflow-hidden rounded-control border border-line-soft transition-colors">
 						<summary className="group/state flex cursor-pointer list-none items-center gap-3 bg-raised/60 px-3 py-2.5 transition hover:bg-brand/5"><span className="text-faint transition-transform group-open/state:rotate-90"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="m9 18 6-6-6-6" /></svg></span><span className="min-w-0 flex-1"><span className="block text-sm font-bold">{section.label}</span><span className="block text-2xs text-faint">{section.hint}</span></span><span className="hidden text-2xs font-medium text-faint sm:inline">{section.documents.length > 12 ? 'Открыть список' : ''}</span><span className="rounded-full bg-surface px-2 py-1 text-2xs font-bold text-muted">{section.documents.length}</span></summary>
 						<div className="px-2 pb-2">{canEdit && <div className="flex justify-end px-2 pt-2"><Link href={`/contracts/${contract.id}/upload?state=${section.key}`} className="rounded-tight border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-brand-ink hover:bg-brand-soft">+ Загрузить в эту папку</Link></div>}{section.kinds.length === 0 && <div className="px-2 py-4 text-center text-xs text-faint">В этом разделе файлов пока нет</div>}{section.kinds.map((kind) => <div key={kind}>
 							<div className="flex items-center gap-2 px-2 pb-1 pt-3"><span className="text-xs font-bold text-muted">{DOCUMENT_KIND_LABELS[kind]}</span><span className="text-2xs text-faint">{section.byKind.get(kind)!.length}</span></div>
