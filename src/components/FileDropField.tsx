@@ -119,6 +119,11 @@ type Props = {
 	 *  а свою кнопку "Загрузить"/"Очистить всё" не рисует — иначе на одном
 	 *  экране было бы два разных действия отправки одновременно. */
 	hideUploadButton?: boolean
+	/** Компактный вид — для точечных полей по месту (папка/раздел/строка
+	 *  таблицы), где полноразмерная зона (140px, подсказка форматов, кнопка
+	 *  камеры) была бы избыточной. Поведение (клик/drag&drop/вставка) то же
+	 *  самое, меняется только разметка самой зоны. */
+	compact?: boolean
 }
 
 const DEFAULT_MAX_FILES = 100
@@ -204,6 +209,7 @@ const FileDropField = forwardRef<FileDropFieldHandle, Props>(function FileDropFi
 	itemFields,
 	onFilesChange,
 	hideUploadButton = false,
+	compact = false,
 }: Props, forwardedRef) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -434,21 +440,34 @@ const FileDropField = forwardRef<FileDropFieldHandle, Props>(function FileDropFi
 			{hint && <p className="text-xs leading-5 text-muted">{hint}</p>}
 
 			<label
-				className={`smart-upload-dropzone group flex min-h-[140px] flex-col items-center justify-center gap-1 rounded-control border-2 border-dashed px-5 py-6 text-center transition-all duration-200 ${disabled || reading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${dragging ? 'scale-[1.01] border-brand bg-brand/10' : 'border-line bg-raised/30 hover:border-brand/55 hover:bg-brand/5'}`}
+				className={compact
+					? `smart-upload-dropzone group flex min-h-[44px] flex-row items-center gap-2.5 rounded-tight border border-dashed px-3 py-2.5 text-left transition-all duration-150 ${disabled || reading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${dragging ? 'border-brand bg-brand/10' : 'border-line bg-raised/30 hover:border-brand/55 hover:bg-brand/5'}`
+					: `smart-upload-dropzone group flex min-h-[140px] flex-col items-center justify-center gap-1 rounded-control border-2 border-dashed px-5 py-6 text-center transition-all duration-200 ${disabled || reading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${dragging ? 'scale-[1.01] border-brand bg-brand/10' : 'border-line bg-raised/30 hover:border-brand/55 hover:bg-brand/5'}`}
 				onDragEnter={(event) => { event.preventDefault(); if (!disabled && !reading) setDragging(true) }}
 				onDragOver={(event) => event.preventDefault()}
 				onDragLeave={() => setDragging(false)}
 				onDrop={onDrop}
 			>
 				<input ref={fileInputRef} type="file" name="files" multiple={multiple} accept={acceptAttr} required={required} disabled={disabled || reading} className="sr-only" onChange={onInputChange} />
-				<div className="grid h-10 w-10 place-items-center rounded-tight bg-brand-soft text-brand-ink transition-transform duration-200 group-hover:-translate-y-0.5">
-					{reading ? <Icon icon={Loader2} size={18} className="animate-spin" /> : <Icon icon={Upload} size={18} />}
-				</div>
-				<div className="text-sm font-bold text-ink">{reading ? 'Читаю папку…' : 'Перетащите файлы или папку, нажмите или вставьте (Ctrl+V)'}</div>
-				{!reading && accept.length > 0 && <div className="text-xs text-muted">{accept.map((ext) => ext.replace('.', '').toUpperCase()).join(', ')} · до {formatBytes(maxBytes)} на файл</div>}
+				{compact ? (
+					<>
+						<div className="grid h-7 w-7 flex-none place-items-center rounded-tight bg-brand-soft text-brand-ink">
+							{reading ? <Icon icon={Loader2} size={13} className="animate-spin" /> : <Icon icon={Upload} size={13} />}
+						</div>
+						<div className="min-w-0 flex-1 text-xs font-semibold text-ink">{reading ? 'Читаю…' : 'Перетащите или нажмите, чтобы загрузить'}</div>
+					</>
+				) : (
+					<>
+						<div className="grid h-10 w-10 place-items-center rounded-tight bg-brand-soft text-brand-ink transition-transform duration-200 group-hover:-translate-y-0.5">
+							{reading ? <Icon icon={Loader2} size={18} className="animate-spin" /> : <Icon icon={Upload} size={18} />}
+						</div>
+						<div className="text-sm font-bold text-ink">{reading ? 'Читаю папку…' : 'Перетащите файлы или папку, нажмите или вставьте (Ctrl+V)'}</div>
+						{!reading && accept.length > 0 && <div className="text-xs text-muted">{accept.map((ext) => ext.replace('.', '').toUpperCase()).join(', ')} · до {formatBytes(maxBytes)} на файл</div>}
+					</>
+				)}
 			</label>
 
-			{showCamera && (
+			{!compact && showCamera && (
 				<>
 					<input ref={cameraInputRef} type="file" accept="image/*" capture="environment" disabled={disabled} className="sr-only" onChange={onInputChange} />
 					<button type="button" onClick={() => cameraInputRef.current?.click()} disabled={disabled} className="inline-flex h-9 w-fit items-center gap-1.5 self-start rounded-control border border-line bg-surface px-3 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand-ink disabled:opacity-50 sm:hidden">

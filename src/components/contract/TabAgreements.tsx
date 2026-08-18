@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Card, CardHeader, EmptyState } from '@/components/ui'
 import { formatBytes, formatDate, formatMoney } from '@/lib/format'
 import { agreementTitle, estimateTitle, type ContractWithRelations } from './shared'
+import InlineDocumentUpload from './InlineDocumentUpload'
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
 	UNPAID: 'Не оплачен',
@@ -78,19 +79,21 @@ export default function TabAgreements({
 										</div>
 										<div className="tnum ml-auto text-xs text-faint">{formatDate(a.date)}</div>
 									</div>
-									<div className="ml-[42px] flex flex-wrap items-center gap-2 text-xs">
-										{scans.map((document) => (
-											<a key={document.id} href={`/api/documents/${document.id}`} className="flex items-center gap-1 rounded-tight border border-line-soft bg-surface px-2 py-1 text-faint hover:border-brand/40 hover:text-brand-ink">
-												<span className="max-w-[180px] truncate">{document.fileName}</span>
-												<span className="tnum">{formatBytes(document.sizeBytes)}</span>
-											</a>
-										))}
-										{canEdit && (
-											<Link href={`/contracts/${contract.id}/upload?agreement=${a.id}`} className="text-brand-ink hover:underline">
-												{scans.length ? '+ ещё скан' : 'Прикрепить скан →'}
-											</Link>
-										)}
-									</div>
+									{scans.length > 0 && (
+										<div className="ml-[42px] flex flex-wrap items-center gap-2 text-xs">
+											{scans.map((document) => (
+												<a key={document.id} href={`/api/documents/${document.id}`} className="flex items-center gap-1 rounded-tight border border-line-soft bg-surface px-2 py-1 text-faint hover:border-brand/40 hover:text-brand-ink">
+													<span className="max-w-[180px] truncate">{document.fileName}</span>
+													<span className="tnum">{formatBytes(document.sizeBytes)}</span>
+												</a>
+											))}
+										</div>
+									)}
+									{canEdit && (
+										<div className="ml-[42px]">
+											<InlineDocumentUpload contractId={contract.id} extraFields={{ agreementId: a.id, kind: 'AGREEMENT' }} maxFiles={5} />
+										</div>
+									)}
 								</div>
 							)
 						})}
@@ -141,19 +144,21 @@ export default function TabAgreements({
 										</div>
 										<div className="tnum ml-auto text-xs text-faint">{formatDate(invoice.date)}</div>
 									</div>
-									<div className="ml-[42px] flex flex-wrap items-center gap-2 text-xs">
-										{scans.map((document) => (
-											<a key={document.id} href={`/api/documents/${document.id}`} className="flex items-center gap-1 rounded-tight border border-line-soft bg-surface px-2 py-1 text-faint hover:border-brand/40 hover:text-brand-ink">
-												<span className="max-w-[180px] truncate">{document.fileName}</span>
-												<span className="tnum">{formatBytes(document.sizeBytes)}</span>
-											</a>
-										))}
-										{canEditInvoices && (
-											<Link href={`/contracts/${contract.id}/upload?invoice=${invoice.id}`} className="text-brand-ink hover:underline">
-												{scans.length ? '+ ещё скан' : 'Прикрепить скан →'}
-											</Link>
-										)}
-									</div>
+									{scans.length > 0 && (
+										<div className="ml-[42px] flex flex-wrap items-center gap-2 text-xs">
+											{scans.map((document) => (
+												<a key={document.id} href={`/api/documents/${document.id}`} className="flex items-center gap-1 rounded-tight border border-line-soft bg-surface px-2 py-1 text-faint hover:border-brand/40 hover:text-brand-ink">
+													<span className="max-w-[180px] truncate">{document.fileName}</span>
+													<span className="tnum">{formatBytes(document.sizeBytes)}</span>
+												</a>
+											))}
+										</div>
+									)}
+									{canEditInvoices && (
+										<div className="ml-[42px]">
+											<InlineDocumentUpload contractId={contract.id} extraFields={{ invoiceId: invoice.id, kind: 'INVOICE' }} maxFiles={5} />
+										</div>
+									)}
 								</div>
 							)
 						})}
