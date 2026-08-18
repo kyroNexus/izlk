@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { canSeeAmounts, canSeeSchedules, canWrite, contractScope, isAdmin } from '../src/lib/access'
+import { canManageInvoices, canSeeAmounts, canSeeSchedules, canWrite, contractScope, isAdmin } from '../src/lib/access'
 
 type Role = 'ADMIN' | 'MANAGER' | 'DESIGNER' | 'BUILDER' | 'PRODUCTION' | 'ACCOUNTING' | 'VIEWER_DESIGN' | 'VIEWER'
 const asUser = (role: Role) => ({ id: `user-${role}`, name: role, email: `${role}@izlk.test`, role })
@@ -28,6 +28,16 @@ for (const role of ['BUILDER', 'PRODUCTION', 'ACCOUNTING', 'VIEWER_DESIGN'] as R
 	assert.equal(isAdmin(asUser(role)), false)
 }
 
+// canManageInvoices (задача C2): узкое право ИМЕННО для счетов — ACCOUNTING
+// плюс существующий canWrite, остальные роли без изменений (никакого
+// расширения canWrite самого по себе — проверено отдельно выше).
+assert.equal(canManageInvoices(asUser('ACCOUNTING')), true, 'ACCOUNTING должна управлять счетами')
+assert.equal(canManageInvoices(asUser('ADMIN')), true)
+assert.equal(canManageInvoices(asUser('MANAGER')), true)
+for (const role of ['BUILDER', 'PRODUCTION', 'DESIGNER', 'VIEWER_DESIGN', 'VIEWER'] as Role[]) {
+	assert.equal(canManageInvoices(asUser(role)), false, `${role} не должна управлять счетами`)
+}
+
 // Узкие write-пути реально подключены в перечисленных файлах (не просто "должны быть").
 const read = (file: string) => fs.readFileSync(file, 'utf8')
 const checks: [string, RegExp][] = [
@@ -42,9 +52,15 @@ const checks: [string, RegExp][] = [
 	['src/app/(dashboard)/executive/[contractId]/page.tsx', /acting\.role !== 'BUILDER'/],
 	['src/app/(dashboard)/contracts/[id]/upload/page.tsx', /user\.role === 'BUILDER'/],
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'BUILDER'/],
-	['src/app/api/contracts/[id]/documents/route.ts', /user\.role !== 'BUILDER' && formData/],
+	['src/app/api/contracts/[id]/documents/route.ts', /user\.role !== 'BUILDER' && user\.role !== 'ACCOUNTING' && formData/],
 	['src/components/Sidebar.tsx', /canSeeSchedules/],
 	['src/app/(dashboard)/settings/page.tsx', /VIEWER_DESIGN/],
+	// Задача C2: узкий доступ ACCOUNTING к счетам — та же схема, что у BUILDER выше.
+	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'ACCOUNTING'/],
+	['src/app/(dashboard)/contracts/[id]/upload/page.tsx', /user\.role === 'ACCOUNTING'/],
+	['src/app/(dashboard)/contracts/[id]/invoices/new/page.tsx', /canManageInvoices/],
+	['src/app/(dashboard)/contracts/[id]/page.tsx', /canManageInvoices/],
+	['src/components/contract/TabAgreements.tsx', /canEditInvoices/],
 ]
 for (const [file, pattern] of checks) assert.match(read(file), pattern, `${file} должен содержать ${pattern}`)
 

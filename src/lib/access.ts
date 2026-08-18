@@ -58,6 +58,17 @@ export function canWrite(user: SessionUser): boolean {
 	return user.role === 'ADMIN' || user.role === 'MANAGER'
 }
 
+/**
+ * Задача C2: у ACCOUNTING сейчас нет прав вообще нигде (canWrite — только
+ * ADMIN/MANAGER), а работа со счетами — её прямая задача. Отдельная узкая
+ * проверка ИМЕННО для счетов (не расширяем canWrite целиком — это разом
+ * дало бы ACCOUNTING запись во все остальные формы приложения, от карточки
+ * контрагента до перевода этапов договора, о чём в задаче речи не было).
+ */
+export function canManageInvoices(user: SessionUser): boolean {
+	return canWrite(user) || user.role === 'ACCOUNTING'
+}
+
 /** Только администратор управляет пользователями и очередью импорта. */
 export function isAdmin(user: SessionUser): boolean {
 	return user.role === 'ADMIN'

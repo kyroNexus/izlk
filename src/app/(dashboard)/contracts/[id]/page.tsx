@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
-import { canSeeAmounts as canSeeAmountsFor, canWrite, contractScope, isAdmin, requireUser } from '@/lib/access'
+import { canManageInvoices, canSeeAmounts as canSeeAmountsFor, canWrite, contractScope, isAdmin, requireUser } from '@/lib/access'
 import Topbar from '@/components/Topbar'
 import ContractSectionNav from '@/components/ContractSectionNav'
 import type { ContractHierarchyNode } from '@/components/ContractHierarchy'
@@ -46,6 +46,9 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const canSeeAmounts = canSeeAmountsFor(user)
 	const canEdit = canWrite(user)
 	const isAdminUser = isAdmin(user)
+	// Задача C2: узкая проверка ИМЕННО для счетов — у ACCOUNTING нет canEdit
+	// (canWrite только ADMIN/MANAGER), но работа со счетами — её прямая задача.
+	const canEditInvoices = canManageInvoices(user)
 
 	// Видимость считается централизованно (lib/access), а не копией условий на каждой странице.
 	const contractLoadStartedAt = Date.now()
@@ -381,7 +384,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							applyDemoStep={applyDemoStep}
 						/>
 
-						<TabAgreements contract={contract} canEdit={canEdit} canSeeAmounts={canSeeAmounts} />
+						<TabAgreements contract={contract} canEdit={canEdit} canEditInvoices={canEditInvoices} canSeeAmounts={canSeeAmounts} />
 
 						<TabDocuments
 							contract={contract}

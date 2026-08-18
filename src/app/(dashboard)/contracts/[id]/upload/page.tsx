@@ -15,7 +15,7 @@ export default async function UploadDocumentPage({
 	searchParams,
 }: {
 	params: { id: string }
-	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; pr1?: string; agreement?: string }
+	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; pr1?: string; agreement?: string; invoice?: string }
 }) {
 	const user = await requireUser()
 	const contractId = params.id
@@ -26,15 +26,20 @@ export default async function UploadDocumentPage({
 	const requestedKind = DOCUMENT_KIND_ORDER.find((kind) => kind === searchParams.kind) ?? ''
 	const pr1Mode = searchParams.pr1 === '1'
 	const projectSection = searchParams.project ? await prisma.projectSection.findFirst({ where: { id: searchParams.project, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
-	// Задача C2: скан к конкретному доп. соглашению — та же проверка "id
+	// Задача C2: скан к конкретному доп. соглашению/счёту — та же проверка "id
 	// принадлежит этому договору", что уже есть для projectSection выше.
 	const agreement = searchParams.agreement ? await prisma.agreement.findFirst({ where: { id: searchParams.agreement, contractId, deletedAt: null }, select: { id: true, number: true } }) : null
+	const invoice = searchParams.invoice ? await prisma.invoice.findFirst({ where: { id: searchParams.invoice, contractId, deletedAt: null }, select: { id: true, number: true } }) : null
 	const contract = user.role === 'DESIGNER'
 		? projectSection && await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null }, select: { id: true, number: true, managerId: true } })
 		: user.role === 'BUILDER'
 		// Строитель загружает файлы площадок/исполнительной/графика проектирования
 		// на любой видимый ему договор — без общего canWrite (не может редактировать сам договор).
 		? await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null, ...contractScope(user) }, select: { id: true, number: true, managerId: true } })
+		: user.role === 'ACCOUNTING'
+		// У бухгалтерии нет общего canWrite — только узкий доступ к странице
+		// прикрепления скана к счёту, который она явно открыла по ссылке.
+		? invoice && await prisma.contract.findFirst({ where: { id: contractId, deletedAt: null }, select: { id: true, number: true, managerId: true } })
 		: await assertContractAccess(contractId, user, { write: true })
 	if (!contract) redirect('/projects')
 
@@ -62,7 +67,7 @@ export default async function UploadDocumentPage({
 
 			<div className="workspace-content">
 				<div className="work-hero mb-[20px] px-5 py-4">
-					<h1 className="text-2xl font-bold tracking-[-0.02em]">{pr1Mode ? 'Подписанное Приложение №1' : agreement ? `Скан к ${agreementTitle(agreement.number)}` : 'Загрузка документа'}</h1>
+					<h1 className="text-2xl font-bold tracking-[-0.02em]">{pr1Mode ? 'Подписанное Приложение №1' : agreement ? `Скан к ${agreementTitle(agreement.number)}` : invoice ? `Скан к счёту №${invoice.number}` : 'Загрузка документа'}</h1>
 					<div className="mt-[4px] text-base text-faint">К договору № {contract.number}</div>
 				</div>
 
@@ -82,6 +87,7 @@ export default async function UploadDocumentPage({
 							requestedKind={requestedKind}
 							pr1Mode={pr1Mode}
 							agreement={agreement}
+							invoice={invoice}
 						/>
 					</Card>
 

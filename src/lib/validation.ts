@@ -158,6 +158,13 @@ export const estimateSchema = z.object({
 	amount: z.string().trim().optional(),
 })
 
+export const invoiceSchema = z.object({
+	number: z.string().trim().min(1, 'Укажите номер счёта').max(120),
+	date: z.string().trim().min(1, 'Укажите дату счёта'),
+	amount: z.string().trim().refine((value) => parseAmount(value) !== null, 'Сумма должна быть положительной и не превышать 9 999 999 999 999.'),
+	dueDate: z.string().trim().optional(),
+})
+
 /** Первое сообщение об ошибке из zod-результата. */
 export function firstIssue(error: z.ZodError): string {
 	return error.issues[0]?.message ?? 'Проверьте поля формы'
