@@ -5,6 +5,7 @@ import { Card, EmptyState } from '@/components/ui'
 import { isAdmin, requireUser } from '@/lib/access'
 import { formatDateTime, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
+import { agreementTitle } from '@/components/contract/shared'
 
 type ActivityFilter = 'all' | 'documents' | 'contracts' | 'workflow'
 
@@ -21,6 +22,9 @@ const labels: Record<string, string> = {
   Contract: 'создал договор', ContractDeleted: 'переместил договор в корзину', ContractRestored: 'восстановил договор', ContractPurged: 'удалил договор безвозвратно',
   ContractWorkflowStage: 'изменил этап договора', ContractPr1Confirmed: 'подтвердил ПР1', ContractPr1Revoked: 'отменил подтверждение ПР1', ContractDemoStep: 'изменил демо-этап',
   ContractImport: 'импортировал договор', ProjectSection: 'изменил раздел проекта', SiteWork: 'добавил дневной отчёт',
+  // Задача (2026-08-18): MANAGER теперь может редактировать чужие договоры —
+  // эти два действия и раньше существовали, но нигде не писали в аудит.
+  Agreement: 'создал доп. соглашение', Invoice: 'создал счёт',
 }
 
 function groupFor(entityType: string): Exclude<ActivityFilter, 'all'> {
@@ -41,14 +45,23 @@ export default async function ActivityPage({ searchParams }: { searchParams: { t
   const filter = FILTERS.some((item) => item.key === searchParams.type) ? searchParams.type as ActivityFilter : 'all'
   const logs = await prisma.auditLog.findMany({ include: { user: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 250 })
   const shownLogs = filter === 'all' ? logs : logs.filter((log) => groupFor(log.entityType) === filter)
-  const contractIds = [...new Set(logs.filter((log) => groupFor(log.entityType) !== 'documents').map((log) => log.entityId))]
+  const contractIds = [...new Set(logs.filter((log) => groupFor(log.entityType) !== 'documents' && log.entityType !== 'Agreement' && log.entityType !== 'Invoice').map((log) => log.entityId))]
   const documentIds = [...new Set(logs.filter((log) => groupFor(log.entityType) === 'documents').map((log) => log.entityId))]
-  const [contracts, documents] = await Promise.all([
+  // Задача (2026-08-18): ДС и счёт хранят СВОЙ id в entityId (как везде в
+  // аудите), не id договора — без отдельного разрешения запись выглядела бы
+  // как «Объект был удалён» (ложно, объект на месте — просто не тот вид сущности).
+  const agreementIds = [...new Set(logs.filter((log) => log.entityType === 'Agreement').map((log) => log.entityId))]
+  const invoiceIds = [...new Set(logs.filter((log) => log.entityType === 'Invoice').map((log) => log.entityId))]
+  const [contracts, documents, agreements, invoices] = await Promise.all([
     contractIds.length ? prisma.contract.findMany({ where: { id: { in: contractIds } }, select: { id: true, number: true, deletedAt: true } }) : [],
     documentIds.length ? prisma.document.findMany({ where: { id: { in: documentIds } }, select: { id: true, fileName: true, deletedAt: true } }) : [],
+    agreementIds.length ? prisma.agreement.findMany({ where: { id: { in: agreementIds } }, select: { id: true, number: true, contractId: true, deletedAt: true } }) : [],
+    invoiceIds.length ? prisma.invoice.findMany({ where: { id: { in: invoiceIds } }, select: { id: true, number: true, contractId: true, deletedAt: true } }) : [],
   ])
   const contractById = new Map(contracts.map((contract) => [contract.id, contract]))
   const documentById = new Map(documents.map((document) => [document.id, document]))
+  const agreementById = new Map(agreements.map((agreement) => [agreement.id, agreement]))
+  const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]))
   const countLabel = filter === 'all' ? `${shownLogs.length} последних событий` : `${shownLogs.length} в выбранной категории`
 
   return <>
@@ -66,8 +79,16 @@ export default async function ActivityPage({ searchParams }: { searchParams: { t
           const group = groupFor(log.entityType)
           const document = documentById.get(log.entityId)
           const contract = contractById.get(log.entityId)
-          const objectName = document?.fileName ?? (contract ? `Договор № ${contract.number}` : group === 'documents' ? 'Документ был удалён' : 'Объект был удалён')
-          const href = document && !document.deletedAt ? `/documents/${document.id}` : contract && !contract.deletedAt ? `/contracts/${contract.id}` : null
+          const agreement = log.entityType === 'Agreement' ? agreementById.get(log.entityId) : undefined
+          const invoice = log.entityType === 'Invoice' ? invoiceById.get(log.entityId) : undefined
+          const objectName = document?.fileName
+            ?? (agreement ? agreementTitle(agreement.number) : undefined)
+            ?? (invoice ? `Счёт №${invoice.number}` : undefined)
+            ?? (contract ? `Договор № ${contract.number}` : group === 'documents' ? 'Документ был удалён' : 'Объект был удалён')
+          const href = document && !document.deletedAt ? `/documents/${document.id}`
+            : agreement && !agreement.deletedAt ? `/contracts/${agreement.contractId}#agreements`
+            : invoice && !invoice.deletedAt ? `/contracts/${invoice.contractId}#agreements`
+            : contract && !contract.deletedAt ? `/contracts/${contract.id}` : null
           const content = <><div className="min-w-0 flex-1"><div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm"><b>{log.user.name}</b><span>{labels[log.entityType] ?? 'изменил данные'}</span><span className="max-w-full truncate font-semibold text-brand-ink">{objectName}</span></div><div className="mt-1 flex items-center gap-2 text-xs text-faint"><span>{formatDateTime(log.createdAt)}</span><span className="h-1 w-1 rounded-full bg-line" /><span>{group === 'documents' ? 'Файлы' : group === 'workflow' ? 'Ход работ' : 'Договоры'}</span></div></div>{href && <span className="flex-none text-xs font-semibold text-brand-ink transition group-hover:translate-x-0.5">Открыть →</span>}</>
           return href ? <Link key={log.id} href={href} className="group flex items-start gap-3 border-b border-line-soft px-5 py-3.5 transition hover:bg-raised/70 last:border-0"><Accent group={group} />{content}</Link> : <div key={log.id} className="flex items-start gap-3 border-b border-line-soft px-5 py-3.5 last:border-0"><Accent group={group} />{content}</div>
         })}</div>}

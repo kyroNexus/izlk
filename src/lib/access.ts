@@ -81,18 +81,24 @@ export function canSeeSchedules(user: SessionUser): boolean {
 
 /**
  * Область видимости договоров для роли.
- * ADMIN, BUILDER, PRODUCTION, ACCOUNTING и VIEWER_DESIGN сюда осознанно не
- * добавлены — «просмотр всего» для них означает без дополнительного фильтра,
- * как и для ADMIN.
+ * По прямому запросу пользователя (2026-08-18): MANAGER и DESIGNER видят и
+ * редактируют ЛЮБОЙ договор, не только свои/назначенные — раньше MANAGER
+ * был ограничен managerId, а DESIGNER — ContractAccess/ответственностью за
+ * раздел проекта. Это единственная функция, через которую идёт и список
+ * (contracts, dashboard, поиск), и проверка на запись (assertContractAccess/
+ * findContractInScope) — так что снятие фильтра здесь разом даёт менеджерам
+ * право редактировать чужие договоры (загружать файлы, менять этап, ДС,
+ * счета). Пользователь подтвердил это осознанно, с условием: все изменения
+ * остаются в журнале (writeAudit пишет реального автора действия, не
+ * managerId договора — «Последняя активность» у ADMIN покажет, кто что менял).
+ * ADMIN, BUILDER, PRODUCTION, ACCOUNTING и VIEWER_DESIGN тут и раньше не
+ * фильтровались — «просмотр всего» для них означает без дополнительного
+ * фильтра. Осталась только VIEWER (внешний/ограниченный доступ) — её сюда
+ * никто не просил менять.
  */
 export function contractScope(user: SessionUser): Prisma.ContractWhereInput {
 	return {
 		deletedAt: null,
-		...(user.role === 'MANAGER' ? { managerId: user.id } : {}),
-		...(user.role === 'DESIGNER' ? { OR: [
-			{ access: { some: { userId: user.id } } },
-			{ projectSections: { some: { responsibleId: user.id, deletedAt: null } } },
-		] } : {}),
 		...(user.role === 'VIEWER' ? { access: { some: { userId: user.id } } } : {}),
 	}
 }

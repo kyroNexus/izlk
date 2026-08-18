@@ -7,6 +7,7 @@ import { Card } from '@/components/ui'
 import { initials } from '@/lib/format'
 import { invoiceSchema, firstIssue, orNull, parseAmount, parseDate } from '@/lib/validation'
 import { canManageInvoices, requireUser } from '@/lib/access'
+import { writeAudit } from '@/lib/audit'
 
 const FIELD_CLASS =
 	'h-control w-full rounded-control border border-line bg-surface px-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
@@ -73,6 +74,7 @@ export default async function NewInvoicePage({
 			data: { contractId, number: data.number, date: dateValue!, amount: amount!, dueDate },
 			select: { id: true },
 		})
+		await writeAudit({ userId: actingUser.id, action: 'CREATE', entityType: 'Invoice', entityId: invoice.id })
 
 		redirect(`/contracts/${contractId}/upload?invoice=${invoice.id}`)
 	}

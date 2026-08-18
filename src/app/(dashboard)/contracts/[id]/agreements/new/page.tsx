@@ -7,6 +7,7 @@ import { Card } from '@/components/ui'
 import { initials } from '@/lib/format'
 import { agreementSchema, firstIssue, orNull, parseDate } from '@/lib/validation'
 import { assertContractAccess, requireUser } from '@/lib/access'
+import { writeAudit } from '@/lib/audit'
 
 const FIELD_CLASS =
 	'h-control w-full rounded-control border border-line bg-surface px-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/20'
@@ -83,14 +84,19 @@ export default async function NewAgreementPage({
 			}
 		}
 
-		await prisma.agreement.create({
+		// Задача (2026-08-18): MANAGER теперь может создать ДС и в чужом
+		// договоре (contractScope больше не ограничивает managerId) — журнал
+		// должен фиксировать реального автора, не владельца договора.
+		const agreement = await prisma.agreement.create({
 			data: {
 				contractId,
 				number: data.number,
 				date: dateValue,
 				parentId,
 			},
+			select: { id: true },
 		})
+		await writeAudit({ userId: actingUser.id, action: 'CREATE', entityType: 'Agreement', entityId: agreement.id })
 
 		redirect(`/contracts/${contractId}`)
 	}

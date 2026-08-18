@@ -1,7 +1,12 @@
 /**
  * C5: the two new XLSX exports must use the exact same scope as their pages
- * (a MANAGER exporting must not see another manager's contracts in the
- * file) and must carry over the existing formula-injection escaping.
+ * — both call contractScope(user), the single shared function, so whatever
+ * it returns is what actually ends up in the file. Since 2026-08-18
+ * contractScope no longer restricts MANAGER to their own managerId (user's
+ * explicit request), a MANAGER's export now legitimately includes every
+ * manager's contracts — this test now guards that invariant (same scope as
+ * the page) rather than a managerId restriction that no longer exists.
+ * Also carries over the existing formula-injection escaping checks.
  */
 import assert from 'node:assert/strict'
 import * as XLSX from 'xlsx'
@@ -35,7 +40,7 @@ async function main() {
 		const prodRows = sheetRows(prodBuffer, 'График производства')
 		const prodBodyText = JSON.stringify(prodRows)
 		assert.ok(prodBodyText.includes(`TMP-C5A-${stamp}`), 'export must include the exporting manager\'s own contract')
-		assert.ok(!prodBodyText.includes(`TMP-C5B-${stamp}`), 'export must not leak another manager\'s contract')
+		assert.ok(prodBodyText.includes(`TMP-C5B-${stamp}`), 'contractScope no longer restricts MANAGER to managerId (2026-08-18) — the export must include the other manager\'s contract too, matching what the page itself now shows')
 		assert.ok(prodBodyText.includes("'=2+2"), 'a note starting with = must be escaped with a leading apostrophe, not left as a live formula')
 		assert.ok(prodBodyText.includes('Высокий'), 'priority must be shown as its Russian label, not the raw enum value')
 
@@ -44,12 +49,12 @@ async function main() {
 		const buildRows = sheetRows(buildBuffer, 'График стройотдела')
 		const buildBodyText = JSON.stringify(buildRows)
 		assert.ok(buildBodyText.includes(`TMP-C5CA-${stamp}`), 'construction export must include the exporting manager\'s own contract')
-		assert.ok(!buildBodyText.includes(`TMP-C5CB-${stamp}`), 'construction export must not leak another manager\'s contract')
+		assert.ok(buildBodyText.includes(`TMP-C5CB-${stamp}`), 'contractScope no longer restricts MANAGER to managerId (2026-08-18) — construction export must include the other manager\'s contract too')
 		const dataRow = buildRows.find((row) => row[0] === `TMP-C5CA-${stamp}`)
 		assert.ok(dataRow, 'the exported row for the construction contract must exist')
 		assert.equal(dataRow![7], '01.02.2026', 'КЖ column must carry the real last work date for that direction')
 
-		console.log('Schedule export checks passed: contractScope enforced on both exports, formula escaping, real KZH date carried through.')
+		console.log('Schedule export checks passed: both exports share contractScope with their page (now unrestricted for MANAGER), formula escaping, real KZH date carried through.')
 	} finally {
 		await prisma.siteWork.deleteMany({ where: { siteId: site.id } })
 		await prisma.site.delete({ where: { id: site.id } })

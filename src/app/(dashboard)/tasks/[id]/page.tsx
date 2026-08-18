@@ -109,13 +109,13 @@ export default async function TaskPage({
       where: { id: assigneeId, deletedAt: null, isActive: true },
       select: { id: true },
     })
+    // Раньше тут отдельно повторялось managerId-ограничение — раз выпадающий
+    // список "Договор" выше уже собран через contractScope(user), проверка
+    // на сохранение должна пускать то же самое, иначе MANAGER мог выбрать
+    // договор из списка и получить "Проверьте обязательные поля".
     const allowedContract = contractId
       ? await prisma.contract.findFirst({
-          where: {
-            id: contractId,
-            deletedAt: null,
-            ...(acting.role === 'MANAGER' ? { managerId: acting.id } : {}),
-          },
+          where: { id: contractId, ...contractScope(acting) },
           select: { id: true },
         })
       : null
