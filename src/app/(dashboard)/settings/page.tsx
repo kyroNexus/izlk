@@ -12,6 +12,7 @@ import { getSystemHealth } from '@/lib/system-health'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import TableDensityToggle from '@/components/TableDensityToggle'
 import { hashPassword } from '@/lib/password'
+import Link from 'next/link'
 
 const ROLES = Object.keys(ROLE_LABELS) as Role[]
 
@@ -104,6 +105,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { e
 
 	return <><Topbar crumbs={[{ label: 'Главная', href: '/' }, { label: 'Настройки' }]} userName={name.split(' ')[0]} initials={initials(name)} />
 		<div className="workspace-content"><div className="mb-[18px]"><h1 className="text-2xl font-bold">Настройки</h1><div className="mt-[4px] text-base text-muted">Пользователи, права доступа и состояние системы</div></div><div className="mb-[12px] max-w-[760px]"><FormError message={searchParams.error} />{searchParams.success && <div className="rounded-control border border-ok-bd bg-ok-bg px-3 py-2 text-sm text-ok">{searchParams.success}</div>}</div>
+			<Card className="mb-[14px] p-4"><div className="flex flex-wrap items-center gap-4"><div className="min-w-0 flex-1"><div className="text-base font-bold">Правила документов</div><div className="mt-1 text-xs text-muted">Шаблоны автоматического определения вида, подтипа и связи с дополнительным соглашением.</div></div><Link href="/settings/document-rules" className="rounded-tight border border-line bg-surface px-4 py-2 text-sm font-semibold hover:bg-raised">Настроить</Link></div></Card>
 			<Card className="mb-[14px] overflow-hidden">
 				<div className="flex items-center border-b border-line-soft px-4 py-3"><div><div className="text-base font-bold">Состояние системы</div><div className="mt-0.5 text-xs text-faint">Проверено {formatDateTime(health.checkedAt)}</div></div><Chip tone={health.storage.available && health.inbox.available ? 'ok' : 'danger'}>{health.storage.available && health.inbox.available ? 'Всё работает' : 'Требует внимания'}</Chip></div>
 				<div className="grid grid-cols-2 gap-px bg-line-soft md:grid-cols-4">

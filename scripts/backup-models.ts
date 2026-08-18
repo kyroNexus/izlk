@@ -17,6 +17,7 @@ export const backupTables: BackupTable[] = Prisma.dmmf.datamodel.models.map(({ n
 // fail fast when the Prisma schema gains a new model.
 export const restoreOrder = [
   'user',
+  'documentRouteRule',
   'contractor',
   'contract',
   'productionPlan',

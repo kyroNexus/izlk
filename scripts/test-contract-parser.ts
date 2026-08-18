@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import * as XLSX from 'xlsx'
 import { detectContractorType, parseContractFolder, parseContractText, parseEstimateWorkbook } from '../src/lib/contract-parser'
 import { classifyDocumentPath } from '../src/lib/document-classifier'
+import { assertDocumentRulePattern, DEFAULT_DOCUMENT_ROUTE_RULES, testDocumentRoute } from '../src/lib/document-route-rules'
 import { isValidOgrn } from '../src/lib/validation'
 
 function estimateBuffer(rows: string[][], sheetName = 'Смета') {
@@ -46,6 +47,33 @@ assert.equal(legacyWordStyle.cipher, 'ИЗЛК Рус КБ-300.18.36.64.60')
 assert.equal(classifyDocumentPath('Заказчик/Исходные данные/ГПЗУ участка.pdf'), 'SOURCE_DATA')
 assert.equal(classifyDocumentPath('ИГИ/инженерно-геологические изыскания.pdf'), 'SOURCE_DATA')
 assert.equal(classifyDocumentPath('Заказчик/Геоподоснова участка.pdf'), 'SOURCE_DATA')
+
+const invoiceRoute = testDocumentRoute('Счёт на оплату № 42 от 18.08.2026.pdf', DEFAULT_DOCUMENT_ROUTE_RULES)
+assert.equal(invoiceRoute.kind, 'INVOICE')
+assert.equal(invoiceRoute.matchedRule?.id, 'default-invoice')
+
+const sourceRoute = testDocumentRoute('Исходные данные ИГИ.pdf', DEFAULT_DOCUMENT_ROUTE_RULES)
+assert.equal(sourceRoute.kind, 'SOURCE_DATA')
+assert.equal(sourceRoute.sourceDataKind, 'IGI')
+
+const estimateRoute = testDocumentRoute('Смета к ДС № 3.xlsx', DEFAULT_DOCUMENT_ROUTE_RULES)
+assert.equal(estimateRoute.kind, 'ESTIMATE')
+assert.equal(estimateRoute.agreementNumber, '3')
+
+const disabledInvoiceRoute = testDocumentRoute(
+	'Счёт на оплату № 42 от 18.08.2026.pdf',
+	DEFAULT_DOCUMENT_ROUTE_RULES.map((rule) => rule.id === 'default-invoice' ? { ...rule, enabled: false } : rule),
+)
+assert.equal(disabledInvoiceRoute.kind, 'INVOICE', 'встроенный классификатор остаётся запасным вариантом')
+assert.equal(disabledInvoiceRoute.matchedRule, null, 'отключённое правило не должно считаться совпавшим')
+
+const customRoute = testDocumentRoute('Спецакт 2026.pdf', [
+	{ id: 'custom-rule', target: 'APPENDIX_TO_AGREEMENT', pattern: '^Спецакт', enabled: true, sortOrder: 1, note: null },
+	...DEFAULT_DOCUMENT_ROUTE_RULES,
+])
+assert.equal(customRoute.matchedRule?.id, 'custom-rule', 'правило из БД должно дополнять встроенную классификацию')
+assert.equal(customRoute.kind, 'APPENDIX')
+assert.throws(() => assertDocumentRulePattern('['), /регулярное выражение/)
 
 // Формулировка по образцу реального договора (ФИО вымышленное) — заказчик
 // физ. лицо, действующее через представителя по доверенности; у представителя

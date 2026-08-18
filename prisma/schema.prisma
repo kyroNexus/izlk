@@ -691,6 +691,18 @@ model Document {
   @@index([contractId, state])
 }
 
+model DocumentRouteRule {
+  id        String   @id @default(cuid())
+  target    String
+  pattern   String
+  enabled   Boolean  @default(true)
+  sortOrder Int
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([target, sortOrder])
+}
+
 // ------------------------------------------------------------
 // ПЛОЩАДКИ
 // ------------------------------------------------------------

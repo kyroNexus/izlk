@@ -1,10 +1,13 @@
 import { PrismaClient, Role, ContractStatus, SiteStatus, SiteEventType, SectionCode, ExecStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_DOCUMENT_ROUTE_RULES } from '../src/lib/document-route-rules';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Сидирование базы данных ИЗЛК...');
+
+  await prisma.documentRouteRule.createMany({ data: DEFAULT_DOCUMENT_ROUTE_RULES, skipDuplicates: true });
 
   // --- Пользователи ---
   const adminPass = await bcrypt.hash('admin123', 10);
