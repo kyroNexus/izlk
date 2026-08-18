@@ -299,6 +299,9 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const needsSite = contract.kind === 'SMR'
 	const needsExecutive = contract.kind !== 'PROJECT'
 	const executiveReady = executiveDocs.length > 0 && executiveDocs.every((item) => item.status === 'READY')
+	const agreementHasFiles = contract.documents.some((document) => document.agreementId || document.invoiceId || document.kind === 'AGREEMENT' || document.kind === 'INVOICE')
+	const projectHasFiles = projectSections.some((section) => section.documents.length > 0)
+	const executiveHasFiles = contract.documents.some((document) => document.executiveDocId)
 	const progressParts = [
 		{ label: 'Договор и файлы', ready: documentReady, href: '#documents' },
 		{ label: 'Подписанное ПР1', ready: pr1Ready, href: '#workflow' },
@@ -369,12 +372,12 @@ export default async function ContractPage({ params, searchParams }: { params: {
 						</Card>
 
 						<ContractSectionNav sections={[
-							{ id: 'workflow', label: 'Ход договора' },
-							{ id: 'documents', label: 'Документы' },
-							{ id: 'agreements', label: 'Соглашения' },
-							{ id: 'project', label: 'Проект' },
+							{ id: 'workflow', label: 'Ход договора', hasFiles: Boolean(latestPr1) },
+							{ id: 'documents', label: 'Документы', hasFiles: documentsForRegistry.length > 0 },
+							{ id: 'agreements', label: 'Соглашения', hasFiles: agreementHasFiles },
+							{ id: 'project', label: 'Проект', hasFiles: projectHasFiles },
 							...(site ? [{ id: 'site', label: 'Площадка' }] : []),
-							...(needsExecutive ? [{ id: 'executive', label: 'Исполнительная' }] : []),
+							...(needsExecutive ? [{ id: 'executive', label: 'Исполнительная', hasFiles: executiveHasFiles }] : []),
 							{ id: 'tasks', label: 'Задачи' },
 							{ id: 'history', label: 'История' },
 						]} />
