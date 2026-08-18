@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
-import type { DocumentKind } from '@prisma/client'
+import type { DocumentKind, SourceDataKind } from '@prisma/client'
 import FileDropField, { type FileDropFieldResult, type SelectedFile } from '@/components/FileDropField'
-import { classifyDocumentPath } from '@/lib/document-classifier'
+import { routeDocument } from '@/lib/document-routing'
 import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatMoney } from '@/lib/format'
 import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
 import { agreementTitle } from '@/components/contract/shared'
@@ -40,6 +40,7 @@ type Props = {
 	requestedExecutive?: string
 	requestedState?: string
 	requestedKind?: string
+	requestedSubtype?: SourceDataKind | null
 	pr1Mode?: boolean
 	/** Задача C2: скан к конкретному доп. соглашению — вид жёстко AGREEMENT,
 	 *  как и у ПР1/проектного режима выше, уточнять нечего. */
@@ -69,6 +70,7 @@ export default function SmartDocumentUpload({
 	requestedExecutive = '',
 	requestedState = '',
 	requestedKind = '',
+	requestedSubtype = null,
 	pr1Mode = false,
 	agreement = null,
 	invoice = null,
@@ -77,11 +79,12 @@ export default function SmartDocumentUpload({
 	const isProject = Boolean(projectSection)
 	const isAgreementMode = Boolean(agreement)
 	const isInvoiceMode = Boolean(invoice)
+	const isSourceDataMode = Boolean(requestedSubtype)
 	const endpoint = `/api/contracts/${contractId}/documents`
 
 	const [advanced, setAdvanced] = useState(false)
 	const [confirmPr1, setConfirmPr1] = useState(pr1Mode)
-	const [kind, setKind] = useState(() => (isProject ? 'PROJECT_PDF' : isAgreementMode ? 'AGREEMENT' : isInvoiceMode ? 'INVOICE' : requestedKind || (requestedExecutive ? 'EXECUTIVE' : 'AUTO')))
+	const [kind, setKind] = useState(() => (isProject ? 'PROJECT_PDF' : isAgreementMode ? 'AGREEMENT' : isInvoiceMode ? 'INVOICE' : isSourceDataMode ? 'SOURCE_DATA' : requestedKind || (requestedExecutive ? 'EXECUTIVE' : 'AUTO')))
 	const [executiveDocId, setExecutiveDocId] = useState(pr1Mode ? '' : requestedExecutive)
 	const [signedAt, setSignedAt] = useState('')
 	const [workingDays, setWorkingDays] = useState('')
@@ -90,6 +93,7 @@ export default function SmartDocumentUpload({
 	const [status, setStatus] = useState('')
 	// Ручные правки чипа вида на отдельных файлах — ключ: id файла в FileDropField.
 	const [kindOverrides, setKindOverrides] = useState<Record<string, DocumentKind>>({})
+	const [subtypeOverrides, setSubtypeOverrides] = useState<Record<string, SourceDataKind | ''>>({})
 	// Задача B3: если среди выбранных файлов классификатор нашёл смету,
 	// сразу спрашиваем сервер про срок и сумму — не дожидаясь отправки формы.
 	// Поле "Рабочих дней" тут не единственный источник: пользователь мог уже
@@ -100,10 +104,13 @@ export default function SmartDocumentUpload({
 	// Чип вида уместен только там, где вид вообще неоднозначен: в проектном
 	// режиме, ПР1 и скане к ДС/счёту вид жёстко фиксирован форматом/ролью/
 	// контекстом, там нечего уточнять.
-	const showKindChip = !isProject && !pr1Mode && !isAgreementMode && !isInvoiceMode
+	const showKindChip = !isProject && !pr1Mode && !isAgreementMode && !isInvoiceMode && !isSourceDataMode
+	function classifiedRoute(item: { file: File; relativePath?: string }) {
+		return routeDocument(item.relativePath || item.file.name)
+	}
 
 	function classifiedKind(item: { file: File; relativePath?: string }): DocumentKind {
-		return classifyDocumentPath(item.relativePath || item.file.name)
+		return classifiedRoute(item).kind
 	}
 
 	function resolvedKind(item: { id: string; file: File; relativePath?: string }): DocumentKind {
@@ -118,7 +125,10 @@ export default function SmartDocumentUpload({
 		if (!showKindChip) return null
 		const forced = kind !== 'AUTO'
 		const value = resolvedKind(item)
+		const route = classifiedRoute(item)
+		const subtype = subtypeOverrides[item.id] ?? route.sourceDataKind ?? ''
 		return (
+			<span className="flex flex-wrap items-center justify-end gap-1">
 			<select
 				value={value}
 				disabled={forced || item.status !== 'pending'}
@@ -128,11 +138,16 @@ export default function SmartDocumentUpload({
 			>
 				{DOCUMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{DOCUMENT_KIND_LABELS[k]}</option>)}
 			</select>
+			{value === 'SOURCE_DATA' && <select value={subtype} disabled={item.status !== 'pending'} onChange={(event) => setSubtypeOverrides((current) => ({ ...current, [item.id]: event.target.value as SourceDataKind | '' }))} className="h-5 rounded-full border border-brand/25 bg-surface px-1.5 text-2xs font-semibold text-brand-ink"><option value="">Подтип</option><option value="IGI">ИГИ</option><option value="GPZU">ГПЗУ</option><option value="TOPO">Топосъёмка</option><option value="GEOBASE">Геоподоснова</option><option value="CONSTRAINTS">Ограничения</option></select>}
+			{route.agreementNumber && <span className="rounded-full bg-warn-bg px-1.5 text-2xs font-semibold text-warn">к ДС №{route.agreementNumber}</span>}
+			</span>
 		)
 	}
 
 	function itemFields(item: SelectedFile): Record<string, string> {
-		return showKindChip ? { kinds: resolvedKind(item) } : {}
+		if (!showKindChip) return { paths: item.relativePath || item.file.name }
+		const route = classifiedRoute(item)
+		return { paths: item.relativePath || item.file.name, kinds: resolvedKind(item), subs: resolvedKind(item) === 'SOURCE_DATA' ? subtypeOverrides[item.id] ?? route.sourceDataKind ?? '' : '' }
 	}
 
 	// Поле "Рабочих дней" существует только в контексте ПР1 (confirmPr1/pr1Mode) —
@@ -223,6 +238,8 @@ export default function SmartDocumentUpload({
 		executiveDocId,
 		agreementId: agreement?.id ?? '',
 		invoiceId: invoice?.id ?? '',
+		agreementNumber: agreement?.number ?? '',
+		sub: requestedSubtype ?? '',
 		signedAt,
 		workingDays,
 		state,
@@ -238,9 +255,11 @@ export default function SmartDocumentUpload({
 			{agreement && <input type="hidden" name="kind" value="AGREEMENT" />}
 			{invoice && <input type="hidden" name="invoiceId" value={invoice.id} />}
 			{invoice && <input type="hidden" name="kind" value="INVOICE" />}
+			{agreement && <input type="hidden" name="agreementNumber" value={agreement.number} />}
+			{requestedSubtype && <><input type="hidden" name="kind" value="SOURCE_DATA" /><input type="hidden" name="sub" value={requestedSubtype} /></>}
 
 			<div className="smart-upload-intro rounded-[14px] border border-brand/20 bg-[linear-gradient(135deg,rgba(112,71,232,.10),rgba(112,71,232,.025))] px-4 py-3">
-				<div className="text-base font-bold text-ink">{pr1Mode ? 'Подписанное Приложение №1' : agreement ? `Скан к ${agreementTitle(agreement.number)}` : invoice ? `Скан к счёту №${invoice.number}` : 'Добавьте файлы к договору'}</div>
+				<div className="text-base font-bold text-ink">{pr1Mode ? 'Подписанное Приложение №1' : agreement ? `Скан к ${agreementTitle(agreement.number)}` : invoice ? `Скан к счёту №${invoice.number}` : requestedSubtype ? `Исходные данные: ${requestedSubtype}` : 'Добавьте файлы к договору'}</div>
 				<p className="mt-1 text-xs leading-5 text-muted">{pr1Mode ? 'Загрузите подписанный заказчиком файл. После отправки договор перейдёт в проектирование, а площадка создастся автоматически.' : agreement ? 'Прикрепите скан или файл этого дополнительного соглашения — он появится в списке документов ДС на карточке договора.' : invoice ? 'Прикрепите скан или файл этого счёта — он появится в списке документов на карточке договора.' : <>Перетащите файл или папку документов в область ниже. Для полной папки система сама распределит договор, сметы и проектные файлы через <Link href="/contracts/import" className="font-semibold text-brand-ink hover:underline">умный импорт</Link>.</>}</p>
 			</div>
 
@@ -261,14 +280,14 @@ export default function SmartDocumentUpload({
 			/>
 			{status && <div role="status" className="rounded-tight border border-line bg-raised px-2.5 py-1.5 text-xs text-muted">{status}</div>}
 
-			{!isProject && !pr1Mode && !isAgreementMode && !isInvoiceMode && <div className="grid gap-3 sm:grid-cols-2">
+			{!isProject && !pr1Mode && !isAgreementMode && !isInvoiceMode && !isSourceDataMode && <div className="grid gap-3 sm:grid-cols-2">
 				<label className="grid gap-1.5"><span className="text-xs font-semibold text-muted">Что загружаем</span><select name="kind" value={kind} onChange={(event) => setKind(event.target.value)} className="h-10 rounded-control border border-line bg-surface px-3 text-sm font-medium outline-none transition focus:border-brand/60">{KIND_OPTIONS.map(([value, optionLabel]) => <option key={value} value={value}>{optionLabel}</option>)}</select></label>
 				{executiveDocs.length > 0 && <label className="grid gap-1.5"><span className="text-xs font-semibold text-muted">Раздел исполнительной документации</span><select name="executiveDocId" value={executiveDocId} onChange={(event) => setExecutiveDocId(event.target.value)} className="h-10 rounded-control border border-line bg-surface px-3 text-sm outline-none transition focus:border-brand/60"><option value="">Не привязывать к разделу</option>{executiveDocs.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
 			</div>}
 
 			{isProject && <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5"><span className="text-xs font-semibold text-muted">Формат проектного файла</span><select name="kind" value={kind} onChange={(event) => setKind(event.target.value)} className="h-10 rounded-control border border-line bg-surface px-3 text-sm font-medium outline-none transition focus:border-brand/60"><option value="PROJECT_PDF">Итоговая версия PDF</option><option value="PROJECT_DWG">Исходник DWG</option></select></label><div className="rounded-control border border-brand/15 bg-brand/5 px-3 py-2.5 text-xs leading-4 text-muted">Раздел {projectSection!.code}. После итогового PDF его можно подтвердить готовым в графике проектов.</div></div>}
 
-			{!isProject && !requestedExecutive && !pr1Mode && !isAgreementMode && !isInvoiceMode && <label className={`rounded-[13px] border p-4 transition-all duration-200 ${confirmPr1 ? 'border-ok/40 bg-ok/5 shadow-[0_8px_24px_rgba(40,150,90,.08)]' : 'border-brand/22 bg-brand/5 hover:border-brand/45'}`}>
+			{!isProject && !requestedExecutive && !pr1Mode && !isAgreementMode && !isInvoiceMode && !isSourceDataMode && <label className={`rounded-[13px] border p-4 transition-all duration-200 ${confirmPr1 ? 'border-ok/40 bg-ok/5 shadow-[0_8px_24px_rgba(40,150,90,.08)]' : 'border-brand/22 bg-brand/5 hover:border-brand/45'}`}>
 				<span className="flex items-start gap-3"><input type="checkbox" name="confirmPr1Signed" checked={confirmPr1} onChange={(event) => setConfirmPr1(event.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" /><span><b className="block text-sm text-ink">Это подписанное заказчиком Приложение №1</b><span className="mt-1 block text-xs leading-5 text-muted">После загрузки система создаст площадку и поставит договор в очередь проектирования КМ/КЖ.</span></span></span>
 				{confirmPr1 && <span className="mt-3 block"><span className="grid gap-2 sm:grid-cols-2"><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Дата подписания ПР1</span><input type="date" name="signedAt" required value={signedAt} onChange={(event) => setSignedAt(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label><label className="grid gap-1"><span className="text-xs font-semibold text-muted">Рабочих дней из сметы</span><input type="number" name="workingDays" min="1" max="730" placeholder="Например, 55" value={workingDays} onChange={(event) => setWorkingDays(event.target.value)} className="h-9 rounded-tight border border-line bg-surface px-2.5 text-sm" /></label></span>{renderEstimatePreview()}</span>}
 			</label>}

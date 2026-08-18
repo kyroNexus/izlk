@@ -8,11 +8,12 @@ import type { DocumentKind, DocumentState } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { importInboxFile, INBOX_PATH } from '@/lib/storage'
 import { parseContractFile, PARSABLE_EXTENSIONS } from '@/lib/contract-parser'
-import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
+import { tryConfirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { writeImportEvent } from '@/lib/audit'
-import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath } from '@/lib/document-classifier'
+import { classifyDocumentPath } from '@/lib/document-classifier'
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { logger } from '@/lib/logger'
+import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
 
 export { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 
@@ -209,7 +210,7 @@ async function retryFailedQueueItem(input: {
 				status: parseError ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'),
 				parsedContractNumber,
 				parsedCipher,
-				suggestedKind: classifyDocumentPath(input.sourcePath),
+				suggestedKind: routeDocument(input.sourcePath).kind,
 				errorMessage: parseError,
 			},
 		})
@@ -228,28 +229,48 @@ async function retryFailedQueueItem(input: {
 
 async function autoImportRecognizedItems() {
 	const items = await prisma.inboxItem.findMany({
-		where: { status: { in: ['PENDING', 'SUGGESTED'] }, OR: [{ parsedContractNumber: { not: null } }, { parsedCipher: { not: null } }] },
+		where: { status: { in: ['PENDING', 'SUGGESTED'] } },
 		orderBy: { createdAt: 'asc' },
 	})
 	let imported = 0
 	for (const item of items) {
-		const contract = await prisma.contract.findFirst({
-			where: {
-				deletedAt: null,
-				OR: [
-					...(item.parsedContractNumber ? [{ number: { equals: item.parsedContractNumber, mode: 'insensitive' as const } }] : []),
-					...(item.parsedCipher ? [{ cipher: { equals: item.parsedCipher, mode: 'insensitive' as const } }] : []),
-				],
+		const route = routeDocument(item.sourcePath)
+		const routeFilters = [
+			...(route.cipher ? [{ cipher: { equals: route.cipher, mode: 'insensitive' as const } }] : []),
+			...(route.contractNumberFull ? [{ number: { equals: route.contractNumberFull, mode: 'insensitive' as const } }] : []),
+			...(route.contractNumberShort ? [
+				{ number: { equals: route.contractNumberShort, mode: 'insensitive' as const } },
+				{ number: { startsWith: `${route.contractNumberShort}-`, mode: 'insensitive' as const } },
+				{ number: { startsWith: `${route.contractNumberShort}_`, mode: 'insensitive' as const } },
+			] : []),
+		]
+		const routeCandidates = routeFilters.length ? await prisma.contract.findMany({ where: { deletedAt: null, OR: routeFilters }, select: { id: true, number: true, cipher: true, date: true } }) : []
+		const routedContract = matchDocumentContract(route, routeCandidates).contract
+		const fallbackShort = item.parsedContractNumber && /^\d{2,5}$/u.test(item.parsedContractNumber) ? item.parsedContractNumber : null
+		const mayUseFolderFallback = !route.contractNumberShort || Boolean(route.pr1SignedAt)
+		const fallbackContract = !routedContract && mayUseFolderFallback && (item.parsedContractNumber || item.parsedCipher) ? await prisma.contract.findFirst({
+			where: { deletedAt: null, OR: [
+				...(item.parsedContractNumber ? [{ number: { equals: item.parsedContractNumber, mode: 'insensitive' as const } }] : []),
+				...(fallbackShort ? [{ number: { startsWith: `${fallbackShort}-`, mode: 'insensitive' as const } }, { number: { startsWith: `${fallbackShort}_`, mode: 'insensitive' as const } }] : []),
+				...(item.parsedCipher ? [{ cipher: { equals: item.parsedCipher, mode: 'insensitive' as const } }] : []),
+			] }, select: { id: true },
+		}) : null
+		const contractId = routedContract?.id ?? fallbackContract?.id
+		const contract = contractId ? await prisma.contract.findUnique({
+			where: { id: contractId },
+			include: {
+				projectSections: { where: { deletedAt: null } }, executiveDocs: { where: { deletedAt: null } },
+				agreements: { where: { deletedAt: null }, select: { id: true, number: true } },
+				invoices: { where: { deletedAt: null }, select: { id: true, number: true } },
 			},
-			include: { projectSections: { where: { deletedAt: null } }, executiveDocs: { where: { deletedAt: null } } },
-		})
+		}) : null
 		if (!contract) continue
 		let savedPath: string | null = null
 		try {
 			const saved = await importInboxFile({ contractId: contract.id, sourcePath: item.sourcePath, fileName: item.fileName, expectedSha256: item.sha256 })
 			savedPath = saved.storagePath
 			const searchable = `${item.sourcePath} ${item.fileName}`.toLocaleLowerCase('ru-RU')
-			const sectionCode = detectProjectSectionCode(`${item.sourcePath} ${item.fileName}`)
+			const sectionCode = route.sectionCode
 			const projectSection = sectionCode
 				? contract.projectSections.find((section) => section.code === sectionCode)
 					?? await prisma.projectSection.upsert({
@@ -259,7 +280,7 @@ async function autoImportRecognizedItems() {
 						select: { id: true, code: true },
 					})
 				: null
-			const executiveDoc = item.suggestedKind && ['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(item.suggestedKind)
+			const executiveDoc = ['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(route.kind)
 				? contract.executiveDocs.find((doc) => {
 					const name = doc.name.toLowerCase()
 					return (/акт|аоср/i.test(searchable) && /акт|скрыт/i.test(name)) ||
@@ -269,8 +290,8 @@ async function autoImportRecognizedItems() {
 						(/паспорт/i.test(searchable) && /паспорт/i.test(name))
 				})
 				: null
-			const documentKind = item.suggestedKind ?? 'OTHER'
-			const documentState = documentStateForPath(item.sourcePath)
+			const documentKind = route.kind
+			const documentState = route.state
 			await createVersionedDocument({
 				contractId: contract.id,
 				kind: documentKind,
@@ -282,11 +303,22 @@ async function autoImportRecognizedItems() {
 				sha256: saved.sha256,
 				projectSectionId: projectSection?.id,
 				executiveDocId: executiveDoc?.id,
+				sourceDataKind: route.sourceDataKind,
+				agreementId: contract.agreements.find((agreement) => agreement.number === route.agreementNumber)?.id,
+				invoiceId: contract.invoices.find((invoice) => invoice.number === route.invoiceNumber)?.id,
+				signedAt: route.pr1SignedAt ? new Date(`${route.pr1SignedAt}T12:00:00.000Z`) : undefined,
 			})
 			if (contract.managerId) await trySyncWorkflowAfterDocumentUpload({ contractId: contract.id, actorId: contract.managerId, kind: documentKind, state: documentState })
 			if (executiveDoc) await prisma.executiveDoc.update({ where: { id: executiveDoc.id }, data: { status: 'IN_PROGRESS' } })
-			await prisma.inboxItem.update({ where: { id: item.id }, data: { status: 'MATCHED', matchedContractId: contract.id } })
-			await writeImportEvent({ inboxItemId: item.id, fileName: item.fileName, event: 'AUTO_IMPORTED', outcome: 'SUCCESS', contractId: contract.id, message: `Автоматически привязан к договору № ${contract.number}` })
+			let warning = matchDocumentContract(route, [contract]).warning
+			if (route.pr1SignedAt) {
+				if (!matchDocumentContract(route, [contract]).contract) warning = `ПР1 не подтверждён: номер в имени не совпадает с договором № ${contract.number}.`
+				else if (contract.pr1ConfirmedAt) warning = 'ПР1 уже подтверждён; повторный запуск пропущен.'
+				else if (contract.managerId) warning = (await tryConfirmSignedPr1Workflow({ contractId: contract.id, actorId: contract.managerId, signedAt: new Date(`${route.pr1SignedAt}T12:00:00.000Z`) })).error
+				else warning = 'ПР1 не подтверждён автоматически: у договора не назначен менеджер.'
+			}
+			await prisma.inboxItem.update({ where: { id: item.id }, data: { status: 'MATCHED', matchedContractId: contract.id, suggestedKind: documentKind, errorMessage: warning } })
+			await writeImportEvent({ inboxItemId: item.id, fileName: item.fileName, event: 'AUTO_IMPORTED', outcome: 'SUCCESS', contractId: contract.id, message: `Автоматически привязан к договору № ${contract.number}.${warning ? ` Предупреждение: ${warning}` : ''}` })
 			imported++
 		} catch (error) {
 			if (savedPath) {
@@ -381,7 +413,7 @@ export async function scanInbox() {
 						const ignored = await prisma.inboxItem.create({ data: {
 							sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: 'IGNORED',
 							parsedContractNumber: hint?.number, parsedCipher: hint?.cipher,
-							suggestedKind: classifyDocumentPath(sourcePath), errorMessage: 'Точная копия уже прикреплена к этому договору.', matchedContractId: target?.id,
+							suggestedKind: routeDocument(sourcePath).kind, errorMessage: 'Точная копия уже прикреплена к этому договору.', matchedContractId: target?.id,
 						} })
 						await writeImportEvent({ inboxItemId: ignored.id, fileName, event: 'SCANNED', outcome: 'IGNORED', contractId: target?.id, message: 'Точная копия уже прикреплена к этому договору.' })
 					} catch (error) {
@@ -403,7 +435,7 @@ export async function scanInbox() {
 						status: 'SUGGESTED',
 						parsedContractNumber: hint.number,
 						parsedCipher: hint.cipher,
-						suggestedKind: classifyDocumentPath(sourcePath),
+						suggestedKind: routeDocument(sourcePath).kind,
 						errorMessage: null,
 					} })
 				}
@@ -429,7 +461,7 @@ export async function scanInbox() {
 			}
 			const info = await stat(sourcePath)
 			try {
-				const created = await prisma.inboxItem.create({ data: { sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: errorMessage ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'), parsedContractNumber, parsedCipher, suggestedKind: classifyDocumentPath(sourcePath), errorMessage } })
+				const created = await prisma.inboxItem.create({ data: { sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: errorMessage ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'), parsedContractNumber, parsedCipher, suggestedKind: routeDocument(sourcePath).kind, errorMessage } })
 				await writeImportEvent({ inboxItemId: created.id, fileName, event: 'SCANNED', outcome: errorMessage ? 'FAILED' : 'QUEUED', message: errorMessage ?? (parsedContractNumber ? `Распознан договор № ${parsedContractNumber}` : 'Ожидает выбора договора') })
 				result.queued++
 			} catch (error) {

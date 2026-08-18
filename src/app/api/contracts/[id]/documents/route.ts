@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server'
-import type { DocumentKind, DocumentState } from '@prisma/client'
+import type { DocumentKind, DocumentState, SourceDataKind } from '@prisma/client'
 import { assertContractAccess, contractScope, type SessionUser } from '@/lib/access'
 import { writeAudit, writeImportEvent } from '@/lib/audit'
-import { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 import { DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
 import { orNull, parseDate } from '@/lib/validation'
-import { confirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
+import { confirmSignedPr1Workflow, tryConfirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { configuredPublicOrigin } from '@/lib/request-security'
 import { withApiAuth } from '@/lib/api-auth'
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { logger } from '@/lib/logger'
+import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +52,9 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		executiveId = String(formData.get('executiveDocId') ?? '')
 		agreementIdRaw = String(formData.get('agreementId') ?? '')
 		invoiceIdRaw = String(formData.get('invoiceId') ?? '')
+		const agreementNumberRaw = String(formData.get('agreementNumber') ?? '').trim()
+		const sourceDataKindRaw = String(formData.get('sub') ?? '')
+		const sourceDataKindsRaw = formData.getAll('subs').map(String)
 		const requestedProjectSectionId = String(formData.get('projectSectionId') ?? '')
 		const projectSection = requestedProjectSectionId ? await prisma.projectSection.findFirst({ where: { id: requestedProjectSectionId, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
 		if (user.role === 'DESIGNER') {
@@ -81,17 +84,18 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		// kind/state из формы — это ПЕРЕОПРЕДЕЛЕНИЕ на всю пачку, а не значение по
 		// умолчанию: явный выбор (не AUTO) побеждает для всех файлов, как и раньше.
 		// Если поле осталось на AUTO (новое значение по умолчанию в форме) — вид и
-		// версия каждого файла определяются classifyDocumentPath/documentStateForPath
+		// версия каждого файла определяются routeDocument
 		// по имени файла отдельно для каждого файла в цикле ниже.
 		const kindRaw = String(formData.get('kind') ?? 'AUTO')
 		const selectedKind: DocumentKind = (DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw) ? kindRaw as DocumentKind : 'OTHER'
 		const isAutoKind = !(DOCUMENT_KIND_ORDER as readonly string[]).includes(kindRaw)
 		// Задача B2: с JS клиент уже посчитал вид каждого файла (тем же изоморфным
-		// классификатором) и прислал его явно — сервер просто проверяет, что это
+		// маршрутизатором) и прислал его явно — сервер просто проверяет, что это
 		// валидный DocumentKind, а не пересчитывает классификатор заново. Без JS
 		// (обычная форма) это поле пустое — тогда работает сервер-side автоопределение
 		// из задачи B1, ниже в цикле.
 		const kindsRaw = formData.getAll('kinds').map((value) => String(value))
+		const pathsRaw = formData.getAll('paths').map(String)
 		const signedAtRaw = user.role === 'DESIGNER' ? null : orNull(String(formData.get('signedAt') ?? ''))
 		const signedAt = signedAtRaw ? parseDate(signedAtRaw) : confirmPr1Signed ? new Date() : null
 		const workingDaysRaw = String(formData.get('workingDays') ?? '').trim()
@@ -107,10 +111,21 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		// Задача C2: скан к доп. соглашению/счёту — та же логика, что у
 		// executiveDocId выше: id проверяется против ЭТОГО договора, а не
 		// берётся из формы как есть.
-		const agreement = agreementIdRaw ? await prisma.agreement.findFirst({ where: { id: agreementIdRaw, contractId, deletedAt: null }, select: { id: true } }) : null
-		const agreementId = agreement?.id ?? null
-		const invoice = invoiceIdRaw ? await prisma.invoice.findFirst({ where: { id: invoiceIdRaw, contractId, deletedAt: null }, select: { id: true } }) : null
-		const invoiceId = invoice?.id ?? null
+		const routingContract = await prisma.contract.findUnique({
+			where: { id: contractId },
+			select: {
+				id: true, number: true, cipher: true, date: true, pr1ConfirmedAt: true,
+				agreements: { where: { deletedAt: null }, select: { id: true, number: true } },
+				invoices: { where: { deletedAt: null }, select: { id: true, number: true } },
+			},
+		})
+		if (!routingContract) return errorResponse(wantsJson, 'Договор не найден', new URL('/contracts', publicOrigin(request)), 404)
+		const agreement = agreementIdRaw ? routingContract.agreements.find((item) => item.id === agreementIdRaw) : null
+		const explicitAgreementId = agreement?.id ?? null
+		const invoice = invoiceIdRaw ? routingContract.invoices.find((item) => item.id === invoiceIdRaw) : null
+		const explicitInvoiceId = invoice?.id ?? null
+		const validSourceKinds = ['IGI', 'GPZU', 'TOPO', 'GEOBASE', 'CONSTRAINTS'] as const
+		const explicitSourceDataKind = validSourceKinds.includes(sourceDataKindRaw as typeof validSourceKinds[number]) ? sourceDataKindRaw as SourceDataKind : null
 
 		let uploadedCount = 0
 		let skippedCount = 0
@@ -124,6 +139,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		// смешанной автоопределённой пачки оказался договор — берём его состояние;
 		// SIGNED важнее SOURCE, если договорных файлов оказалось несколько.
 		let contractUploadState: DocumentState | null = null
+		let automaticPr1SignedAt: Date | null = null
 		for (const [index, upload] of uploads.entries()) {
 			let savedPath: string | null = null
 			try {
@@ -136,6 +152,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				// (kinds[i], задача B2: уже посчитан классификатором в браузере, тут
 				// только проверяется валидность enum). Если и его нет (форма без JS) —
 				// сервер сам классифицирует по имени (задача B1).
+				const routed = routeDocument(pathsRaw[index] || upload.name)
 				const sentKind = kindsRaw[index]
 				const validSentKind: DocumentKind | null = sentKind && (DOCUMENT_KIND_ORDER as readonly string[]).includes(sentKind) ? sentKind as DocumentKind : null
 				const kind: DocumentKind = user.role === 'DESIGNER'
@@ -144,14 +161,23 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 					? 'APPENDIX'
 					: !isAutoKind
 					? selectedKind
-					: validSentKind ?? classifyDocumentPath(upload.name)
+					: validSentKind ?? routed.kind
 				const state: DocumentState = user.role === 'DESIGNER'
 					? 'SOURCE'
 					: confirmPr1Signed || signedAt
 					? 'SIGNED'
 					: isAutoState
-					? documentStateForPath(upload.name)
+					? routed.state
 					: (stateRaw as DocumentState)
+				const sentSourceKind = sourceDataKindsRaw[index]
+				const sourceDataKind = kind === 'SOURCE_DATA'
+					? explicitSourceDataKind ?? (validSourceKinds.includes(sentSourceKind as typeof validSourceKinds[number]) ? sentSourceKind as SourceDataKind : null) ?? routed.sourceDataKind ?? null
+					: null
+				const agreementId = explicitAgreementId ?? routingContract.agreements.find((item) => item.number === (agreementNumberRaw || routed.agreementNumber))?.id ?? null
+				const invoiceId = explicitInvoiceId ?? routingContract.invoices.find((item) => item.number === routed.invoiceNumber)?.id ?? null
+				const routedProjectSection = projectSection ?? (routed.sectionCode ? await prisma.projectSection.upsert({ where: { contractId_code: { contractId, code: routed.sectionCode } }, create: { contractId, code: routed.sectionCode }, update: { deletedAt: null }, select: { id: true, code: true } }) : null)
+				const routedSignedAt = routed.pr1SignedAt ? new Date(`${routed.pr1SignedAt}T12:00:00.000Z`) : null
+				const documentSignedAt = signedAt ?? routedSignedAt
 				const buffer = Buffer.from(await upload.arrayBuffer())
 				const digest = sha256Buffer(buffer)
 				if (await prisma.document.findFirst({ where: { contractId, sha256: digest }, select: { id: true } })) {
@@ -163,10 +189,17 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				}
 				const saved = await saveContractFile({ contractId, fileName: upload.name, buffer })
 				savedPath = saved.storagePath
-				const document = await createVersionedDocument({ contractId, kind, state, fileName: upload.name, storagePath: saved.storagePath, mimeType: saved.mimeType, sizeBytes: BigInt(saved.sizeBytes), sha256: saved.sha256, signedAt, isConfidential, executiveDocId, agreementId, invoiceId, projectSectionId: projectSection?.id ?? null, uploadedById: user.id })
+				const document = await createVersionedDocument({ contractId, kind, state, sourceDataKind, fileName: upload.name, storagePath: saved.storagePath, mimeType: saved.mimeType, sizeBytes: BigInt(saved.sizeBytes), sha256: saved.sha256, signedAt: documentSignedAt, isConfidential, executiveDocId, agreementId, invoiceId, projectSectionId: routedProjectSection?.id ?? null, uploadedById: user.id })
 				await writeAudit({ userId: user.id, action: 'UPLOAD', entityType: 'Document', entityId: document.id })
 				if (kind === 'CONTRACT') contractUploadState = contractUploadState === 'SIGNED' ? contractUploadState : state
-				const message = `Загружен как ${kind}.`
+				const contractMatch = matchDocumentContract(routed, [routingContract])
+				let routingWarning = contractMatch.warning
+				if (routed.pr1SignedAt && !confirmPr1Signed) {
+					if (!contractMatch.contract) routingWarning = `ПР1 не подтверждён: номер в имени файла не совпадает с договором № ${routingContract.number}.`
+					else if (routingContract.pr1ConfirmedAt) routingWarning = 'ПР1 уже был подтверждён ранее; повторный запуск пропущен.'
+					else automaticPr1SignedAt ??= routedSignedAt
+				}
+				const message = `Загружен как ${kind}.${routingWarning ? ` Предупреждение: ${routingWarning}` : ''}`
 				await writeImportEvent({ fileName: upload.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId, actorId: user.id, message })
 				perFile.push({ fileName: upload.name, status: 'SUCCESS', message, documentId: document.id })
 				uploadedCount += 1
@@ -182,11 +215,17 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 			}
 		}
 
-		const workflow = confirmPr1Signed ? await confirmSignedPr1Workflow({ contractId, actorId: user.id, signedAt: signedAt ?? new Date(), workingDays }) : null
+		const automaticWorkflow = !routingContract.pr1ConfirmedAt && !confirmPr1Signed && automaticPr1SignedAt
+			? await tryConfirmSignedPr1Workflow({ contractId, actorId: user.id, signedAt: automaticPr1SignedAt })
+			: null
+		const workflow = routingContract.pr1ConfirmedAt ? null : confirmPr1Signed
+			? await confirmSignedPr1Workflow({ contractId, actorId: user.id, signedAt: signedAt ?? new Date(), workingDays })
+			: automaticWorkflow?.result ?? null
+		if (automaticWorkflow?.error) await writeImportEvent({ fileName: 'Подписанное ПР1', event: 'MANUAL_IMPORTED', outcome: 'FAILED', contractId, actorId: user.id, message: `Файл сохранён, но автоматическое подтверждение ПР1 не выполнено: ${automaticWorkflow.error}` })
 		const automaticStage = !workflow && contractUploadState ? (await trySyncWorkflowAfterDocumentUpload({ contractId, actorId: user.id, kind: 'CONTRACT', state: contractUploadState })).result : null
 		if (projectSection && uploadedCount > 0) await prisma.projectSection.update({ where: { id: projectSection.id }, data: { queueStatus: 'IN_PROGRESS', dateFrom: new Date() } })
-		const destination = new URL(projectSection ? `/projects?section=${projectSection.code}` : executiveDocId ? `/executive/${contractId}` : agreementId || invoiceId ? `/contracts/${contractId}#agreements` : `/contracts/${contractId}`, publicOrigin(request))
-		const workflowText = workflow ? ` ПР1 подтверждён: площадка ${workflow.siteCreated ? 'создана' : 'уже существовала'}, разделов добавлено: ${workflow.sectionsCreated}, задач создано: ${workflow.tasksCreated}${workflow.responsibleName ? `, ответственный: ${workflow.responsibleName}` : ''}.` : automaticStage?.changed ? ' Этап договора обновлён автоматически.' : ''
+		const destination = new URL(projectSection ? `/projects?section=${projectSection.code}` : executiveDocId ? `/executive/${contractId}` : explicitAgreementId || explicitInvoiceId ? `/contracts/${contractId}#agreements` : `/contracts/${contractId}`, publicOrigin(request))
+		const workflowText = workflow ? ` ПР1 подтверждён: площадка ${workflow.siteCreated ? 'создана' : 'уже существовала'}, разделов добавлено: ${workflow.sectionsCreated}, задач создано: ${workflow.tasksCreated}${workflow.responsibleName ? `, ответственный: ${workflow.responsibleName}` : ''}.` : automaticWorkflow?.error ? ' Файл сохранён, но ПР1 требует ручного подтверждения; причина записана в журнал.' : automaticStage?.changed ? ' Этап договора обновлён автоматически.' : ''
 		// "Загружено файлов: 0" на своём читается как сбой, даже когда дубликат
 		// корректно не создался повторно — назвать причину явно, без домыслов.
 		const summaryText = uploadedCount === 0 && skippedCount > 0 && failedCount === 0

@@ -272,11 +272,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const stateLabel = Object.fromEntries(DOCUMENT_STATES.map((state) => [state.key, state.label])) as Record<DocumentState, string>
 	const sourceDataDocuments = contract.documents.filter((document) => document.kind === 'SOURCE_DATA')
 	const sourceDataChecklist = [
-		{ label: 'ИГИ', hint: 'инженерно-геологические изыскания', match: (fileName: string) => hasToken(fileName, 'иги') || /инженерн(?:о|ые)[ -]?геолог/i.test(fileName) },
-		{ label: 'ГПЗУ', hint: 'градостроительный план', match: (fileName: string) => hasToken(fileName, 'гпзу') || /градостроительн/i.test(fileName) },
-		{ label: 'Топосъёмка', hint: 'топографическая съёмка', match: (fileName: string) => /(?:топос[ъь]ем|топограф)/i.test(fileName) },
-		{ label: 'Геоподоснова', hint: 'геодезическая или топографическая основа', match: (fileName: string) => /(?:геоподоснов|геодезическ(?:ая|ий)?\s+основ)/i.test(fileName) },
-		{ label: 'Стеснённые условия', hint: 'сведения об ограничениях на площадке', match: (fileName: string) => /стеснен/i.test(fileName) },
+		{ sub: 'IGI' as const, label: 'ИГИ', hint: 'инженерно-геологические изыскания', match: (fileName: string) => hasToken(fileName, 'иги') || /инженерн(?:о|ые)[ -]?геолог/i.test(fileName) },
+		{ sub: 'GPZU' as const, label: 'ГПЗУ', hint: 'градостроительный план', match: (fileName: string) => hasToken(fileName, 'гпзу') || /градостроительн/i.test(fileName) },
+		{ sub: 'TOPO' as const, label: 'Топосъёмка', hint: 'топографическая съёмка', match: (fileName: string) => /(?:топос[ъь]ем|топограф)/i.test(fileName) },
+		{ sub: 'GEOBASE' as const, label: 'Геоподоснова', hint: 'геодезическая или топографическая основа', match: (fileName: string) => /(?:геоподоснов|геодезическ(?:ая|ий)?\s+основ)/i.test(fileName) },
+		{ sub: 'CONSTRAINTS' as const, label: 'Стеснённые условия', hint: 'сведения об ограничениях на площадке', match: (fileName: string) => /стеснен/i.test(fileName) },
 	].map((item) => ({ ...item, document: sourceDataDocuments.find((document) => item.match(document.fileName)) }))
 	// Защищаем страницу от старых записей/Prisma Client, где новые связи ещё не возвращаются.
 	const sites = contract.sites ?? []

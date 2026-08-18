@@ -4,7 +4,7 @@ import { parseContractFile, MAX_FOLDER_FILES, MAX_FOLDER_TOTAL_BYTES, MAX_PARSE_
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
 import { EXEC_TEMPLATES } from '@/lib/executive'
 import { classifyDocumentPath, detectProjectSectionCode, documentStateForPath, isTransientSystemFile } from '@/lib/document-classifier'
-import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
+import { tryConfirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { contractImportSchema, firstIssue, orNull } from '@/lib/validation'
 import { grantDesignReadAccess, type SessionUser } from '@/lib/access'
 import { withApiAuth } from '@/lib/api-auth'
@@ -13,6 +13,7 @@ import { removeUnusedImportedContractor, rollbackNewContractImport } from '@/lib
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { findMatchingContractor, normalizeCompanyName } from '@/lib/contractor-match'
 import { logger } from '@/lib/logger'
+import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
 
 export const runtime = 'nodejs'
 
@@ -22,8 +23,8 @@ type FolderUpload = { file: File; relativePath: string }
 type ProjectSectionReference = { id: string; code: 'KM' | 'KZH' | 'AR' | 'OTHER' }
 
 /** Project source files get their own section even before the PR1 workflow step. */
-async function projectSectionForPath(contractId: string, filePath: string, sections: ProjectSectionReference[]) {
-	const code = detectProjectSectionCode(filePath)
+async function projectSectionForPath(contractId: string, filePath: string, sections: ProjectSectionReference[], routedCode = detectProjectSectionCode(filePath)) {
+	const code = routedCode
 	if (!code) return null
 	const existing = sections.find((section) => section.code === code)
 	if (existing) return existing
@@ -43,12 +44,15 @@ async function removeUnlinkedUpload(storagePath: string) {
 }
 
 async function attachFolderToContract(input: { contractId: string; uploads: FolderUpload[]; userId: string }) {
-	const [projectSections, executiveDocs] = await Promise.all([
+	const [projectSections, executiveDocs, contract] = await Promise.all([
 		prisma.projectSection.findMany({ where: { contractId: input.contractId, deletedAt: null } }),
 		prisma.executiveDoc.findMany({ where: { contractId: input.contractId, deletedAt: null } }),
+		prisma.contract.findUnique({ where: { id: input.contractId }, select: { id: true, number: true, cipher: true, date: true, pr1ConfirmedAt: true, agreements: { where: { deletedAt: null }, select: { id: true, number: true } }, invoices: { where: { deletedAt: null }, select: { id: true, number: true } } } }),
 	])
+	if (!contract) throw new Error('Договор не найден')
 	let attached = 0
 	let skipped = 0
+	let automaticPr1SignedAt: Date | null = null
 	const issues: string[] = []
 	const skip = (fileName: string, reason: string) => {
 		skipped++
@@ -64,10 +68,10 @@ async function attachFolderToContract(input: { contractId: string; uploads: Fold
 		const buffer = Buffer.from(await file.arrayBuffer())
 		const sha256 = sha256Buffer(buffer)
 		if (await prisma.document.findFirst({ where: { contractId: input.contractId, sha256 }, select: { id: true } })) { await skip(file.name, 'Точная копия уже есть в этом договоре.'); continue }
-		const kind = classifyDocumentPath(relativePath)
-		const state = documentStateForPath(relativePath)
+		const route = routeDocument(relativePath)
+		const { kind, state } = route
 		const searchable = relativePath.toLocaleLowerCase('ru-RU')
-		const projectSection = await projectSectionForPath(input.contractId, relativePath, projectSections)
+		const projectSection = await projectSectionForPath(input.contractId, relativePath, projectSections, route.sectionCode)
 		const executiveDoc = ['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(kind)
 			? executiveDocs.find((doc) => {
 				const name = doc.name.toLocaleLowerCase('ru-RU')
@@ -80,15 +84,33 @@ async function attachFolderToContract(input: { contractId: string; uploads: Fold
 			contractId: input.contractId, kind, state, fileName: file.name,
 			storagePath: saved.storagePath, mimeType: saved.mimeType, sizeBytes: BigInt(saved.sizeBytes), sha256: saved.sha256,
 			uploadedById: input.userId, projectSectionId: projectSection?.id, executiveDocId: executiveDoc?.id,
+			sourceDataKind: route.sourceDataKind,
+			agreementId: contract.agreements.find((item) => item.number === route.agreementNumber)?.id,
+			invoiceId: contract.invoices.find((item) => item.number === route.invoiceNumber)?.id,
+			signedAt: route.pr1SignedAt ? new Date(`${route.pr1SignedAt}T12:00:00.000Z`) : undefined,
 		})
 		if (executiveDoc) await prisma.executiveDoc.update({ where: { id: executiveDoc.id }, data: { status: 'IN_PROGRESS' } })
 		await trySyncWorkflowAfterDocumentUpload({ contractId: input.contractId, actorId: input.userId, kind, state })
 		await prisma.auditLog.create({ data: { userId: input.userId, action: 'UPLOAD', entityType: 'Document', entityId: document.id } })
-		await writeImportEvent({ fileName: file.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId: input.contractId, actorId: input.userId, message: `Прикреплён как ${kind}.` })
+		const contractMatch = matchDocumentContract(route, [contract])
+		let warning = contractMatch.warning
+		if (route.pr1SignedAt) {
+			if (!contractMatch.contract) warning = `ПР1 не подтверждён: номер в имени не совпадает с договором № ${contract.number}.`
+			else if (contract.pr1ConfirmedAt) warning = 'ПР1 уже подтверждён; повторный запуск пропущен.'
+			else automaticPr1SignedAt ??= new Date(`${route.pr1SignedAt}T12:00:00.000Z`)
+		}
+		await writeImportEvent({ fileName: file.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId: input.contractId, actorId: input.userId, message: `Прикреплён как ${kind}.${warning ? ` Предупреждение: ${warning}` : ''}` })
 		attached++
 		} catch (error) {
 			if (savedPath) await removeUnlinkedUpload(savedPath)
 			await skip(file.name, error instanceof Error ? error.message : 'Непредвиденная ошибка обработки файла.')
+		}
+	}
+	if (automaticPr1SignedAt) {
+		const workflow = await tryConfirmSignedPr1Workflow({ contractId: input.contractId, actorId: input.userId, signedAt: automaticPr1SignedAt })
+		if (workflow.error) {
+			if (issues.length < 20) issues.push(`Подписанное ПР1: файл сохранён, но автоматическое подтверждение не выполнено: ${workflow.error}`)
+			await writeImportEvent({ fileName: 'Подписанное ПР1', event: 'MANUAL_IMPORTED', outcome: 'FAILED', contractId: input.contractId, actorId: input.userId, message: workflow.error })
 		}
 	}
 	return { attached, skipped, issues }
@@ -136,10 +158,19 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		if (value(form, 'operation') === 'attach') {
 			const accessibleContracts = await prisma.contract.findMany({
 				where: { deletedAt: null, ...(user.role === 'MANAGER' ? { managerId: user.id } : {}) },
-				select: { id: true, number: true }, take: 2000,
+				select: { id: true, number: true, cipher: true, date: true }, take: 2000,
 			})
 			const explicitNumber = value(form, 'targetContractNumber')
-			const matches = accessibleContracts.map((contract) => ({ contract, score: explicitNumber === contract.number ? 9999 : folderUploads.reduce((score, upload) => score + (contractNumberInName(upload.relativePath, contract.number) ? 1 : 0), 0) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score)
+			const matches = accessibleContracts.map((contract) => ({
+				contract,
+				score: explicitNumber && (explicitNumber === contract.number || contract.number.startsWith(`${explicitNumber}-`) || contract.number.startsWith(`${explicitNumber}_`))
+					? 100_000
+					: folderUploads.reduce((score, upload) => {
+						const route = routeDocument(upload.relativePath)
+						const matched = matchDocumentContract(route, [contract]).contract
+						return score + (matched ? route.cipher ? 100 : route.contractNumberFull ? 10 : 1 : contractNumberInName(upload.relativePath, contract.number) ? 1 : 0)
+					}, 0),
+			})).filter((item) => item.score > 0).sort((a, b) => b.score - a.score)
 			if (!matches.length) return rejectImport('Номер существующего договора не найден в названиях файлов. Добавьте номер в формате «765 — смета.xlsx» или укажите его вручную.', 400, { event: 'MANUAL_IMPORTED' })
 			if (matches.length > 1 && matches[0].score === matches[1].score) return rejectImport('Найдено несколько договоров с одинаковым совпадением. Укажите номер договора вручную.', 409, { event: 'MANUAL_IMPORTED' })
 			const result = await attachFolderToContract({ contractId: matches[0].contract.id, uploads: folderUploads, userId: user.id })
@@ -239,6 +270,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 
 		let importedFiles = 1
 		let skippedFiles = 0
+		let automaticPr1SignedAt: Date | null = null
 		const issues: string[] = []
 		const skipAttachment = async (fileName: string, message: string) => {
 			skippedFiles++
@@ -264,10 +296,11 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				// the same name/size must not disappear from the imported package.
 				if (attachmentHash === digest) continue
 				if (await prisma.document.findFirst({ where: { contractId: contract.id, sha256: attachmentHash }, select: { id: true } })) { await skipAttachment(attachment.name, 'Точная копия уже есть в этом договоре.'); continue }
-				const documentKind = classifyDocumentPath(relativePath)
-				const documentState = documentStateForPath(relativePath)
+				const route = routeDocument(relativePath)
+				const documentKind = route.kind
+				const documentState = route.state
 				const searchable = relativePath.toLocaleLowerCase('ru-RU')
-				const projectSection = await projectSectionForPath(contract.id, relativePath, projectSections)
+				const projectSection = await projectSectionForPath(contract.id, relativePath, projectSections, route.sectionCode)
 				const executiveDoc = ['EXECUTIVE', 'ACT', 'CERTIFICATE'].includes(documentKind)
 					? executiveDocs.find((doc) => {
 						const name = doc.name.toLowerCase()
@@ -288,12 +321,27 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 					uploadedById: user.id,
 					projectSectionId: projectSection?.id,
 					executiveDocId: executiveDoc?.id,
+					sourceDataKind: route.sourceDataKind,
+					signedAt: route.pr1SignedAt ? new Date(`${route.pr1SignedAt}T12:00:00.000Z`) : undefined,
 				})
 				if (executiveDoc) await prisma.executiveDoc.update({ where: { id: executiveDoc.id }, data: { status: 'IN_PROGRESS' } })
 				await trySyncWorkflowAfterDocumentUpload({ contractId: contract.id, actorId: user.id, kind: documentKind, state: documentState })
-				await writeImportEvent({ fileName: attachment.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId: contract.id, actorId: user.id, message: `Прикреплён как ${documentKind}.` })
+				const contractMatch = matchDocumentContract(route, [{ id: contract.id, number, cipher: cipher || null, date }])
+				let warning = contractMatch.warning
+				if (route.pr1SignedAt) {
+					if (!contractMatch.contract) warning = `ПР1 не подтверждён: номер в имени не совпадает с договором № ${number}.`
+					else automaticPr1SignedAt ??= new Date(`${route.pr1SignedAt}T12:00:00.000Z`)
+				}
+				await writeImportEvent({ fileName: attachment.name, event: 'MANUAL_IMPORTED', outcome: 'SUCCESS', contractId: contract.id, actorId: user.id, message: `Прикреплён как ${documentKind}.${warning ? ` Предупреждение: ${warning}` : ''}` })
 				importedFiles++
 					} catch (error) { if (savedPath) await removeUnlinkedUpload(savedPath); await skipAttachment(attachment.name, error instanceof Error ? error.message : 'Непредвиденная ошибка обработки файла.') }
+			}
+		}
+		if (automaticPr1SignedAt) {
+			const workflow = await tryConfirmSignedPr1Workflow({ contractId: contract.id, actorId: user.id, signedAt: automaticPr1SignedAt })
+			if (workflow.error) {
+				if (issues.length < 20) issues.push(`Подписанное ПР1: файл сохранён, но автоматическое подтверждение не выполнено: ${workflow.error}`)
+				await writeImportEvent({ fileName: 'Подписанное ПР1', event: 'MANUAL_IMPORTED', outcome: 'FAILED', contractId: contract.id, actorId: user.id, message: workflow.error })
 			}
 		}
 		await writeAudit({ userId: user.id, action: 'CREATE', entityType: 'ContractImport', entityId: contract.id })

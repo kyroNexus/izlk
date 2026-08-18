@@ -6,6 +6,7 @@ import SmartDocumentUpload from '@/components/SmartDocumentUpload'
 import { DOCUMENT_KIND_LABELS, DOCUMENT_KIND_ORDER, formatBytes, initials } from '@/lib/format'
 import { assertContractAccess, contractScope, requireUser } from '@/lib/access'
 import { agreementTitle } from '@/components/contract/shared'
+import type { SourceDataKind } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ export default async function UploadDocumentPage({
 	searchParams,
 }: {
 	params: { id: string }
-	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; pr1?: string; agreement?: string; invoice?: string }
+	searchParams: { error?: string; success?: string; executive?: string; project?: string; state?: string; kind?: string; sub?: string; pr1?: string; agreement?: string; invoice?: string }
 }) {
 	const user = await requireUser()
 	const contractId = params.id
@@ -24,6 +25,7 @@ export default async function UploadDocumentPage({
 	// по имени файла, а не жёстко фиксируется на "исходник".
 	const requestedState = ['SOURCE', 'SIGNED', 'ARCHIVE'].includes(searchParams.state ?? '') ? searchParams.state! : ''
 	const requestedKind = DOCUMENT_KIND_ORDER.find((kind) => kind === searchParams.kind) ?? ''
+	const requestedSubtype = (['IGI', 'GPZU', 'TOPO', 'GEOBASE', 'CONSTRAINTS'] as const).find((kind) => kind === searchParams.sub) as SourceDataKind | undefined
 	const pr1Mode = searchParams.pr1 === '1'
 	const projectSection = searchParams.project ? await prisma.projectSection.findFirst({ where: { id: searchParams.project, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
 	// Задача C2: скан к конкретному доп. соглашению/счёту — та же проверка "id
@@ -85,6 +87,7 @@ export default async function UploadDocumentPage({
 							requestedExecutive={searchParams.executive ?? ''}
 							requestedState={requestedState}
 							requestedKind={requestedKind}
+							requestedSubtype={requestedSubtype}
 							pr1Mode={pr1Mode}
 							agreement={agreement}
 							invoice={invoice}

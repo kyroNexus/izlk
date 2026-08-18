@@ -246,6 +246,16 @@ export async function confirmSignedPr1Workflow(input: ConfirmPr1Input) {
 	return { siteCreated: result.siteCreated, sectionsCreated: result.sectionsCreated, tasksCreated: result.tasksCreated, responsibleName: result.designer?.name ?? null, deadline: result.deadline, alreadyConfirmed: result.alreadyConfirmed }
 }
 
+export async function tryConfirmSignedPr1Workflow(input: ConfirmPr1Input) {
+	try {
+		return { result: await confirmSignedPr1Workflow(input), error: null as string | null }
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'Не удалось автоматически подтвердить ПР1.'
+		logger.error('contract_workflow.pr1_confirmation_failed', { entityType: 'Contract', entityId: input.contractId, userId: input.actorId, error })
+		return { result: null, error: message }
+	}
+}
+
 /** Обратная совместимость для уже существующей точки загрузки. */
 export async function activateSignedPr1Workflow(contractId: string, fallbackResponsibleId: string) {
 	return confirmSignedPr1Workflow({ contractId, actorId: fallbackResponsibleId, signedAt: new Date() })

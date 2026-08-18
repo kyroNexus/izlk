@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Card, CardHeader, FileIcon } from '@/components/ui'
 import { DOCUMENT_KIND_LABELS, formatBytes, formatDate, plural } from '@/lib/format'
-import type { DocumentState } from '@prisma/client'
+import type { DocumentState, SourceDataKind } from '@prisma/client'
 import type { ContractWithRelations } from './shared'
 import InlineDocumentUpload from './InlineDocumentUpload'
 import RenameFileButton from '@/components/RenameFileButton'
@@ -38,7 +38,7 @@ export default function TabDocuments({
 	selectedFolder: string | null
 	folders: { key: string; label: string }[]
 	folderFor: (document: DocumentRow) => string
-	sourceDataChecklist: { label: string; hint: string; document: DocumentRow | undefined }[]
+	sourceDataChecklist: { sub: SourceDataKind; label: string; hint: string; document: DocumentRow | undefined }[]
 	latestPr1: DocumentRow | undefined
 	documentSections: DocumentSection[]
 	stateLabel: Record<DocumentState, string>
@@ -57,7 +57,7 @@ export default function TabDocuments({
 			</div>
 			{(!selectedFolder || selectedFolder === 'source-data') && <div className="mx-[11px] mt-[11px] rounded-control border border-brand/15 bg-brand/5 p-3">
 				<div className="flex flex-wrap items-start gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-bold">Исходные данные от заказчика</div><div className="mt-1 text-xs text-muted">ИГИ, ГПЗУ, топосъёмка и сведения о стеснённых условиях хранятся отдельно от смет и проектов.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?kind=SOURCE_DATA`} className="rounded-tight border border-brand/25 bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить</Link>}</div>
-				<div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{sourceDataChecklist.map((item) => <div key={item.label} className={`rounded-tight border px-2.5 py-2 ${item.document ? 'border-ok/25 bg-ok/5' : 'border-line-soft bg-surface/60'}`}><div className="flex items-center gap-1.5 text-xs font-bold"><span className={item.document ? 'text-ok' : 'text-faint'}>{item.document ? '●' : '○'}</span>{item.label}</div><div className="mt-1 truncate text-2xs text-faint">{item.document ? item.document.fileName : item.hint}</div></div>)}</div>
+				<div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{sourceDataChecklist.map((item) => <div key={item.label} className={`rounded-tight border px-2.5 py-2 ${item.document ? 'border-ok/25 bg-ok/5' : 'border-line-soft bg-surface/60'}`}><div className="flex items-center gap-1.5 text-xs font-bold"><span className={item.document ? 'text-ok' : 'text-faint'}>{item.document ? '●' : '○'}</span><span className="min-w-0 flex-1">{item.label}</span>{canEdit && <Link href={`/contracts/${contract.id}/upload?kind=SOURCE_DATA&sub=${item.sub}`} className="text-brand-ink hover:underline">+ Добавить</Link>}</div><div className="mt-1 truncate text-2xs text-faint">{item.document ? item.document.fileName : item.hint}</div></div>)}</div>
 			</div>}
 			<div className={`mx-[11px] mt-[11px] flex flex-wrap items-center gap-2.5 rounded-control border px-3 py-2.5 ${latestPr1 ? contract.pr1ConfirmedAt ? 'border-ok/25 bg-ok-bg' : 'border-warn/25 bg-warn-bg' : 'border-line-soft bg-raised/50'}`}>
 				<div className="grid h-8 w-8 place-items-center rounded-tight bg-surface text-2xs font-bold text-brand-ink">ПР1</div>
