@@ -370,8 +370,8 @@ export default async function ContractPage({ params, searchParams }: { params: {
 
 						<ContractSectionNav sections={[
 							{ id: 'workflow', label: 'Ход договора' },
-							{ id: 'agreements', label: 'Соглашения' },
 							{ id: 'documents', label: 'Документы' },
+							{ id: 'agreements', label: 'Соглашения' },
 							{ id: 'project', label: 'Проект' },
 							...(site ? [{ id: 'site', label: 'Площадка' }] : []),
 							...(needsExecutive ? [{ id: 'executive', label: 'Исполнительная' }] : []),
@@ -424,7 +424,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 
 						<TabTasks contractId={contract.id} openTasks={openTasks} />
 
-						<TabExecutive executiveDocs={executiveDocs} />
+						<TabExecutive contractId={contract.id} executiveDocs={executiveDocs} canUpload={canEdit || user.role === 'BUILDER'} />
 					</div>
 
 					{/* ---------- Правая колонка ---------- */}
