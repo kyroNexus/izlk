@@ -597,7 +597,8 @@ button, a, details, summary, input, select {
 	.side-panel-grid-primary {
 		overflow-x: auto !important;
 	}
-	.side-panel-grid-primary > .settings-users-row {
+	.side-panel-grid-primary > .settings-users-row,
+	.side-panel-grid-primary > details {
 		min-width: 650px;
 	}
 }

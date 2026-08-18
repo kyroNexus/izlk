@@ -65,6 +65,8 @@ const checks: [string, RegExp][] = [
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role !== 'BUILDER' && user\.role !== 'ACCOUNTING' && formData/],
 	['src/components/Sidebar.tsx', /canSeeSchedules/],
 	['src/app/(dashboard)/settings/page.tsx', /VIEWER_DESIGN/],
+	['src/app/(dashboard)/settings/page.tsx', /async function updateUser[\s\S]*id !== acting\.id[\s\S]*passwordHash/],
+	['src/app/(dashboard)/settings/page.tsx', /async function deleteUser[\s\S]*id === acting\.id[\s\S]*deletedAt: new Date\(\)/],
 	// Задача C2: узкий доступ ACCOUNTING к счетам — та же схема, что у BUILDER выше.
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'ACCOUNTING'/],
 	['src/app/(dashboard)/contracts/[id]/upload/page.tsx', /user\.role === 'ACCOUNTING'/],
