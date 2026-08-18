@@ -98,12 +98,21 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	async function deleteDocument(formData: FormData) {
 		'use server'
 		const acting = await requireUser()
-		if (!isAdmin(acting)) redirect(`/contracts/${params.id}`)
 		const documentId = String(formData.get('documentId') ?? '')
+		// Временная диагностика (жалоба: "Удалить" ничего не делает) — снять
+		// после подтверждения причины через `docker compose logs app`.
+		// eslint-disable-next-line no-console
+		console.log('[diag] deleteDocument called', JSON.stringify({ userId: acting.id, role: acting.role, isAdmin: isAdmin(acting), documentId, contractId: params.id }))
+		if (!isAdmin(acting)) {
+			console.log('[diag] deleteDocument denied: not admin', JSON.stringify({ userId: acting.id, role: acting.role }))
+			redirect(`/contracts/${params.id}`)
+		}
 		const target = await prisma.document.findFirst({ where: { id: documentId, contractId: params.id, deletedAt: null }, select: { id: true } })
+		console.log('[diag] deleteDocument target lookup', JSON.stringify({ documentId, contractId: params.id, found: Boolean(target) }))
 		if (target) {
 			await prisma.document.update({ where: { id: target.id }, data: { deletedAt: new Date() } })
 			await writeAudit({ userId: acting.id, action: 'DELETE', entityType: 'DocumentDeleted', entityId: target.id })
+			console.log('[diag] deleteDocument succeeded', JSON.stringify({ documentId: target.id }))
 		}
 		redirect(`/contracts/${params.id}#documents`)
 	}
