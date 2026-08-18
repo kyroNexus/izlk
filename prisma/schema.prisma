@@ -140,6 +140,7 @@ model Contractor {
   name      String
   type      ContractorType @default(LEGAL)
   inn       String?
+  ogrn      String?
   address   String?
   phone     String?
   email     String?
@@ -238,6 +239,13 @@ model Contract {
   pr1ConfirmedBy User? @relation("ContractPr1ConfirmedBy", fields: [pr1ConfirmedById], references: [id], onDelete: SetNull)
   deadline      DateTime?
   objectAddress String?
+  /// Тип фундамента по актуальной смете (напр. "ФБР-1600") — из строки
+  /// "Ж/б фундамент Серия ФБР-1600.ИЗЛКРус..." под позицией "Изготовление
+  /// и устройство фундамента". Пусто, если в смете нет позиции фундамента.
+  foundationType String?
+  /// true, если в смете вместо фундамента — позиция "Устройство химических
+  /// анкеров": значит, у заказчика уже есть своя плита, фундамент ИЗЛК не делает.
+  customerOwnSlab Boolean       @default(false)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   deletedAt     DateTime? // договоры не удаляются физически, только архивируются

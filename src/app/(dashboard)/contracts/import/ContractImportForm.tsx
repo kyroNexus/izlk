@@ -91,7 +91,7 @@ export default function ContractImportForm() {
 	}
 
 	function fillManually() {
-		setParsed({ fileName: 'manual-entry', contractNumber: '', contractDate: '', amount: '', currency: 'RUB', contractorName: '', contractorType: '', inn: '', cipher: '', objectAddress: '', snils: '', passportSeries: '', passportNumber: '', passportIssuedBy: '', passportIssuedAt: '', passportDeptCode: '', representativeName: '', representativeSnils: '', representativePassportSeries: '', representativePassportNumber: '', representativePassportIssuedBy: '', representativePassportIssuedAt: '', representativePassportDeptCode: '', representativeProxyNumber: '', representativeProxyDate: '', confidence: 0, foundFields: [], warnings: ['Автораспознавание пропущено. Заполните реквизиты по документу вручную и сохраните файл.'], preview: '' })
+		setParsed({ fileName: 'manual-entry', contractNumber: '', contractDate: '', amount: '', currency: 'RUB', contractorName: '', contractorType: '', inn: '', ogrn: '', cipher: '', objectAddress: '', foundationType: '', customerOwnSlab: false, snils: '', passportSeries: '', passportNumber: '', passportIssuedBy: '', passportIssuedAt: '', passportDeptCode: '', representativeName: '', representativeSnils: '', representativePassportSeries: '', representativePassportNumber: '', representativePassportIssuedBy: '', representativePassportIssuedAt: '', representativePassportDeptCode: '', representativeProxyNumber: '', representativeProxyDate: '', confidence: 0, foundFields: [], warnings: ['Автораспознавание пропущено. Заполните реквизиты по документу вручную и сохраните файл.'], preview: '' })
 		setError('')
 	}
 
@@ -238,6 +238,7 @@ export default function ContractImportForm() {
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Номер договора" required><input name="contractNumber" required defaultValue={parsed.contractNumber} className={inputClass} /></Field><Field label="Дата договора" required><input name="contractDate" type="date" required defaultValue={parsed.contractDate} className={inputClass} /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-[1fr_120px]"><Field label="Сумма" required><input name="amount" required defaultValue={parsed.amount} className={inputClass} /></Field><Field label="Валюта"><select name="currency" defaultValue={parsed.currency} className={selectClass}><option>RUB</option><option>USD</option><option>EUR</option><option>CNY</option></select></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Контрагент" required><input name="contractorName" defaultValue={parsed.contractorName} className={inputClass} /></Field><Field label="ИНН"><input name="inn" defaultValue={parsed.inn} className={inputClass} inputMode="numeric" /></Field></div>
+				<Field label="ОГРН"><input name="ogrn" defaultValue={parsed.ogrn} className={inputClass} inputMode="numeric" placeholder="13 или 15 цифр (ОГРНИП)" /></Field>
 				<ContractorTypeFields
 					defaultType={parsed.contractorType || 'LEGAL'}
 					defaults={{
@@ -252,7 +253,12 @@ export default function ContractImportForm() {
 				/>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Телефон контрагента"><input name="contractorPhone" defaultValue={parsed.phone} className={inputClass} inputMode="tel" /></Field><Field label="Email контрагента"><input name="contractorEmail" defaultValue={parsed.email} className={inputClass} inputMode="email" /></Field></div>
 				<div className="grid gap-3.5 md:grid-cols-2"><Field label="Шифр"><input name="cipher" defaultValue={parsed.cipher} className={inputClass} /></Field><Field label="Тип договора"><select name="kind" defaultValue="SMR" className={selectClass}><option value="SMR">СМР</option><option value="MK">МК</option><option value="PROJECT">Проектный</option></select></Field></div>
-				<Field label="Адрес объекта"><input name="objectAddress" defaultValue={parsed.objectAddress} className={inputClass} /></Field><button type="submit" disabled={busy} className="brand-gradient mt-[4px] h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busyLabel(mode === 'folder' ? `Создать договор и загрузить ${folderFiles.length} файлов` : 'Создать договор и прикрепить файл')}</button>
+				<Field label="Адрес объекта" hint={isFolder ? 'Из ячейки "Стройка:" актуальной сметы — из ДС с наибольшим номером, если он есть в папке.' : undefined}><input name="objectAddress" defaultValue={parsed.objectAddress} className={inputClass} /></Field>
+				<div className="grid gap-3.5 md:grid-cols-[1fr_auto]">
+					<Field label="Тип фундамента" hint="Из строки «Серия ...ИЗЛКРус» под позицией «Изготовление и устройство фундамента» в смете."><input name="foundationType" defaultValue={parsed.foundationType} className={inputClass} placeholder="Например, ФБР-1600" /></Field>
+					<label className="flex h-control items-center gap-2 self-end whitespace-nowrap rounded-control border border-line bg-raised/40 px-3 text-sm font-medium"><input type="checkbox" name="customerOwnSlab" value="true" defaultChecked={parsed.customerOwnSlab} className="h-4 w-4 accent-brand" />Своя плита у заказчика</label>
+				</div>
+				<button type="submit" disabled={busy} className="brand-gradient mt-[4px] h-[42px] rounded-control px-4 text-base font-semibold text-white disabled:opacity-60">{busyLabel(mode === 'folder' ? `Создать договор и загрузить ${folderFiles.length} файлов` : 'Создать договор и прикрепить файл')}</button>
 				{busy && <ProgressBar percent={uploaded ? 100 : uploadPercent} tone={uploaded ? 'muted' : 'brand'} />}
 			</div>}
 		</Card>

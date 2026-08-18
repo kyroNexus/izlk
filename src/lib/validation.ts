@@ -41,6 +41,13 @@ export function isValidInn(value: string): boolean {
 	return control([7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === digits[10] && control([3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === digits[11]
 }
 
+/** Checks the official control digit for Russian 13-digit ОГРН and 15-digit ОГРНИП values. */
+export function isValidOgrn(value: string): boolean {
+	if (/^\d{13}$/.test(value)) return Number(BigInt(value.slice(0, 12)) % BigInt(11) % BigInt(10)) === Number(value[12])
+	if (/^\d{15}$/.test(value)) return Number(BigInt(value.slice(0, 14)) % BigInt(13) % BigInt(10)) === Number(value[14])
+	return false
+}
+
 const importDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату договора.')
 	.refine((value) => !Number.isNaN(Date.parse(`${value}T12:00:00Z`)), 'Дата договора некорректна.')
 
@@ -66,8 +73,16 @@ export const contractImportSchema = z.object({
 	// человеком предположение, а не жёсткое решение сервера.
 	type: z.enum(['LEGAL', 'INDIVIDUAL']).default('LEGAL'),
 	inn: z.string().trim().optional().refine((value) => !value || isValidInn(value), 'ИНН не прошёл контрольную проверку.'),
+	ogrn: z.string().trim().optional().refine((value) => !value || isValidOgrn(value), 'ОГРН/ОГРНИП не прошёл контрольную проверку.'),
 	cipher: z.string().trim().max(120, 'Слишком длинный шифр.').optional(),
 	objectAddress: z.string().trim().max(500, 'Слишком длинный адрес.').optional(),
+	// Задача: тип фундамента и признак "своя плита у заказчика" — из сметы
+	// (см. contract-parser.ts), переопределяемые человеком, как и остальной
+	// автораспознанный результат.
+	foundationType: z.string().trim().max(120, 'Слишком длинный тип фундамента.').optional(),
+	// Чекбокс: браузер вообще не отправляет поле, если он не отмечен — строгий
+	// enum('true'|'false') на пустой строке падал бы с ошибкой валидации.
+	customerOwnSlab: z.string().optional(),
 	currency: z.enum(['RUB', 'USD', 'EUR', 'CNY']),
 	kind: z.enum(['SMR', 'MK', 'PROJECT']),
 	snils: z.string().trim().max(20).optional(),
@@ -104,6 +119,8 @@ export const contractSchema = z.object({
 	status: z.enum(['ACTIVE', 'CLOSED', 'ARCHIVED']),
 	kind: z.enum(['SMR', 'MK', 'PROJECT']),
 	objectAddress: z.string().trim().max(500).optional(),
+	foundationType: z.string().trim().max(120).optional(),
+	customerOwnSlab: z.string().optional(),
 })
 
 export const contractorSchema = z
@@ -117,6 +134,7 @@ export const contractorSchema = z
 			.max(12)
 			.optional()
 			.refine((v) => !v || /^\d{10}$|^\d{12}$/.test(v), 'ИНН должен содержать 10 или 12 цифр'),
+		ogrn: z.string().trim().optional().refine((v) => !v || isValidOgrn(v), 'ОГРН/ОГРНИП не прошёл контрольную проверку.'),
 		address: z.string().trim().max(500).optional(),
 		phone: z.string().trim().max(50).optional(),
 		email: z

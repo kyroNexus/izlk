@@ -157,8 +157,9 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 
 		const validation = contractImportSchema.safeParse({
 			number: value(form, 'contractNumber'), date: value(form, 'contractDate'), amount: value(form, 'amount'),
-			contractorName: value(form, 'contractorName'), inn: value(form, 'inn'), cipher: value(form, 'cipher'),
-			objectAddress: value(form, 'objectAddress'), currency: value(form, 'currency') || 'RUB', kind: value(form, 'kind') || 'SMR',
+			contractorName: value(form, 'contractorName'), inn: value(form, 'inn'), ogrn: value(form, 'ogrn'), cipher: value(form, 'cipher'),
+			objectAddress: value(form, 'objectAddress'), foundationType: value(form, 'foundationType'), customerOwnSlab: value(form, 'customerOwnSlab'),
+			currency: value(form, 'currency') || 'RUB', kind: value(form, 'kind') || 'SMR',
 			type: value(form, 'type') || 'LEGAL',
 			snils: value(form, 'snils'), passportSeries: value(form, 'passportSeries'), passportNumber: value(form, 'passportNumber'),
 			passportIssuedBy: value(form, 'passportIssuedBy'), passportIssuedAt: value(form, 'passportIssuedAt'), passportDeptCode: value(form, 'passportDeptCode'),
@@ -170,7 +171,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		})
 		if (!validation.success) return rejectImport(firstIssue(validation.error), 400, { fileName: file.name })
 		const {
-			number, date, contractorName, inn, cipher, objectAddress, currency, kind, type, snils, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt, passportDeptCode,
+			number, date, contractorName, inn, ogrn, cipher, objectAddress, foundationType, customerOwnSlab, currency, kind, type, snils, passportSeries, passportNumber, passportIssuedBy, passportIssuedAt, passportDeptCode,
 			representativeName, representativeSnils, representativePassportSeries, representativePassportNumber, representativePassportIssuedBy, representativePassportIssuedAt, representativePassportDeptCode,
 			representativeProxyNumber, representativeProxyDate,
 		} = validation.data
@@ -195,7 +196,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 			// которая уже подтверждена раньше.
 			contractor = await prisma.contractor.create({
 				data: {
-					name: contractorName || `Контрагент ИНН ${inn}`, inn: inn || null, phone: contractorPhone, email: contractorEmail, type,
+					name: contractorName || `Контрагент ИНН ${inn}`, inn: inn || null, ogrn: ogrn || null, phone: contractorPhone, email: contractorEmail, type,
 					...(type === 'INDIVIDUAL' ? {
 						snils: orNull(snils), passportSeries: orNull(passportSeries), passportNumber: orNull(passportNumber),
 						passportIssuedBy: orNull(passportIssuedBy), passportIssuedAt: passportIssuedAt ? new Date(`${passportIssuedAt}T12:00:00`) : null, passportDeptCode: orNull(passportDeptCode),
@@ -224,6 +225,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				number, date: new Date(`${date}T12:00:00.000Z`), amount: amount.toFixed(2), currency,
 				kind, status: 'ACTIVE', contractorId: contractor.id, managerId: user.id,
 				cipher: cipher || null, objectAddress: objectAddress || null,
+				foundationType: foundationType || null, customerOwnSlab: customerOwnSlab === 'true',
 			}, select: { id: true },
 		})
 		createdContractId = contract.id

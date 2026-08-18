@@ -27,7 +27,7 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 		const parsed = contractorSchema.safeParse({
 			name: String(formData.get('name') ?? ''), aliases: String(formData.get('aliases') ?? ''),
 			type: String(formData.get('type') ?? 'LEGAL'),
-			inn: String(formData.get('inn') ?? ''), address: String(formData.get('address') ?? ''),
+			inn: String(formData.get('inn') ?? ''), ogrn: String(formData.get('ogrn') ?? ''), address: String(formData.get('address') ?? ''),
 			phone: String(formData.get('phone') ?? ''), email: String(formData.get('email') ?? ''),
 			snils: String(formData.get('snils') ?? ''), passportSeries: String(formData.get('passportSeries') ?? ''),
 			passportNumber: String(formData.get('passportNumber') ?? ''), passportIssuedBy: String(formData.get('passportIssuedBy') ?? ''),
@@ -42,6 +42,7 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 		if (!parsed.success) redirect(`/contractors/new?error=${encodeURIComponent(firstIssue(parsed.error))}${suffix}`)
 		const data = parsed.data
 		const inn = orNull(data.inn)
+		const ogrn = orNull(data.ogrn)
 		const duplicate = await findMatchingContractor({ name: data.name, inn, phone: data.phone, email: data.email })
 		// В мастере договора возвращаем сразу к уже существующему контрагенту.
 		if (duplicate && returnToContract) redirect(`/contracts/new?contractor=${duplicate.id}`)
@@ -51,7 +52,7 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 		try {
 			created = await prisma.contractor.create({
 				data: {
-					name: data.name, aliases: parseAliases(data.aliases ?? ''), type: data.type, inn, address: orNull(data.address), phone: orNull(data.phone), email: orNull(data.email),
+					name: data.name, aliases: parseAliases(data.aliases ?? ''), type: data.type, inn, ogrn, address: orNull(data.address), phone: orNull(data.phone), email: orNull(data.email),
 					snils: orNull(data.snils), passportSeries: orNull(data.passportSeries), passportNumber: orNull(data.passportNumber),
 					passportIssuedBy: orNull(data.passportIssuedBy), passportIssuedAt: data.passportIssuedAt ? new Date(`${data.passportIssuedAt}T12:00:00`) : null, passportDeptCode: orNull(data.passportDeptCode),
 					representativeName: orNull(data.representativeName), representativeSnils: orNull(data.representativeSnils),
@@ -82,7 +83,8 @@ export default async function NewContractorPage({ searchParams }: { searchParams
 					<Field label="Название организации" required><input name="name" required className={inputClass} placeholder="ООО «Строймонтаж» или ФИО" /></Field>
 					<ContractorTypeFields />
 					<Field label="Другие названия" hint="Каждое с новой строки или через запятую — они будут участвовать в поиске"><textarea name="aliases" className={textareaClass} placeholder={'Строймонтаж\nООО СМ'} /></Field>
-					<div className="grid grid-cols-1 gap-3.5 md:grid-cols-2"><Field label="ИНН"><input name="inn" inputMode="numeric" className={inputClass} placeholder="10 или 12 цифр" /></Field><Field label="Телефон"><input name="phone" className={inputClass} placeholder="+7 900 000-00-00" /></Field></div>
+					<div className="grid grid-cols-1 gap-3.5 md:grid-cols-2"><Field label="ИНН"><input name="inn" inputMode="numeric" className={inputClass} placeholder="10 или 12 цифр" /></Field><Field label="ОГРН"><input name="ogrn" inputMode="numeric" className={inputClass} placeholder="13 или 15 цифр (ОГРНИП)" /></Field></div>
+					<Field label="Телефон"><input name="phone" className={inputClass} placeholder="+7 900 000-00-00" /></Field>
 					<Field label="Email"><input name="email" type="email" className={inputClass} placeholder="office@company.ru" /></Field>
 					<Field label="Адрес"><input name="address" className={inputClass} /></Field>
 					<div className="mt-[5px] flex gap-2.5"><button className="brand-gradient inline-flex h-control items-center rounded-control px-4 text-base font-semibold text-white">Сохранить контрагента</button><Link href={returnToContract ? '/contracts/new' : '/contractors'} className="inline-flex h-control items-center rounded-control border border-line bg-surface px-4 text-base font-semibold hover:bg-raised">Отмена</Link></div>

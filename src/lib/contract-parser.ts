@@ -100,10 +100,17 @@ export type ParsedContract = {
 	/** '' — не удалось определить, форма подставит дефолт LEGAL и даст поправить вручную. */
 	contractorType: 'LEGAL' | 'INDIVIDUAL' | ''
 	inn: string
+	ogrn: string
 	phone?: string
 	email?: string
 	cipher: string
 	objectAddress: string
+	/** Из актуальной сметы (см. parseEstimateWorkbook ниже): "ФБР-1600" и т.п.
+	 *  Пусто, если в смете нет позиции фундамента или её не нашли. */
+	foundationType: string
+	/** true — в смете вместо фундамента позиция "Устройство химических
+	 *  анкеров": у заказчика уже есть своя плита, ИЗЛК фундамент не делает. */
+	customerOwnSlab: boolean
 	/** Реквизиты физ. лица — заказчика. Ищутся только когда сам заказчик
 	 *  назван формулой "Гражданин РФ" (contractorType === 'INDIVIDUAL');
 	 *  для юр. лиц всегда пустые. */
@@ -262,6 +269,20 @@ function extractPersonIdentity(segment: string): PersonIdentity {
 	}
 }
 
+// ИЗЛК Рус — собственные реквизиты подрядчика (ЕГРЮЛ). Если авторазбор по
+// ошибке зацепит именно эти значения в поле ЗАКАЗЧИКА (перепутал блок
+// реквизитов сторон в конце договора, либо считал не тот угол сметы), это
+// хуже пустого поля — заметить такую подмену сложнее, чем отсутствие данных.
+// Список — по жалобе пользователя, значения официальные (ЕГРЮЛ ИЗЛК Рус).
+const IZLK_OWN_INN = '9725024975'
+const IZLK_OWN_OGRN = '1197746687731'
+const IZLK_OWN_ADDRESS_MARKERS = [/117461/, /черёмушки|черемушки/iu, /каховк/iu, /дом\s*20\s*а\b/iu, /помещ\.?\s*10\/4/iu]
+
+/** Два и более совпадения — уже точно наш адрес, не просто "Москва" у заказчика. */
+function isIzlkOwnAddress(value: string) {
+	return IZLK_OWN_ADDRESS_MARKERS.filter((marker) => marker.test(value)).length >= 2
+}
+
 function categorize(fileName: string, relativePath?: string) {
 	const searchable = `${relativePath ?? ''} ${fileName}`.toLocaleLowerCase('ru-RU')
 	return FOLDER_CATEGORIES.find((category) => category.expression.test(searchable)) ?? { key: 'other', label: 'Прочие файлы', expression: /./ }
@@ -358,7 +379,19 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	const innNearCustomer = firstMatch(textBeforeContractorParty, [
 		/(?:заказчик)[\s\S]{0,800}?ИНН\s*[:№]?\s*(\d{10}|\d{12})/iu,
 	])
-	const inn = innNearCustomer || firstMatch(textBeforeContractorParty, [/(?:^|\s)ИНН\s*[:№]?\s*(\d{10}|\d{12})(?=\s|$)/imu])
+	let inn = innNearCustomer || firstMatch(textBeforeContractorParty, [/(?:^|\s)ИНН\s*[:№]?\s*(\d{10}|\d{12})(?=\s|$)/imu])
+	// ОГРН — та же логика области поиска и та же защита от "своего" ОГРН
+	// Подрядчика, что и у ИНН чуть выше.
+	const ogrnNearCustomer = firstMatch(textBeforeContractorParty, [
+		/(?:заказчик)[\s\S]{0,800}?ОГРН(?:ИП)?\s*[:№]?\s*(\d{13}|\d{15})/iu,
+	])
+	let ogrn = ogrnNearCustomer || firstMatch(textBeforeContractorParty, [/(?:^|\s)ОГРН(?:ИП)?\s*[:№]?\s*(\d{13}|\d{15})(?=\s|$)/imu])
+	// Задача: даже если приведённая выше область поиска (до клаузулы Подрядчика)
+	// почему-то не сработала — конкретные известные "свои" значения ИЗЛК всё
+	// равно никогда не должны попасть в поле заказчика.
+	const izlkGuardWarnings: string[] = []
+	if (inn === IZLK_OWN_INN) { inn = ''; izlkGuardWarnings.push('Распознанный ИНН совпал с собственным ИНН ИЗЛК — вероятно, перепутан блок реквизитов сторон. Поле оставлено пустым, заполните вручную.') }
+	if (ogrn === IZLK_OWN_OGRN) { ogrn = ''; izlkGuardWarnings.push('Распознанный ОГРН совпал с собственным ОГРН ИЗЛК — вероятно, перепутан блок реквизитов сторон. Поле оставлено пустым, заполните вручную.') }
 	const cipher = firstMatch(text, [
 		/((?:ИЗЛК\s*Рус\s*)?КБ[-–—]\s*\d+(?:\.\d+){2,})/iu,
 		/(?:шифр(?:\s+объекта)?)\s*[:№]?\s*([^\n,;]{3,80})/iu,
@@ -424,9 +457,10 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	].map(plausibleContractorName).find(Boolean) ?? ''
 	const email = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu)?.[0] ?? ''
 	const phone = text.match(/(?:\+7|8)[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}/u)?.[0]?.replace(/\s+/g, ' ').trim() ?? ''
-	const objectAddress = firstMatch(text, [
+	let objectAddress = firstMatch(text, [
 		/(?:адрес\s+(?:объекта|строительства)|место\s+выполнения\s+работ|по\s+адресу)\s*[:—-]?\s*([^\n]{5,220})/iu,
 	])
+	if (objectAddress && isIzlkOwnAddress(objectAddress)) { objectAddress = ''; izlkGuardWarnings.push('Распознанный адрес объекта совпал с собственным адресом ИЗЛК — вероятно, перепутан блок реквизитов сторон. Поле оставлено пустым, заполните вручную.') }
 	const currency: ParsedContract['currency'] = /(?:USD|доллар)/iu.test(text) ? 'USD' : /(?:EUR|евро)/iu.test(text) ? 'EUR' : /(?:CNY|юан)/iu.test(text) ? 'CNY' : 'RUB'
 	// contractorType/identity/representative* не участвуют в values/confidence —
 	// как и currency, это отдельные, не входящие в "обязательные поля" признаки:
@@ -447,9 +481,10 @@ export function parseContractText(fileName: string, rawText: string): ParsedCont
 	// просим перепроверить перед сохранением, а не подставляем молча.
 	if (identity.snils || identity.passportNumber) warnings.push('СНИЛС/паспорт заказчика распознаны автоматически — сверьте с документом перед сохранением.')
 	if (representativeName || representativeIdentity.snils || representativeIdentity.passportNumber) warnings.push('В договоре упомянут представитель по доверенности — сверьте его данные и саму доверенность перед сохранением.')
+	warnings.push(...izlkGuardWarnings)
 	const confidence = Math.min(100, Math.round((essential.filter(Boolean).length / essential.length) * 80 + (foundFields.length / Object.keys(values).length) * 20))
 	return {
-		fileName, ...values, contractorType: contractorType ?? '', currency,
+		fileName, ...values, ogrn, foundationType: '', customerOwnSlab: false, contractorType: contractorType ?? '', currency,
 		...identity,
 		representativeName,
 		representativeSnils: representativeIdentity.snils,
@@ -487,6 +522,108 @@ export async function parseContractFile(fileName: string, buffer: Buffer, allowO
 		if (ocr.warning) return { ...parsed, warnings: [...warnings, ocr.warning] }
 	}
 	return { ...parsed, warnings }
+}
+
+/** Номер ДС из первого сегмента относительного пути ("ДС №2/Смета.xlsx" → 2). */
+function dsFolderNumber(relativePath: string): number | null {
+	const first = relativePath.replace(/\\/g, '/').split('/')[0] ?? ''
+	const match = first.match(/^ДС\s*№?\s*(\d+)/iu)
+	return match ? Number(match[1]) : null
+}
+
+/**
+ * Выбирает смету, из которой берём адрес/шифр/тип фундамента: если в корне
+ * договора есть папки "ДС №1"/"ДС №2"/... — смета из папки с САМЫМ БОЛЬШИМ
+ * номером (последняя редакция — данные могли измениться после исходного
+ * договора). Без папок ДС — смета из корня, иначе первая попавшаяся.
+ */
+function selectEstimateFile(files: FolderParseFile[]): FolderParseFile | null {
+	const candidates = files.filter((file) => /смет/iu.test(file.fileName) && ['.xlsx', '.xls'].includes(path.extname(file.fileName).toLowerCase()))
+	if (!candidates.length) return null
+	const withDs = candidates
+		.map((file) => ({ file, ds: dsFolderNumber(file.relativePath ?? '') }))
+		.filter((item): item is { file: FolderParseFile; ds: number } => item.ds !== null)
+	if (withDs.length) return withDs.sort((a, b) => b.ds - a.ds)[0].file
+	const root = candidates.find((file) => !(file.relativePath ?? '').replace(/\\/g, '/').includes('/'))
+	return root ?? candidates[0]
+}
+
+export type EstimateExtract = {
+	objectAddress: string
+	foundationType: string
+	customerOwnSlab: boolean
+	cipher: string
+	contractorName: string
+	amount: string
+	sourceFile: string
+	warnings: string[]
+}
+
+/**
+ * Структурный разбор сметы — в отличие от остального парсера, который читает
+ * плоский CSV-текст всех листов сразу, здесь именно лист "Смета" и именно
+ * по ячейкам: адрес объекта в реальных сметах стоит в ячейке вида
+ * "Стройка: Московская обл., г.о Подольск, п.Поливаново, к.н. 50:27:...",
+ * и брать его из общего текстового блока ненадёжнее, чем найти саму ячейку.
+ */
+export function parseEstimateWorkbook(fileName: string, buffer: Buffer): EstimateExtract {
+	const blank: EstimateExtract = { objectAddress: '', foundationType: '', customerOwnSlab: false, cipher: '', contractorName: '', amount: '', sourceFile: fileName, warnings: [] }
+	let workbook: XLSX.WorkBook
+	try {
+		workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+	} catch {
+		return { ...blank, warnings: [`Смета «${fileName}» не открылась — структура не разобрана, реквизиты придётся заполнить вручную.`] }
+	}
+	const sheetName = workbook.SheetNames.find((name) => /^смета$/iu.test(name.trim())) ?? workbook.SheetNames.find((name) => /смет/iu.test(name)) ?? workbook.SheetNames[0]
+	if (!sheetName) return { ...blank, warnings: [`В файле сметы «${fileName}» нет ни одного листа.`] }
+	const rows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false })
+	const cells = rows.flatMap((row) => row.map((cell) => String(cell ?? '').trim())).filter(Boolean)
+	const warnings: string[] = []
+
+	// "Стройка: <адрес>" — адрес объекта берём из этой же ячейки, отрезав метку.
+	const siteCellIndex = cells.findIndex((cell) => /стройка\s*:/iu.test(cell))
+	const objectAddress = siteCellIndex !== -1 ? cleanField(cells[siteCellIndex].replace(/^[\s\S]*?стройка\s*:\s*/iu, '')) : ''
+	if (siteCellIndex === -1) warnings.push(`В листе «${sheetName}» не нашёл ячейку "Стройка:" — адрес объекта не распознан из сметы.`)
+	if (objectAddress && isIzlkOwnAddress(objectAddress)) warnings.push('Адрес из ячейки "Стройка:" похож на собственный адрес ИЗЛК — проверьте вручную.')
+
+	// Тип фундамента: заголовок "Изготовление и устройство фундамента", рядом —
+	// "Ж/б фундамент Серия ФБР-1600.ИЗЛКРус...". Верстка сметы отличается между
+	// шаблонами, поэтому ищем "Серия <код>.ИЗЛКРус" сперва в самой заголовочной
+	// ячейке (перенос строки внутри одной ячейки), затем в нескольких соседних.
+	const seriesPattern = /серия\s+([A-ZА-ЯЁ]{2,8}[-–—]\d{2,5})\s*\.\s*ИЗЛКРус/iu
+	const foundationHeaderIndex = cells.findIndex((cell) => /изготовлен[а-яё]*\s+и\s+устройств[а-яё]*\s+фундамент/iu.test(cell))
+	let foundationType = ''
+	if (foundationHeaderIndex !== -1) {
+		const direct = cells[foundationHeaderIndex].match(seriesPattern)
+		foundationType = direct?.[1] ?? ''
+		if (!foundationType) {
+			for (const candidate of cells.slice(foundationHeaderIndex + 1, foundationHeaderIndex + 6)) {
+				const match = candidate.match(seriesPattern)
+				if (match) { foundationType = match[1]; break }
+			}
+		}
+		foundationType = foundationType.replace(/[–—]/g, '-')
+		if (!foundationType) warnings.push(`В листе «${sheetName}» нашёл позицию фундамента, но не распознал серию (Серия ...ИЗЛКРус) — заполните тип фундамента вручную.`)
+	}
+
+	// "Устройство химических анкеров" — своя плита у заказчика, ИЗЛК фундамент не делает.
+	const customerOwnSlab = cells.some((cell) => /устройств[а-яё]*\s+хим(?:ическ[а-яё]*)?\s+анкер/iu.test(cell))
+
+	// Шифр/наименование заказчика/итог — тем же способом, что и для текста
+	// договора (см. parseContractText), но применённым только к этой смете:
+	// задача — "берём из актуальной сметы", а не из первого попавшегося файла.
+	const sheetText = rows.map((row) => row.join(' ')).join('\n')
+	const cipher = firstMatch(sheetText, [/((?:ИЗЛК\s*Рус\s*)?КБ[-–—]\s*\d+(?:\.\d+){2,})/iu])
+	const contractorName = [
+		firstMatch(sheetText, [/заказчик\s*[:—-]\s*([^\n]{3,140})/iu]),
+		firstMatch(sheetText, [/((?:ООО|АО|ПАО|ИП)\s+[«"]?[^\n,»"]{2,100}[»"]?)/iu]),
+	].map(plausibleContractorName).find(Boolean) ?? ''
+	const amount = normalizeAmount(firstMatch(sheetText, [
+		/итог[а-яё]*\s+по\s+смете\s*[:—-]?\s*([\d\s ]+(?:[,.]\d{1,2})?)/iu,
+		/(?:итого|всего)\s*[:—-]?\s*([\d\s ]+(?:[,.]\d{1,2})?)/iu,
+	]))
+
+	return { objectAddress, foundationType, customerOwnSlab, cipher, contractorName, amount, sourceFile: fileName, warnings }
 }
 
 /** Parses every readable file in a selected directory and chooses the most credible contract. */
@@ -539,8 +676,29 @@ export async function parseContractFolder(files: FolderParseFile[]): Promise<Fol
 	const ocrFiles = readable.filter((file) => OCR_EXTENSIONS.has(path.extname(file.fileName).toLowerCase())).length
 	if (ocrFiles > MAX_FOLDER_OCR_CANDIDATES) warnings.push(`OCR выполнен для ${MAX_FOLDER_OCR_CANDIDATES} наиболее вероятных сканов из ${ocrFiles}; остальные файлы будут прикреплены без OCR.`)
 	if (skippedFiles.length) warnings.push(`Файлов приложим без авторазбора: ${skippedFiles.length}.`)
+
+	// Адрес объекта и тип фундамента — ВСЕГДА из сметы, когда она есть в папке
+	// (задача пользователя: из договора это ненадёжнее, а иногда там вообще
+	// нет адреса). selectEstimateFile сама выбирает смету из ДС с наибольшим
+	// номером — это последняя редакция, в ней данные могли уже измениться.
+	let parsedResult = selected.parsed
+	const estimateFile = selectEstimateFile(files)
+	if (estimateFile) {
+		const estimate = parseEstimateWorkbook(estimateFile.relativePath || estimateFile.fileName, estimateFile.buffer)
+		parsedResult = {
+			...parsedResult,
+			objectAddress: estimate.objectAddress || parsedResult.objectAddress,
+			foundationType: estimate.foundationType || parsedResult.foundationType,
+			customerOwnSlab: estimate.customerOwnSlab || parsedResult.customerOwnSlab,
+			cipher: estimate.cipher || parsedResult.cipher,
+			contractorName: parsedResult.contractorName || estimate.contractorName,
+			amount: parsedResult.amount || estimate.amount,
+		}
+		warnings.push(`Адрес объекта и тип фундамента проверены по смете «${estimateFile.relativePath || estimateFile.fileName}».`)
+		warnings.push(...estimate.warnings)
+	}
 	return {
-		parsed: { ...selected.parsed, warnings },
+		parsed: { ...parsedResult, warnings },
 		folder: { totalFiles: files.length, parsedFiles: attempts.length, textCandidates: allReadable.length, primaryFile: selected.file.relativePath || selected.file.fileName, categories: [...categorized.values()], skippedFiles, warnings },
 	}
 }

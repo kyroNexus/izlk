@@ -40,6 +40,8 @@ export default async function EditContractPage({
 				status: true,
 				kind: true,
 				objectAddress: true,
+				foundationType: true,
+				customerOwnSlab: true,
 			},
 		}),
 		prisma.contractor.findMany({
@@ -78,6 +80,8 @@ export default async function EditContractPage({
 			status: String(formData.get('status') ?? 'ACTIVE'),
 			kind: String(formData.get('kind') ?? 'SMR'),
 			objectAddress: String(formData.get('objectAddress') ?? ''),
+			foundationType: String(formData.get('foundationType') ?? ''),
+			customerOwnSlab: String(formData.get('customerOwnSlab') ?? ''),
 		})
 		if (!parsed.success) fail(firstIssue(parsed.error))
 		const data = parsed.data
@@ -129,6 +133,8 @@ export default async function EditContractPage({
 				status: data.status,
 				kind: data.kind,
 				objectAddress: orNull(data.objectAddress),
+				foundationType: orNull(data.foundationType),
+				customerOwnSlab: data.customerOwnSlab === 'true',
 			},
 		})
 
@@ -245,6 +251,16 @@ export default async function EditContractPage({
 							<Field label="Адрес объекта">
 								<input name="objectAddress" defaultValue={contract.objectAddress ?? ''} className={inputClass} />
 							</Field>
+
+							<div className="grid grid-cols-[1fr_auto] gap-3.5">
+								<Field label="Тип фундамента">
+									<input name="foundationType" defaultValue={contract.foundationType ?? ''} className={inputClass} placeholder="Например, ФБР-1600" />
+								</Field>
+								<label className="flex h-control items-center gap-2 self-end whitespace-nowrap rounded-control border border-line bg-raised/40 px-3 text-sm font-medium">
+									<input type="checkbox" name="customerOwnSlab" value="true" defaultChecked={contract.customerOwnSlab} className="h-4 w-4 accent-brand" />
+									Своя плита у заказчика
+								</label>
+							</div>
 
 							<div className="mt-[6px] flex gap-2.5">
 								<button

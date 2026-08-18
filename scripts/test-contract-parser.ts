@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
-import { detectContractorType, parseContractText } from '../src/lib/contract-parser'
+import * as XLSX from 'xlsx'
+import { detectContractorType, parseContractFolder, parseContractText, parseEstimateWorkbook } from '../src/lib/contract-parser'
 import { classifyDocumentPath } from '../src/lib/document-classifier'
+import { isValidOgrn } from '../src/lib/validation'
+
+function estimateBuffer(rows: string[][], sheetName = 'Смета') {
+	const workbook = XLSX.utils.book_new()
+	XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName)
+	return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+}
 
 const parsed = parseContractText('Договор_ТЕСТ-701-ИЗЛК-СМР-2026.docx', `
 ДОГОВОР № ТЕСТ-701-ИЗЛК-СМР-2026 от 15.08.2026
@@ -74,6 +82,7 @@ const individualCustomerContract = parseContractText('731-ИЗЛКРус-СМР-
 assert.equal(individualCustomerContract.contractorName, 'Могилевич Алла Федоровна')
 assert.equal(individualCustomerContract.contractorType, 'INDIVIDUAL')
 assert.equal(individualCustomerContract.inn, '', 'ИНН Подрядчика (ИЗЛК) из реквизитов не должен попадать в поле заказчика')
+assert.equal(individualCustomerContract.ogrn, '', 'ОГРН Подрядчика (ИЗЛК) из реквизитов не должен попадать в поле заказчика')
 // Без представителя — паспорт/СНИЛС находятся и относятся к самому заказчику,
 // поле представителя остаётся пустым.
 assert.equal(individualCustomerContract.snils, '024-787-983-99')
@@ -107,4 +116,91 @@ assert.equal(proxyContract.representativePassportSeries, '55 66', 'паспор�
 assert.equal(proxyContract.representativePassportNumber, '778899')
 assert.ok(proxyContract.warnings.some((w) => w.includes('представитель')), 'должно быть предупреждение сверить данные представителя')
 
-console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%; contractor type detection: OK`)
+// Задача: защита от "своих" реквизитов ИЗЛК — на случай, когда область
+// поиска (до клаузулы Подрядчика) почему-то не спасает, потому что
+// реквизиты ИЗЛК оказались раньше в тексте (перепутанный шаблон и т.п.).
+// Проверяем именно эту ситуацию — реквизиты ИЗЛК ДО клаузулы Подрядчика.
+const guardContract = parseContractText('guard-test.doc', `
+Гражданин РФ Тестов Тест Тестович, именуемый в дальнейшем «Заказчик».
+ИНН: 9725024975
+ОГРН: 1197746687731
+Общество с ограниченной ответственностью «ИЗЛК РУС», именуемое в дальнейшем «Подрядчик», в лице Генерального директора, действующего на основании Устава.
+`)
+assert.equal(guardContract.inn, '', 'собственный ИНН ИЗЛК не должен попасть в поле заказчика')
+assert.equal(guardContract.ogrn, '', 'собственный ОГРН ИЗЛК не должен попасть в поле заказчика')
+assert.ok(guardContract.warnings.some((w) => w.includes('ИНН') && w.includes('ИЗЛК')), 'должно быть предупреждение о совпадении с собственным ИНН ИЗЛК')
+assert.ok(guardContract.warnings.some((w) => w.includes('ОГРН') && w.includes('ИЗЛК')), 'должно быть предупреждение о совпадении с собственным ОГРН ИЗЛК')
+
+const guardAddressContract = parseContractText('guard-address-test.doc', `
+Договор № 950-ИЗЛКРус-СМР-2026 от 01.03.2026
+Заказчик: ООО «Ромашка»
+Работы выполняются по адресу: 117461, г. Москва, вн. тер. г. Муниципальный Округ Черемушки, ул. Каховка, дом 20А, помещ. 10/4
+Сумма договора составляет: 1 000 000,00 руб.
+`)
+assert.equal(guardAddressContract.objectAddress, '', 'собственный адрес ИЗЛК не должен попасть в поле адреса объекта')
+assert.ok(guardAddressContract.warnings.some((w) => w.includes('адрес') && w.includes('ИЗЛК')), 'должно быть предупреждение о совпадении с собственным адресом ИЗЛК')
+
+assert.equal(isValidOgrn('1027700132195'), true, 'реальный контрольный разряд ОГРН (13 цифр)')
+assert.equal(isValidOgrn('1027700132196'), false, 'испорченный контрольный разряд ОГРН должен не пройти проверку')
+assert.equal(isValidOgrn('304500116000157'), true, 'реальный контрольный разряд ОГРНИП (15 цифр)')
+assert.equal(isValidOgrn('123'), false, 'ОГРН неверной длины')
+
+// Задача: адрес объекта, тип фундамента и "своя плита у заказчика" — из
+// сметы, по ячейкам, а не из общего текстового блока.
+const foundationEstimate = parseEstimateWorkbook('Смета.xlsx', estimateBuffer([
+	['Смета № 12 к договору 731-ИЗЛКРус-СМР-2026'],
+	['Стройка: Московская обл., г.о Подольск, п.Поливаново, к.н. 50:27:0020412:1803'],
+	['Изготовление и устройство фундамента (Шифр ИЗЛК Рус КБ-300.16.30.74.60)'],
+	['Ж/б фундамент Серия ФБР-1600.ИЗЛКРус.2021 с анкерами /Раздел ИЗЛК Рус КБ-300.2.30.48.58.60-КЖ/'],
+	['Итого по смете: 5 243 000,00'],
+]))
+assert.equal(foundationEstimate.objectAddress, 'Московская обл., г.о Подольск, п.Поливаново, к.н. 50:27:0020412:1803')
+assert.equal(foundationEstimate.foundationType, 'ФБР-1600')
+assert.equal(foundationEstimate.customerOwnSlab, false)
+assert.equal(foundationEstimate.amount, '5243000.00')
+assert.equal(foundationEstimate.warnings.length, 0)
+
+const slabEstimate = parseEstimateWorkbook('Смета.xlsx', estimateBuffer([
+	['Стройка: г. Тверь, ул. Мира, д. 5'],
+	['Устройство химических анкеров'],
+]))
+assert.equal(slabEstimate.customerOwnSlab, true, '"Устройство химических анкеров" — признак своей плиты у заказчика')
+assert.equal(slabEstimate.foundationType, '', 'без позиции фундамента тип должен остаться пустым')
+
+const missingSiteEstimate = parseEstimateWorkbook('Смета.xlsx', estimateBuffer([['Смета без адресной метки объекта']]))
+assert.equal(missingSiteEstimate.objectAddress, '')
+assert.ok(missingSiteEstimate.warnings.some((w) => w.includes('Стройка')), 'должно предупредить, что ячейку "Стройка:" не нашли')
+
+// Задача: если в папке договора есть ДС №1/№2/№3, смета берётся из папки с
+// САМЫМ БОЛЬШИМ номером (последняя редакция) — не из корня и не из ДС №1.
+// parseContractFolder асинхронна, а tsx здесь транспилирует в CJS (top-level
+// await недоступен) — оборачиваем хвост теста в async IIFE.
+void (async () => {
+	const dsFolderResult = await parseContractFolder([
+		{ fileName: 'Договор.txt', relativePath: 'Договор.txt', buffer: Buffer.from(`
+ДОГОВОР № 900-ИЗЛКРус-СМР-2026 от 10.03.2026
+Заказчик: ООО «Полигон»
+ИНН 7712345678
+Сумма договора составляет: 3 000 000,00 руб.
+Адрес объекта: этот адрес из текста договора — должен быть переопределён сметой из ДС №2
+`, 'utf8') },
+		{ fileName: 'Смета.xlsx', relativePath: 'Смета.xlsx', buffer: estimateBuffer([['Стройка: Адрес из корневой сметы']]) },
+		{ fileName: 'Смета.xlsx', relativePath: 'ДС №1/Смета.xlsx', buffer: estimateBuffer([['Стройка: Адрес из ДС №1']]) },
+		{ fileName: 'Смета.xlsx', relativePath: 'ДС №2/Смета.xlsx', buffer: estimateBuffer([['Стройка: Адрес из ДС №2, самый новый']]) },
+	])
+	assert.equal(dsFolderResult.parsed.objectAddress, 'Адрес из ДС №2, самый новый', 'адрес должен браться из сметы в папке ДС с максимальным номером, а не из корня, ДС №1 или текста договора')
+
+	// Без папок ДС — смета из корня.
+	const rootOnlyResult = await parseContractFolder([
+		{ fileName: 'Договор.txt', relativePath: 'Договор.txt', buffer: Buffer.from(`
+ДОГОВОР № 901-ИЗЛКРус-СМР-2026 от 11.03.2026
+Заказчик: ООО «Полигон-2»
+ИНН 7712345679
+Сумма договора составляет: 2 000 000,00 руб.
+`, 'utf8') },
+		{ fileName: 'Смета.xlsx', relativePath: 'Смета.xlsx', buffer: estimateBuffer([['Стройка: Единственный адрес из корневой сметы']]) },
+	])
+	assert.equal(rootOnlyResult.parsed.objectAddress, 'Единственный адрес из корневой сметы')
+
+	console.log(`Parser test passed: ${parsed.foundFields.join(', ')}; confidence ${parsed.confidence}%; contractor type detection: OK; estimate/ОГРН/ИЗЛК-guard checks: OK`)
+})()

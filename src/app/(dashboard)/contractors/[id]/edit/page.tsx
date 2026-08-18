@@ -29,7 +29,7 @@ export default async function EditContractorPage({
 	const contractor = await prisma.contractor.findFirst({
 		where: { id: contractorId, deletedAt: null },
 		select: {
-			id: true, name: true, aliases: true, type: true, inn: true, address: true, phone: true, email: true,
+			id: true, name: true, aliases: true, type: true, inn: true, ogrn: true, address: true, phone: true, email: true,
 			snils: true, passportSeries: true, passportNumber: true, passportIssuedBy: true, passportIssuedAt: true, passportDeptCode: true,
 			representativeName: true, representativeSnils: true, representativePassportSeries: true, representativePassportNumber: true,
 			representativePassportIssuedBy: true, representativePassportIssuedAt: true, representativePassportDeptCode: true,
@@ -49,6 +49,7 @@ export default async function EditContractorPage({
 			aliases: String(formData.get('aliases') ?? ''),
 			type: String(formData.get('type') ?? 'LEGAL'),
 			inn: String(formData.get('inn') ?? ''),
+			ogrn: String(formData.get('ogrn') ?? ''),
 			address: String(formData.get('address') ?? ''),
 			phone: String(formData.get('phone') ?? ''),
 			email: String(formData.get('email') ?? ''),
@@ -97,6 +98,7 @@ export default async function EditContractorPage({
 					aliases: [...new Set((data.aliases ?? '').split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean))],
 					type: data.type,
 					inn,
+					ogrn: orNull(data.ogrn),
 					address: orNull(data.address),
 					phone: orNull(data.phone),
 					email: orNull(data.email),
@@ -185,9 +187,15 @@ export default async function EditContractorPage({
 							<label className="mb-[6px] block text-sm font-medium text-muted">Другие названия</label>
 							<textarea name="aliases" defaultValue={contractor.aliases.join('\n')} className={textareaClass} placeholder="Каждое название с новой строки" />
 						</div>
-						<div>
-							<label className="mb-[6px] block text-sm font-medium text-muted">{'ИНН'}</label>
-							<input name="inn" defaultValue={contractor.inn ?? ''} className={FIELD_CLASS} placeholder="10 или 12 цифр" />
+						<div className="grid grid-cols-2 gap-3.5">
+							<div>
+								<label className="mb-[6px] block text-sm font-medium text-muted">{'ИНН'}</label>
+								<input name="inn" defaultValue={contractor.inn ?? ''} className={FIELD_CLASS} placeholder="10 или 12 цифр" />
+							</div>
+							<div>
+								<label className="mb-[6px] block text-sm font-medium text-muted">{'ОГРН'}</label>
+								<input name="ogrn" defaultValue={contractor.ogrn ?? ''} className={FIELD_CLASS} placeholder="13 или 15 цифр (ОГРНИП)" />
+							</div>
 						</div>
 						<div>
 							<label className="mb-[6px] block text-sm font-medium text-muted">{'Адрес'}</label>

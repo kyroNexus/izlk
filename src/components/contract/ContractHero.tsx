@@ -35,7 +35,7 @@ export default function ContractHero({
 					{contract.cipher ?? 'Шифр не указан'}
 					{' · от '}
 					{formatDate(contract.date)}
-					{contract.manager?.name ? ` · Менеджер: ${contract.manager.name}` : ''}
+					{contract.objectAddress ? ` · ${contract.objectAddress}` : ''}
 				</div>
 				<ContractStageStepper stage={contract.workflowStage} />
 			</div>
