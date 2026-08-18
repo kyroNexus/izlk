@@ -122,6 +122,7 @@ export default function TabAgreements({
 						)
 					}
 				/>
+				{canEdit && <div className="border-b border-line-soft px-3 py-3"><InlineDocumentUpload contractId={contract.id} extraFields={{ kind: 'INVOICE' }} /></div>}
 				{contract.invoices.length === 0 ? (
 					<EmptyState text="Счетов нет" />
 				) : (

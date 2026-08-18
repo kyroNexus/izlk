@@ -74,6 +74,7 @@ const checks: [string, RegExp][] = [
 	['src/app/(dashboard)/contracts/[id]/page.tsx', /id: 'documents'[\s\S]*id: 'agreements'/],
 	['src/components/contract/TabExecutive.tsx', /InlineDocumentUpload[\s\S]*executiveDocId: ed\.id/],
 	['src/components/contract/TabAgreements.tsx', /InlineDocumentUpload contractId=\{contract\.id\} extraFields=\{\{ kind: 'AGREEMENT' \}\}/],
+	['src/components/contract/TabAgreements.tsx', /InlineDocumentUpload contractId=\{contract\.id\} extraFields=\{\{ kind: 'INVOICE' \}\}/],
 	['src/components/ContractSectionNav.tsx', /section\.hasFiles[\s\S]*Есть файлы/],
 	// Задача C2: узкий доступ ACCOUNTING к счетам — та же схема, что у BUILDER выше.
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'ACCOUNTING'/],
