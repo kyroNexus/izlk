@@ -3,6 +3,7 @@ import { Card, CardHeader, EmptyState, FileIcon } from '@/components/ui'
 import { DOCUMENT_KIND_LABELS, formatBytes, formatDate, plural } from '@/lib/format'
 import type { DocumentState } from '@prisma/client'
 import type { ContractWithRelations } from './shared'
+import DocumentsDropzone from './DocumentsDropzone'
 
 type DocumentRow = ContractWithRelations['documents'][number]
 type DocumentSection = {
@@ -53,6 +54,7 @@ export default function TabDocuments({
 				<Link href={`/contracts/${contract.id}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold ${!selectedFolder ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>Все · {documentsForRegistry.length}</Link>
 				{folders.map((folder) => { const count = documentsForRegistry.filter((document) => folderFor(document) === folder.key).length; return <Link key={folder.key} href={`/contracts/${contract.id}?folder=${folder.key}#documents`} className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold ${selectedFolder === folder.key ? 'bg-brand text-white' : 'bg-raised text-muted hover:text-ink'}`}>{folder.label} · {count}</Link> })}
 			</div>
+			{canEdit && <div className="mx-[11px] mt-[11px]"><DocumentsDropzone contractId={contract.id} /></div>}
 			{(!selectedFolder || selectedFolder === 'source-data') && <div className="mx-[11px] mt-[11px] rounded-control border border-brand/15 bg-brand/5 p-3">
 				<div className="flex flex-wrap items-start gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-bold">Исходные данные от заказчика</div><div className="mt-1 text-xs text-muted">ИГИ, ГПЗУ, топосъёмка и сведения о стеснённых условиях хранятся отдельно от смет и проектов.</div></div>{canEdit && <Link href={`/contracts/${contract.id}/upload?kind=SOURCE_DATA`} className="rounded-tight border border-brand/25 bg-surface px-2.5 py-1.5 text-xs font-semibold text-brand-ink hover:bg-brand-soft">+ Добавить</Link>}</div>
 				<div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{sourceDataChecklist.map((item) => <div key={item.label} className={`rounded-tight border px-2.5 py-2 ${item.document ? 'border-ok/25 bg-ok/5' : 'border-line-soft bg-surface/60'}`}><div className="flex items-center gap-1.5 text-xs font-bold"><span className={item.document ? 'text-ok' : 'text-faint'}>{item.document ? '●' : '○'}</span>{item.label}</div><div className="mt-1 truncate text-2xs text-faint">{item.document ? item.document.fileName : item.hint}</div></div>)}</div>
