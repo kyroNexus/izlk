@@ -616,6 +616,14 @@ enum DocumentKind {
   OTHER
 }
 
+enum SourceDataKind {
+  IGI
+  GPZU
+  TOPO
+  GEOBASE
+  CONSTRAINTS
+}
+
 enum DocumentState {
   SOURCE
   SIGNED
@@ -650,6 +658,7 @@ model Document {
   executiveDoc     ExecutiveDoc?   @relation(fields: [executiveDocId], references: [id])
 
   kind           DocumentKind
+  sourceDataKind SourceDataKind?
   state          DocumentState @default(SOURCE)
   version        Int           @default(1)
   fileName       String

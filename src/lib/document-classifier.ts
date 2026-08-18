@@ -1,4 +1,4 @@
-import type { DocumentKind, DocumentState, SectionCode } from '@prisma/client'
+import type { DocumentKind, DocumentState, SectionCode, SourceDataKind } from '@prisma/client'
 
 /**
  * Изоморфный модуль (задача B2): классификация работает по строке —
@@ -54,6 +54,17 @@ export function detectProjectSectionCode(filePath: string): SectionCode | null {
 	if (hasToken(value, ['кж', 'kzh', 'kj'])) return 'KZH'
 	if (hasToken(value, ['км', 'km'])) return 'KM'
 	if (hasToken(value, ['ар', 'ar'])) return 'AR'
+	return null
+}
+
+/** Подтип исходных данных; первое совпадение по подтверждённому приоритету побеждает. */
+export function detectSourceDataSubtype(filePath: string): SourceDataKind | null {
+	const value = normalizeDocumentPath(filePath)
+	if (hasToken(value, 'иги') || /инженерн(?:о|ые)[ -]?геолог/u.test(value)) return 'IGI'
+	if (hasToken(value, 'гпзу') || /градостроительн/u.test(value)) return 'GPZU'
+	if (/геоподоснов|геодезическ/u.test(value) || hasToken(value, 'основа')) return 'GEOBASE'
+	if (/топос[ъь]ем|топограф/u.test(value)) return 'TOPO'
+	if (/стеснен|ограничен.*площадк/u.test(value)) return 'CONSTRAINTS'
 	return null
 }
 
