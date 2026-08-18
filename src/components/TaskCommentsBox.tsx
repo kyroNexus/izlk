@@ -20,7 +20,7 @@ export type TaskCommentItem = { id: string; text: string | null; authorName: str
  * такой отправке, приходит пустой Blob с именем "blob"; тот же способ,
  * что и у ChatPanel/StageCommentEditor, работает надёжно).
  */
-export default function TaskCommentsBox({ taskId, initialComments }: { taskId: string; initialComments: TaskCommentItem[] }) {
+export default function TaskCommentsBox({ taskId, initialComments, canEdit }: { taskId: string; initialComments: TaskCommentItem[]; canEdit: boolean }) {
 	const [comments, setComments] = useState(initialComments)
 	const [text, setText] = useState('')
 	const [pendingFiles, setPendingFiles] = useState<SelectedFile[]>([])
@@ -72,7 +72,7 @@ export default function TaskCommentsBox({ taskId, initialComments }: { taskId: s
 							{comment.text && <div className="mt-[5px] whitespace-pre-wrap text-sm leading-5">{comment.text}</div>}
 							{comment.attachments.length > 0 && (
 								<div className="mt-1.5 flex flex-wrap gap-1.5">
-									{comment.attachments.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment} />)}
+									{comment.attachments.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment} canRename={canEdit} />)}
 								</div>
 							)}
 						</div>

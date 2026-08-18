@@ -95,24 +95,6 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		redirect(`/contracts/${params.id}#documents`)
 	}
 
-	async function renameProjectDocument(formData: FormData) {
-		'use server'
-		const acting = await requireUser()
-		const documentId = String(formData.get('documentId') ?? '')
-		const baseName = String(formData.get('name') ?? '').trim()
-		const target = await prisma.document.findFirst({
-			where: { id: documentId, contractId: params.id, projectSectionId: { not: null }, deletedAt: null, contract: contractScope(acting) },
-			select: { id: true, fileName: true, projectSection: { select: { responsibleId: true } } },
-		})
-		const allowed = target && (canWrite(acting) || acting.role === 'BUILDER' || (acting.role === 'DESIGNER' && target.projectSection?.responsibleId === acting.id))
-		if (!allowed || !baseName || baseName.length > 160 || /[\\/\u0000-\u001f]/.test(baseName) || baseName === '.' || baseName === '..') redirect(`/contracts/${params.id}#project`)
-		const dot = target.fileName.lastIndexOf('.')
-		const extension = dot > 0 ? target.fileName.slice(dot) : ''
-		await prisma.document.update({ where: { id: target.id }, data: { fileName: `${baseName}${extension}` } })
-		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: 'DocumentName', entityId: target.id })
-		redirect(`/contracts/${params.id}#project`)
-	}
-
 	async function deleteDocument(formData: FormData) {
 		'use server'
 		const acting = await requireUser()
@@ -452,12 +434,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 							userId={user.id}
 							userRole={user.role}
 							addProjectSection={addProjectSection}
-							renameDocument={renameProjectDocument}
 						/>
 
 						<TabTasks contractId={contract.id} openTasks={openTasks} />
 
-						<TabExecutive contractId={contract.id} executiveDocs={executiveDocs} canUpload={canEdit || user.role === 'BUILDER'} />
+						<TabExecutive contractId={contract.id} executiveDocs={executiveDocs} documents={contract.documents} canUpload={canEdit || user.role === 'BUILDER'} />
 					</div>
 
 					{/* ---------- Правая колонка ---------- */}

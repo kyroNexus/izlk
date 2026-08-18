@@ -54,7 +54,7 @@ export default function TaskAttachmentsBox({ taskId, initialAttachments, canEdit
 			<div className="mb-1.5 text-xs font-bold text-muted">Вложения{attachments.length > 0 ? ` (${attachments.length})` : ''}</div>
 			{attachments.length > 0 && (
 				<div className="mb-2 flex flex-wrap gap-1.5">
-					{attachments.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment} />)}
+					{attachments.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment} canRename={canEdit} />)}
 				</div>
 			)}
 			{canEdit && (

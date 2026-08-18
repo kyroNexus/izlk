@@ -4,6 +4,7 @@ import { DOCUMENT_KIND_LABELS, formatBytes, formatDate, plural } from '@/lib/for
 import type { DocumentState } from '@prisma/client'
 import type { ContractWithRelations } from './shared'
 import InlineDocumentUpload from './InlineDocumentUpload'
+import RenameFileButton from '@/components/RenameFileButton'
 
 type DocumentRow = ContractWithRelations['documents'][number]
 type DocumentSection = {
@@ -82,6 +83,7 @@ export default function TabDocuments({
 										</div>
 									</div>
 								</Link>
+								{canEdit && <RenameFileButton type="document" id={d.id} fileName={d.fileName} />}
 								{canEdit && <form action={changeDocumentState}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-tight border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-muted hover:border-brand/40 hover:text-brand-ink">{d.state === 'ARCHIVE' ? 'Восстановить' : 'В архив'}</button></form>}
 								{isAdminUser && <form action={deleteDocument}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-tight border border-danger/20 bg-danger/5 px-2 py-1.5 text-xs font-semibold text-danger hover:bg-danger/10">Удалить</button></form>}
 								</div>

@@ -64,3 +64,6 @@ next-env.d.ts
 # temp QA artifacts
 /tmp/
 /docx_render/
+
+# local agent configuration
+/.claude/

@@ -347,6 +347,7 @@ export default async function TaskPage({
             <CardHeader title="Комментарии" extra={task.comments.length} />
             <TaskCommentsBox
               taskId={task.id}
+			  canEdit={canEdit}
               initialComments={task.comments.map((comment) => ({
                 id: comment.id,
                 text: comment.text,

@@ -78,7 +78,7 @@ const checks: [string, RegExp][] = [
 	['src/components/ContractSectionNav.tsx', /section\.hasFiles[\s\S]*Есть файлы/],
 	['src/components/contract/TabProject.tsx', /Исходники \(DWG\)[\s\S]*Итоговые файлы \(PDF\)/],
 	['src/components/contract/TabProject.tsx', /function FileGroup[\s\S]*InlineDocumentUpload/],
-	['src/app/(dashboard)/contracts/[id]/page.tsx', /async function renameProjectDocument[\s\S]*DocumentName/],
+	['src/app/api/files/[type]/[id]/route.ts', /projectSection.*responsibleId[\s\S]*entityType: 'FileName'/],
 	// Задача C2: узкий доступ ACCOUNTING к счетам — та же схема, что у BUILDER выше.
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'ACCOUNTING'/],
 	['src/app/(dashboard)/contracts/[id]/upload/page.tsx', /user\.role === 'ACCOUNTING'/],

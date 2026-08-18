@@ -3,13 +3,9 @@ import { formatDate } from '@/lib/format'
 import type { Role, SectionCode } from '@prisma/client'
 import { PROJECT_SECTION_LABEL, type ContractWithRelations } from './shared'
 import InlineDocumentUpload from './InlineDocumentUpload'
+import RenameFileButton from '@/components/RenameFileButton'
 
 type ProjectDocument = ContractWithRelations['projectSections'][number]['documents'][number]
-
-function nameParts(fileName: string) {
-	const dot = fileName.lastIndexOf('.')
-	return dot > 0 ? { base: fileName.slice(0, dot), extension: fileName.slice(dot) } : { base: fileName, extension: '' }
-}
 
 function FileGroup({
 	title,
@@ -18,7 +14,6 @@ function FileGroup({
 	contractId,
 	projectSectionId,
 	canManage,
-	renameDocument,
 }: {
 	title: string
 	documents: ProjectDocument[]
@@ -26,16 +21,15 @@ function FileGroup({
 	contractId: string
 	projectSectionId: string
 	canManage: boolean
-	renameDocument: (formData: FormData) => Promise<void>
 }) {
 	return <details open={documents.length <= 3} className="group overflow-hidden rounded-tight border border-line-soft bg-surface/60">
 		<summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 text-xs font-bold text-muted hover:bg-raised"><span className="text-faint transition-transform group-open:rotate-90">›</span><span className="min-w-0 flex-1">{title}</span><span className="rounded-full bg-raised px-2 py-0.5 text-2xs">{documents.length}</span></summary>
 		<div className="space-y-2 border-t border-line-soft p-2">
 			{documents.length === 0 && <div className="px-1 py-2 text-xs text-faint">Пока не загружены</div>}
-			{documents.map((document) => { const parts = nameParts(document.fileName); return <div key={document.id} className="rounded-tight border border-line-soft bg-surface p-2">
-				<a href={`/api/documents/${document.id}`} title={document.fileName} className="flex min-w-0 items-center gap-2 text-xs font-semibold text-brand-ink hover:underline"><FileIcon fileName={document.fileName} /><span className="min-w-0 break-all">{document.fileName}</span></a>
-				{canManage && <details className="mt-1.5"><summary className="cursor-pointer text-2xs font-semibold text-muted hover:text-brand-ink">Переименовать</summary><form action={renameDocument} className="mt-1.5 flex items-center gap-1.5"><input type="hidden" name="documentId" value={document.id} /><input name="name" defaultValue={parts.base} required maxLength={160} aria-label={`Новое имя файла ${document.fileName}`} className="h-8 min-w-0 flex-1 rounded-tight border border-line bg-canvas px-2 text-xs outline-none focus:border-brand" /><span className="text-2xs text-faint">{parts.extension}</span><button className="h-8 rounded-tight bg-brand px-2.5 text-2xs font-semibold text-white">Сохранить</button></form></details>}
-			</div>})}
+			{documents.map((document) => <div key={document.id} className="flex items-start gap-1 rounded-tight border border-line-soft bg-surface p-2">
+				<a href={`/api/documents/${document.id}`} title={document.fileName} className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold text-brand-ink hover:underline"><FileIcon fileName={document.fileName} /><span className="min-w-0 break-all">{document.fileName}</span></a>
+				{canManage && <RenameFileButton type="document" id={document.id} fileName={document.fileName} />}
+			</div>)}
 			{canManage && <InlineDocumentUpload contractId={contractId} extraFields={{ projectSectionId, kind }} />}
 		</div>
 	</details>
@@ -49,7 +43,6 @@ export default function TabProject({
 	userId,
 	userRole,
 	addProjectSection,
-	renameDocument,
 }: {
 	contractId: string
 	projectSections: ContractWithRelations['projectSections']
@@ -58,7 +51,6 @@ export default function TabProject({
 	userId: string
 	userRole: Role
 	addProjectSection: (formData: FormData) => Promise<void>
-	renameDocument: (formData: FormData) => Promise<void>
 }) {
 	return (
 		<Card id="project" hidden role="tabpanel" aria-labelledby="tab-project">
@@ -76,8 +68,8 @@ export default function TabProject({
 							<div className="mt-[10px] truncate text-base font-medium">{section.responsible?.name ?? 'Ответственный не назначен'}</div>
 							<div className="tnum mt-[4px] text-xs text-faint">{section.dateFrom ? formatDate(section.dateFrom) : '—'}{' – '}{section.dateTo ? formatDate(section.dateTo) : '—'}</div>
 							<div className="mt-3 space-y-2">
-								<FileGroup title="Исходники (DWG)" documents={sourceDocs} kind="PROJECT_DWG" contractId={contractId} projectSectionId={section.id} canManage={canManage} renameDocument={renameDocument} />
-								<FileGroup title="Итоговые файлы (PDF)" documents={finalDocs} kind="PROJECT_PDF" contractId={contractId} projectSectionId={section.id} canManage={canManage} renameDocument={renameDocument} />
+								<FileGroup title="Исходники (DWG)" documents={sourceDocs} kind="PROJECT_DWG" contractId={contractId} projectSectionId={section.id} canManage={canManage} />
+								<FileGroup title="Итоговые файлы (PDF)" documents={finalDocs} kind="PROJECT_PDF" contractId={contractId} projectSectionId={section.id} canManage={canManage} />
 							</div>
 						</div>
 					})}

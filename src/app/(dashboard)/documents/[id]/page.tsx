@@ -6,6 +6,7 @@ import { Card, Chip, FileIcon, selectClass } from '@/components/ui'
 import { DOCUMENT_KIND_LABELS, formatBytes, formatDate, initials } from '@/lib/format'
 import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { prisma } from '@/lib/prisma'
+import RenameFileButton from '@/components/RenameFileButton'
 import { readStoredFile } from '@/lib/storage'
 import { writeAudit } from '@/lib/audit'
 import type { CommercialProposalStatus } from '@prisma/client'
@@ -165,7 +166,7 @@ export default async function DocumentViewerPage({ params, searchParams }: { par
 			<div className="mb-[16px] flex flex-wrap items-start justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-3">
 					<FileIcon fileName={document.fileName} />
-					<div className="min-w-0"><h1 className="truncate text-2xl font-bold tracking-[-0.02em]">{document.fileName}</h1><p className="mt-1 text-sm text-muted">{formatBytes(document.sizeBytes)} · {DOCUMENT_KIND_LABELS[document.kind]}</p></div>
+					<div className="min-w-0"><div className="flex items-center gap-2"><h1 className="truncate text-2xl font-bold tracking-[-0.02em]">{document.fileName}</h1>{canWrite(user) && <RenameFileButton type="document" id={document.id} fileName={document.fileName} />}</div><p className="mt-1 text-sm text-muted">{formatBytes(document.sizeBytes)} · {DOCUMENT_KIND_LABELS[document.kind]}</p></div>
 				</div>
 				<div className="flex gap-2"><a href={`/api/documents/${document.id}`} className="inline-flex h-control items-center rounded-tight border border-line bg-surface px-4 text-sm font-semibold hover:bg-raised">Скачать</a><Link href={`/contracts/${document.contract.id}`} className="inline-flex h-control items-center rounded-tight border border-line bg-surface px-4 text-sm font-semibold hover:bg-raised">К договору</Link></div>
 			</div>
