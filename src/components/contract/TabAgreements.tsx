@@ -75,7 +75,7 @@ export default function TabAgreements({
 											</div>
 											<div className="mt-[2px] text-xs text-faint">
 												{est
-											? `${estimateTitle(est.number)}${canSeeAmounts && est.amount != null ? ` · ${formatMoney(est.amount)}` : ''}`
+											? `${estimateTitle(est.number)} к ${agreementTitle(a.number)}${canSeeAmounts && est.amount != null ? ` · ${formatMoney(est.amount)}` : ''}`
 												: 'Без сметы'}
 											</div>
 										</div>
@@ -85,7 +85,7 @@ export default function TabAgreements({
 										<div className="ml-[42px] flex flex-wrap items-center gap-2 text-xs">
 											{scans.map((document) => (
 												<span key={document.id} className="flex items-center gap-1 rounded-tight border border-line-soft bg-surface px-2 py-1 text-faint hover:border-brand/40 hover:text-brand-ink">
-													<a href={`/api/documents/${document.id}`} className="flex min-w-0 items-center gap-1"><span className="max-w-[180px] truncate">{document.fileName}</span><span className="tnum">{formatBytes(document.sizeBytes)}</span></a>
+											<a href={`/api/documents/${document.id}`} className="flex min-w-0 items-center gap-1"><span className="max-w-[180px] truncate">{document.fileName}</span><span className="tnum">{formatBytes(document.sizeBytes)}</span><span>к {agreementTitle(a.number)}</span></a>
 													{canEdit && <RenameFileButton type="document" id={document.id} fileName={document.fileName} />}
 												</span>
 											))}

@@ -277,7 +277,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		{ sub: 'TOPO' as const, label: 'Топосъёмка', hint: 'топографическая съёмка', match: (fileName: string) => /(?:топос[ъь]ем|топограф)/i.test(fileName) },
 		{ sub: 'GEOBASE' as const, label: 'Геоподоснова', hint: 'геодезическая или топографическая основа', match: (fileName: string) => /(?:геоподоснов|геодезическ(?:ая|ий)?\s+основ)/i.test(fileName) },
 		{ sub: 'CONSTRAINTS' as const, label: 'Стеснённые условия', hint: 'сведения об ограничениях на площадке', match: (fileName: string) => /стеснен/i.test(fileName) },
-	].map((item) => ({ ...item, document: sourceDataDocuments.find((document) => item.match(document.fileName)) }))
+	].map((item) => ({
+		...item,
+		document: sourceDataDocuments.find((document) => document.sourceDataKind === item.sub)
+			?? sourceDataDocuments.find((document) => !document.sourceDataKind && item.match(document.fileName)),
+	}))
 	// Защищаем страницу от старых записей/Prisma Client, где новые связи ещё не возвращаются.
 	const sites = contract.sites ?? []
 	const executiveDocs = contract.executiveDocs ?? []
