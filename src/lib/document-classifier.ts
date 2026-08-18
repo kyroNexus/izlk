@@ -36,6 +36,12 @@ export function normalizeDocumentPath(filePath: string) {
 		.replace(/[\\/]+/g, ' ')
 }
 
+/** Unicode-aware token match. JavaScript's \b only treats ASCII as word characters. */
+export function hasToken(value: string, pattern: string | string[]) {
+	const source = Array.isArray(pattern) ? pattern.join('|') : pattern
+	return new RegExp(`(^|[^\\p{L}\\p{N}])(?:${source})(?=$|[^\\p{L}\\p{N}])`, 'iu').test(value)
+}
+
 /** Files created by Office/desktop systems that are never real documents. */
 export function isTransientSystemFile(filePath: string) {
 	const fileName = basenameOf(filePath)
@@ -45,10 +51,9 @@ export function isTransientSystemFile(filePath: string) {
 /** Определяет раздел проекта по русской или латинской метке в имени/папке. */
 export function detectProjectSectionCode(filePath: string): SectionCode | null {
 	const value = normalizeDocumentPath(filePath)
-	const hasToken = (tokens: string[]) => new RegExp(`(^|[^\\p{L}\\p{N}])(?:${tokens.join('|')})(?=$|[^\\p{L}\\p{N}])`, 'iu').test(value)
-	if (hasToken(['кж', 'kzh', 'kj'])) return 'KZH'
-	if (hasToken(['км', 'km'])) return 'KM'
-	if (hasToken(['ар', 'ar'])) return 'AR'
+	if (hasToken(value, ['кж', 'kzh', 'kj'])) return 'KZH'
+	if (hasToken(value, ['км', 'km'])) return 'KM'
+	if (hasToken(value, ['ар', 'ar'])) return 'AR'
 	return null
 }
 
@@ -56,7 +61,7 @@ export function detectProjectSectionCode(filePath: string): SectionCode | null {
 export function classifyDocumentPath(filePath: string): DocumentKind {
 	const lower = normalizeDocumentPath(filePath)
 	const ext = extnameOf(lower)
-	if (/(?:\bиги\b|инженерн(?:о|ые)[ -]?геолог|\bгпзу\b|градостроительн|топос[ъь]ем|топограф|геоподоснов|геодезическ(?:ая|ий)?\s+основ|стеснен|исходн(?:ые)?[ -]?данн)/u.test(lower)) return 'SOURCE_DATA'
+	if (hasToken(lower, ['иги', 'гпзу']) || /(?:инженерн(?:о|ые)[ -]?геолог|градостроительн|топос[ъь]ем|топограф|геоподоснов|геодезическ(?:ая|ий)?\s+основ|стеснен|исходн(?:ые)?[ -]?данн)/u.test(lower)) return 'SOURCE_DATA'
 	if (/(смет|локальн.*расч[ее]т)/u.test(lower)) return 'ESTIMATE'
 	if (/(доп\.?\s*соглаш|дс\s*[№_\d])/u.test(lower)) return 'AGREEMENT'
 	if (/(счет|счёт)(?!.*схем)/u.test(lower)) return 'INVOICE'
