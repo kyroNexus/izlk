@@ -50,10 +50,12 @@ export function isTransientSystemFile(filePath: string) {
 
 /** Определяет раздел проекта по русской или латинской метке в имени/папке. */
 export function detectProjectSectionCode(filePath: string): SectionCode | null {
-	const value = normalizeDocumentPath(filePath)
-	if (hasToken(value, ['кж', 'kzh', 'kj'])) return 'KZH'
-	if (hasToken(value, ['км', 'km'])) return 'KM'
-	if (hasToken(value, ['ар', 'ar'])) return 'AR'
+	const parts = filePath.replace(/\\/g, '/').split('/').map(normalizeDocumentPath)
+	for (const value of parts) {
+		if (hasToken(value, ['кж', 'kzh', 'kj'])) return 'KZH'
+		if (hasToken(value, ['км', 'km', 'кмд', 'kmd'])) return 'KM'
+		if (hasToken(value, ['ар', 'ar'])) return 'AR'
+	}
 	return null
 }
 

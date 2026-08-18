@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { detectContractorType, parseContractFolder, parseContractText, parseEstimateWorkbook } from '../src/lib/contract-parser'
 import { classifyDocumentPath } from '../src/lib/document-classifier'
 import { assertDocumentRulePattern, DEFAULT_DOCUMENT_ROUTE_RULES, testDocumentRoute } from '../src/lib/document-route-rules'
+import { matchDocumentContract, routeDocument } from '../src/lib/document-routing'
 import { isValidOgrn } from '../src/lib/validation'
 
 function estimateBuffer(rows: string[][], sheetName = 'Смета') {
@@ -74,6 +75,44 @@ const customRoute = testDocumentRoute('Спецакт 2026.pdf', [
 assert.equal(customRoute.matchedRule?.id, 'custom-rule', 'правило из БД должно дополнять встроенную классификацию')
 assert.equal(customRoute.kind, 'APPENDIX')
 assert.throws(() => assertDocumentRulePattern('['), /регулярное выражение/)
+
+assert.deepEqual(routeDocument('Счет на оплату №326 от 29.06.26.pdf'), {
+	kind: 'INVOICE', state: 'SOURCE', invoiceNumber: '326', invoiceDate: '2026-06-29',
+})
+assert.deepEqual(routeDocument('Доп. соглашение №2 к 731-ИЗЛКРус-СМР-2026.pdf'), {
+	kind: 'AGREEMENT', state: 'SIGNED', agreementNumber: '2', contractNumberFull: '731-ИЗЛКРус-СМР-2026', contractNumberShort: '731',
+})
+const linkedEstimateRoute = routeDocument('731-ИЗЛКРус-СМР-2026 №1,2 Смета, График к ДС №1.xlsx')
+assert.equal(linkedEstimateRoute.kind, 'ESTIMATE')
+assert.equal(linkedEstimateRoute.state, 'SOURCE')
+assert.equal(linkedEstimateRoute.agreementNumber, '1')
+const signedPr1Route = routeDocument('ПОДПИСАНО_25.02.2026 Пр.№1 (731).pdf')
+assert.equal(signedPr1Route.kind, 'APPENDIX')
+assert.equal(signedPr1Route.state, 'SIGNED')
+assert.equal(signedPr1Route.pr1SignedAt, '2026-02-25')
+assert.equal(signedPr1Route.contractNumberShort, '731')
+assert.equal(routeDocument('ПОДПИСАНО Пр.№1 25.02.2026 (731).pdf').contractNumberShort, '731', 'дата после ПР1 не должна приниматься за номер договора')
+assert.equal(routeDocument('Пр.№10 отчет.pdf').pr1SignedAt, undefined)
+assert.equal(routeDocument('ИГИ (731).pdf').sourceDataKind, 'IGI')
+assert.equal(routeDocument('ИГИ (731).pdf').contractNumberShort, '731')
+const projectRoute = routeDocument('КЖ/СМР-2026 КБ-300.16.21.52.60-КЖ-731.dwg')
+assert.equal(projectRoute.kind, 'PROJECT_DWG')
+assert.equal(projectRoute.state, 'SOURCE')
+assert.equal(projectRoute.sectionCode, 'KZH')
+assert.equal(projectRoute.cipher, 'КБ-300.16.21.52.60')
+assert.equal(routeDocument('731_КМД_кровля.dwg').sectionCode, 'KM')
+assert.equal(routeDocument('Договор 731-ИЗЛКРус-СМР-2026.pdf').state, 'SOURCE', 'одиночный PDF договора не считается подписанным')
+
+const contractMatch = matchDocumentContract(projectRoute, [
+	{ id: 'number', number: '731-ИЗЛКРус-СМР-2026', cipher: 'КБ-ДРУГОЙ.20.20', date: '2026-01-01' },
+	{ id: 'cipher', number: '999-ИЗЛКРус-СМР-2026', cipher: 'КБ-300.16.21.52.60', date: '2026-01-01' },
+])
+assert.equal(contractMatch.contract?.id, 'cipher', 'шифр должен быть приоритетнее номера')
+const yearMismatch = matchDocumentContract(routeDocument('ИГИ к 731-ИЗЛКРус-СМР-2023.pdf'), [
+	{ id: 'short', number: '731-ИЗЛКРус-СМР-2026', date: '2026-01-01' },
+])
+assert.equal(yearMismatch.contract?.id, 'short', 'расхождение года не отменяет привязку по уникальному короткому номеру')
+assert.match(yearMismatch.warning ?? '', /Год 2023/)
 
 // Формулировка по образцу реального договора (ФИО вымышленное) — заказчик
 // физ. лицо, действующее через представителя по доверенности; у представителя
