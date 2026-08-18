@@ -46,6 +46,34 @@ async function extractOcrText(fileName: string, buffer: Buffer): Promise<{ text:
 	}
 }
 
+export type OcrHealthResult = { ok: boolean; issues: string[] }
+
+/**
+ * Задача D3: extractOcrText() выше уже возвращает предупреждение, когда
+ * pdftoppm/tesseract недоступны — но оно всплывает только реактивно, на
+ * конкретном скане, и легко теряется среди обычных сообщений импорта. Это —
+ * проактивная самопроверка без реального распознавания: спрашивает версии
+ * обоих бинарников и список языков tesseract. Дешевле, чем гонять OCR
+ * реальной картинки, но ловит ровно те поломки, что случаются на практике —
+ * бинарник пропал при пересборке контейнера, языковой пакет rus не
+ * установлен — теми же формулировками, что уже использует extractOcrText.
+ */
+export async function checkOcrHealth(): Promise<OcrHealthResult> {
+	const issues: string[] = []
+	try {
+		await execFile('pdftoppm', ['-v'], { timeout: 5000 })
+	} catch {
+		issues.push('Не найден конвертер PDF (pdftoppm) — сканы в PDF не распознаются.')
+	}
+	try {
+		const { stdout, stderr } = await execFile('tesseract', ['--list-langs'], { timeout: 5000 })
+		if (!/\brus\b/.test(`${stdout}\n${stderr}`)) issues.push('В Tesseract не установлен русский язык (rus) — русские сканы не распознаются.')
+	} catch {
+		issues.push('Не найден Tesseract OCR — сканы не распознаются вовсе.')
+	}
+	return { ok: issues.length === 0, issues }
+}
+
 /** Formats from which the server can extract actual text without desktop Office. */
 export const PARSABLE_EXTENSIONS = ['.doc', '.docx', '.xlsx', '.xls', '.pdf', '.txt', '.csv', '.png', '.jpg', '.jpeg'] as const
 export const MAX_PARSE_BYTES = 25 * 1024 * 1024

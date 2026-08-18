@@ -1,8 +1,9 @@
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
 import type { Dirent } from 'fs'
-import { readFile, readdir, stat } from 'fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'fs/promises'
 import path from 'path'
+import JSZip from 'jszip'
 import type { DocumentKind, DocumentState } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { importInboxFile, INBOX_PATH } from '@/lib/storage'
@@ -20,11 +21,66 @@ const OCR_SOURCE_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg'])
 // Inbox can contain an entire historical archive. OCR is intentionally limited
 // per scan, otherwise 1,000 scanned PDFs could occupy the worker for hours.
 const MAX_INBOX_OCR_CANDIDATES = 16
+// Задача D2: тот же принцип, что и у OCR-потолка выше — защита воркера, а не
+// полная защита от zip-бомбы. jszip грузит архив и каждую запись целиком в
+// память, поэтому оба предела нужны: и на сам файл архива, и на число записей.
+const MAX_INBOX_ZIP_BYTES = 500 * 1024 * 1024
+const MAX_INBOX_ZIP_ENTRIES = 5000
 
 /** "_мусор/<employee>" is intentionally a private work area, not an import source. */
 function isPrivateTrashPath(filePath: string) {
 	const segments = path.relative(INBOX_PATH, filePath).split(path.sep).map((item) => item.toLocaleLowerCase('ru-RU'))
 	return segments.includes('_мусор') || segments.includes('мусор')
+}
+
+/**
+ * Задача D2: .zip во входящей папке — часто не документ, а целый архив
+ * (историческая выгрузка старых договоров и т.п.), который иначе повис бы в
+ * очереди одним нераспознанным файлом. Разворачиваем его рядом: Файл.zip →
+ * папка Файл/ с тем же содержимым — а дальше её файлы участвуют в обычном
+ * обходе scanInbox() как будто их скинули в Inbox напрямую, без отдельной
+ * ветки логики для архивов в основном цикле ниже.
+ *
+ * Идемпотентно: если папка Файл/ уже существует — архив уже разворачивали
+ * раньше, повторно не трогаем (иначе автосканер распаковывал бы его заново
+ * каждые 5 секунд). Содержимое архива подхватится основным обходом только
+ * на СЛЕДУЮЩЕМ цикле сканирования (files здесь — уже готовый список, его не
+ * пересобираем на лету) — то же почти мгновенное (≤5 сек) отставание, что и
+ * у любого только что появившегося в Inbox файла.
+ */
+/** Exported for a deterministic regression test: extraction, idempotency, zip-slip. */
+export async function expandInboxZips(files: string[]): Promise<{ expanded: Set<string>; failed: Map<string, string> }> {
+	const expanded = new Set<string>()
+	const failed = new Map<string, string>()
+	for (const sourcePath of files) {
+		if (path.extname(sourcePath).toLowerCase() !== '.zip' || isPrivateTrashPath(sourcePath)) continue
+		const resolved = path.resolve(sourcePath)
+		const targetDir = sourcePath.slice(0, -'.zip'.length)
+		try {
+			const alreadyExpanded = await stat(targetDir).then((info) => info.isDirectory()).catch(() => false)
+			if (alreadyExpanded) { expanded.add(resolved); continue }
+			const info = await stat(sourcePath)
+			if (info.size > MAX_INBOX_ZIP_BYTES) throw new Error(`Архив больше допустимых ${Math.round(MAX_INBOX_ZIP_BYTES / 1024 / 1024)} МБ — распакуйте вручную`)
+			const zip = await JSZip.loadAsync(await readFile(sourcePath))
+			const entries = Object.values(zip.files).filter((entry) => !entry.dir)
+			if (entries.length === 0) throw new Error('Архив пуст или повреждён')
+			if (entries.length > MAX_INBOX_ZIP_ENTRIES) throw new Error(`В архиве больше ${MAX_INBOX_ZIP_ENTRIES} файлов — распакуйте вручную`)
+			const resolvedTargetDir = path.resolve(targetDir)
+			for (const entry of entries) {
+				// Защита от zip-slip: путь внутри архива не должен выходить за пределы targetDir.
+				const destination = path.resolve(resolvedTargetDir, entry.name)
+				if (destination !== resolvedTargetDir && !destination.startsWith(resolvedTargetDir + path.sep)) continue
+				await mkdir(path.dirname(destination), { recursive: true })
+				await writeFile(destination, await entry.async('nodebuffer'))
+			}
+			expanded.add(resolved)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Не удалось распаковать архив'
+			failed.set(resolved, message)
+			logger.warn('inbox.zip_expand_failed', { entityType: 'Inbox', error })
+		}
+	}
+	return { expanded, failed }
 }
 
 async function walk(dir: string): Promise<string[]> {
@@ -250,7 +306,16 @@ async function autoImportRecognizedItems() {
 
 export async function scanInbox() {
 	const files = await walk(INBOX_PATH)
-	const result = { found: files.length, queued: 0, autoImported: 0, duplicates: 0, ignored: 0, parsed: 0, errors: 0, issues: [] as string[] }
+	const result = { found: files.length, queued: 0, autoImported: 0, duplicates: 0, ignored: 0, parsed: 0, errors: 0, archivesExpanded: 0, issues: [] as string[] }
+	// Задача D2: сначала разворачиваем архивы — их содержимое подхватит уже
+	// СЛЕДУЮЩИЙ вызов scanInbox() (см. комментарий у expandInboxZips), а сам
+	// .zip дальше в этом проходе пропускается основным циклом ниже.
+	const { expanded: expandedZips, failed: zipFailures } = await expandInboxZips(files)
+	result.archivesExpanded = expandedZips.size
+	for (const [zipPath, message] of zipFailures) {
+		result.errors++
+		result.issues.push(`${path.basename(zipPath)}: ${message}`)
+	}
 	const ocrCandidates = selectInboxOcrCandidates(files)
 	const parsedByPath = new Map<string, Awaited<ReturnType<typeof parseContractFile>>>()
 	if (files.filter((file) => OCR_SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase())).length > MAX_INBOX_OCR_CANDIDATES) {
@@ -286,6 +351,10 @@ export async function scanInbox() {
 
 	for (const sourcePath of files) {
 		const fileName = path.basename(sourcePath)
+		// Успешно развёрнутый архив дальше не участвует как отдельный файл —
+		// его содержимое уже посчитано через archivesExpanded выше, а сами
+		// извлечённые файлы подхватит следующий проход (см. expandInboxZips).
+		if (expandedZips.has(path.resolve(sourcePath))) continue
 		if (IGNORE.some((pattern) => pattern.test(fileName))) { result.ignored++; continue }
 		try {
 			const sha256 = await sha256File(sourcePath)

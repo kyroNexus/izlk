@@ -17,6 +17,7 @@ import { grantDesignReadAccess } from '@/lib/access'
 import { trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { findMatchingContractor } from '@/lib/contractor-match'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export const dynamic = 'force-dynamic'
  * Очередь импорта. Раньше сканер scripts/scan-inbox.ts заполнял InboxItem,
  * но в интерфейсе эти записи нигде не показывались — пункт меню вёл на 404.
  */
-export default async function InboxPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function InboxPage({ searchParams }: { searchParams: { error?: string; scanning?: string } }) {
 	const user = await requireUser()
 	if (!isAdmin(user)) redirect('/')
 
@@ -185,25 +186,27 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 			data: { errorMessage: null },
 		})
 		await writeImportEvent({ fileName: 'Массовый повтор обработки', event: 'RETRY', outcome: 'QUEUED', actorId: actingUser.id, message: 'Администратор запустил повторную проверку ошибочных файлов.' })
-		try {
-			const operation = await runRateLimitedInboxScan(`user:${actingUser.id}`)
-			if (!operation.result) throw new Error('Сканирование уже запущено или временно ограничено.')
-		} catch (error) {
-			redirect(`/inbox?error=${encodeURIComponent(error instanceof Error ? error.message : 'Не удалось повторить обработку файлов')}`)
-		}
-		redirect('/inbox')
+		// Задача D1: раньше ответ блокировался до конца скана целиком — на
+		// большой исторической папке это грозило таймаутом запроса. Автосканер
+		// и так проверяет папку каждые несколько секунд (см. watcher ниже на
+		// странице), поэтому здесь скан просто ЗАПУСКАЕТСЯ (не дожидаемся его
+		// конца) — если блокировку уже держит автосканер, эта попытка тихо
+		// вернёт { result: null } и результат всё равно появится через
+		// секунды из уже идущего цикла.
+		void runRateLimitedInboxScan(`user:${actingUser.id}`).catch((error) => {
+			logger.error('inbox.manual_scan_failed', { entityType: 'Inbox', userId: actingUser.id, error })
+		})
+		redirect('/inbox?scanning=1')
 	}
 
 	async function runScan() {
 		'use server'
 		const actingUser = await requireUser()
 		if (!isAdmin(actingUser)) redirect('/')
-		try {
-			const operation = await runRateLimitedInboxScan(`user:${actingUser.id}`)
-			if (!operation.result) throw new Error('Сканирование уже запущено или временно ограничено.')
-		}
-		catch (error) { redirect(`/inbox?error=${encodeURIComponent(error instanceof Error ? error.message : 'Не удалось проверить папку')}`) }
-		redirect('/inbox')
+		void runRateLimitedInboxScan(`user:${actingUser.id}`).catch((error) => {
+			logger.error('inbox.manual_scan_failed', { entityType: 'Inbox', userId: actingUser.id, error })
+		})
+		redirect('/inbox?scanning=1')
 	}
 
 	async function createContractFromFile(formData: FormData) {
@@ -279,6 +282,11 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 
 				<div className="mb-[14px] max-w-[720px]">
 					<FormError message={searchParams.error} />
+					{searchParams.scanning === '1' && !searchParams.error && (
+						<div className="rounded-control border border-brand/25 bg-brand/5 px-3.5 py-2.5 text-sm text-brand-ink">
+							Проверка папки запущена в фоне — обновите страницу через несколько секунд, чтобы увидеть результат.
+						</div>
+					)}
 				</div>
 				<div className="mb-[14px] grid grid-cols-2 gap-2.5 md:grid-cols-4">
 					<div className="rounded-[12px] border border-line bg-surface p-3"><div className="text-2xs uppercase tracking-wide text-faint">Ждут решения</div><div className="mt-1 text-xl font-bold">{(statusCount.get('PENDING') ?? 0) + (statusCount.get('SUGGESTED') ?? 0)}</div></div>
@@ -288,8 +296,8 @@ export default async function InboxPage({ searchParams }: { searchParams: { erro
 				</div>
 				<div className={`mb-[14px] flex flex-wrap items-center gap-3 rounded-[12px] border px-3.5 py-2.5 ${watcher.online ? 'border-ok-bd bg-ok-bg' : 'border-warn-bd bg-warn-bg'}`}>
 					<span className={`h-2.5 w-2.5 rounded-full ${watcher.online ? 'bg-ok' : 'bg-warn'}`} />
-					<div><div className="text-sm font-bold">{watcher.online ? 'Автосканер работает' : 'Автосканер не запущен'}</div><div className="mt-0.5 text-xs text-muted">{watcher.online ? `Папка проверяется автоматически каждые 5 секунд${watcher.checkedAt ? ` · последняя проверка ${formatDateTime(watcher.checkedAt)}` : ''}` : 'Запустите приложение через START-IZLK.cmd — ручная проверка при этом остаётся доступна'}</div></div>
-					{watcher.online && <div className="ml-auto text-right text-xs text-muted"><div>Новых: {watcher.result?.queued ?? 0} · копий: {watcher.result?.duplicates ?? 0}</div><div className="max-w-[360px] truncate">{watcher.inboxPath}</div></div>}
+					<div><div className="text-sm font-bold">{watcher.online ? 'Автосканер работает' : 'Автосканер не запущен'}</div><div className="mt-0.5 text-xs text-muted">{watcher.online ? `Папка проверяется автоматически каждые 5 секунд${watcher.checkedAt ? ` · последняя проверка ${formatDateTime(watcher.checkedAt)}` : ''}` : 'Запустите приложение через START-IZLK.cmd — ручная проверка при этом остаётся доступна'}{watcher.ocr && (watcher.ocr.ok ? ' · OCR: работает' : <span className="font-semibold text-danger"> · OCR: недоступен — {watcher.ocr.issues[0]}</span>)}</div></div>
+					{watcher.online && <div className="ml-auto text-right text-xs text-muted"><div>Новых: {watcher.result?.queued ?? 0} · копий: {watcher.result?.duplicates ?? 0}{Boolean(watcher.result?.archivesExpanded) && ` · архивов распаковано: ${watcher.result!.archivesExpanded}`}</div><div className="max-w-[360px] truncate">{watcher.inboxPath}</div></div>}
 				</div>
 
 				<Card>
