@@ -196,6 +196,26 @@ export async function saveChatAttachment(input: { threadId: string; fileName: st
 	return { storagePath: target, sha256, sizeBytes: input.buffer.length, mimeType: mimeByFileName(fileName), fileName }
 }
 
+/** Сохраняет вложение к комментарию этапа (задача C3) — тот же паттерн, что
+ *  и saveChatAttachment, отдельно от договорных документов и от чата. */
+export async function saveStageCommentAttachment(input: { contractId: string; stage: string; fileName: string; buffer: Buffer }) {
+	const sha256 = sha256Buffer(input.buffer)
+	const dir = path.join(STORAGE_PATH, 'stage-comments', input.contractId, input.stage)
+	await mkdir(dir, { recursive: true })
+	const fileName = assertSafeDocumentUpload(input.fileName)
+	assertFileContentMatchesName(fileName, input.buffer)
+	const target = path.join(dir, `${sha256.slice(0, 12)}-${fileName}`)
+	const temporary = `${target}.upload-${randomUUID()}.tmp`
+	try {
+		await writeFile(temporary, input.buffer)
+		await rename(temporary, target)
+	} catch (error) {
+		await rm(temporary, { force: true }).catch(() => undefined)
+		throw error
+	}
+	return { storagePath: target, sha256, sizeBytes: input.buffer.length, mimeType: mimeByFileName(fileName), fileName }
+}
+
 /** Сохраняет фотографию дневного отчёта отдельно от договорных документов. */
 export async function saveSitePhoto(input: { siteId: string; workId: string; fileName: string; buffer: Buffer }) {
 	const sha256 = sha256Buffer(input.buffer)

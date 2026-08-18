@@ -291,12 +291,34 @@ model StageComment {
   stage      ContractWorkflowStage
   authorId   String?
   author     User?                 @relation("StageCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  text       String                @db.VarChar(1000)
+  /// Необязателен: комментарий может нести только фото подтверждения этапа,
+  /// без текста (задача C3).
+  text        String?                     @db.VarChar(1000)
+  attachments StageCommentAttachment[]
   createdAt  DateTime              @default(now())
   deletedAt  DateTime?
 
   @@index([contractId, stage, createdAt])
   @@index([authorId])
+}
+
+/// Вложение к комментарию этапа (задача C3) — тот же паттерн, что и
+/// ChatAttachment: подтверждение выполнения этапа фотографией — обычный
+/// сценарий, отдельная модель вместо Document (тот жёстко про юридические
+/// документы договора: kind/state/versioning, тут просто фото/файл к заметке).
+model StageCommentAttachment {
+  id          String       @id @default(cuid())
+  commentId   String
+  comment     StageComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  fileName    String
+  storagePath String
+  mimeType    String?
+  sizeBytes   BigInt
+  sha256      String
+  isImage     Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@index([commentId])
 }
 
 enum ChatScope {

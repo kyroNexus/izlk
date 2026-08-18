@@ -100,7 +100,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 		include: {
 			contractor: { select: { name: true, inn: true } },
 			manager: { select: { name: true } },
-			stageCommentLog: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true, stage: true, text: true, createdAt: true, author: { select: { name: true } } } },
+			stageCommentLog: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true, stage: true, text: true, createdAt: true, author: { select: { name: true } }, attachments: { select: { id: true, fileName: true, sizeBytes: true, isImage: true } } } },
 			projectSections: { where: { deletedAt: null }, select: { code: true, queueStatus: true, documents: { where: { deletedAt: null, kind: 'PROJECT_PDF' }, select: { id: true }, take: 1 } } },
 			_count: { select: { documents: true } },
 		},
@@ -186,10 +186,13 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 					{visibleContracts.length === 0 ? <RichEmptyState title={user.role === 'VIEWER' ? 'Нет назначенных договоров' : 'В этом разделе договоров нет'} description={user.role === 'VIEWER' ? 'Обратитесь к менеджеру или администратору, чтобы получить доступ к договору.' : 'Измените фильтры или создайте новый договор.'} icon={Folder} primaryAction={canWrite(user) ? <Link href="/contracts/new" className="brand-gradient rounded-lg px-3 py-2 text-sm font-semibold text-white">Создать договор</Link> : undefined} secondaryAction={<Link href="/contracts" className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">Сбросить фильтры</Link>} /> : <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 					<div className="min-w-[960px]"><div className="grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] gap-3 border-b border-line-soft bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-wide text-faint"><span>Номер / шифр</span><span>Тип</span><span>Контрагент</span><span>Объект</span><span>Дата</span><span>Этап работ</span><span>Файлы</span></div>
 						{visibleContracts.map((contract) => {
-							const threadByStage: Record<string, { id: string; text: string; authorName: string | null; createdAt: string }[]> = {}
-							for (const item of contract.stageCommentLog) (threadByStage[item.stage] ??= []).push({ id: item.id, text: item.text, authorName: item.author?.name ?? null, createdAt: item.createdAt.toISOString() })
+							const threadByStage: Record<string, { id: string; text: string | null; authorName: string | null; createdAt: string; attachments: { id: string; fileName: string; sizeBytes: number; isImage: boolean; url: string }[] }[]> = {}
+							for (const item of contract.stageCommentLog) (threadByStage[item.stage] ??= []).push({ id: item.id, text: item.text, authorName: item.author?.name ?? null, createdAt: item.createdAt.toISOString(), attachments: item.attachments.map((a) => ({ id: a.id, fileName: a.fileName, sizeBytes: Number(a.sizeBytes), isImage: a.isImage, url: `/api/stage-comments/attachments/${a.id}` })) })
 							const stageThread = threadByStage[contract.workflowStage]
-							const stageComment = stageThread?.[stageThread.length - 1]?.text
+							const lastComment = stageThread?.[stageThread.length - 1]
+							// Комментарий может быть только фото, без текста (задача C3) —
+							// тогда превью в таблице показывает хотя бы это, а не пустоту.
+							const stageComment = lastComment?.text || (lastComment?.attachments.length ? `📎 ${lastComment.attachments.length > 1 ? `${lastComment.attachments.length} файла` : lastComment.attachments[0].fileName}` : undefined)
 							return <div key={contract.id} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-xs last:border-0">
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate text-sm font-bold group-hover:text-brand-ink">№ {contract.number}</span><span className="mt-0.5 block truncate text-xs text-faint">{contract.cipher ?? 'Без шифра'}</span><ProjectBadges sections={contract.projectSections} /></Link>
 							<span><span className="rounded-md bg-raised px-2 py-1 text-xs font-bold">{KIND_LABELS[contract.kind]}</span></span>

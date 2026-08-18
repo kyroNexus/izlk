@@ -4,11 +4,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Paperclip } from 'lucide-react'
 import Icon from '@/components/Icon'
 import FileDropField, { type FileDropFieldHandle, type SelectedFile } from '@/components/FileDropField'
-import { formatBytes, formatDateTime } from '@/lib/format'
+import AttachmentPreview, { type AttachmentSummary } from '@/components/AttachmentPreview'
+import { formatDateTime } from '@/lib/format'
 import { DOCUMENT_EXTENSIONS } from '@/lib/upload-constants'
 
-type Attachment = { id: string; fileName: string; sizeBytes: number; isImage: boolean; url: string }
-type Message = { id: string; text: string | null; createdAt: string; author: { id: string; name: string }; own: boolean; canDelete: boolean; attachments: Attachment[] }
+type Message = { id: string; text: string | null; createdAt: string; author: { id: string; name: string }; own: boolean; canDelete: boolean; attachments: AttachmentSummary[] }
 
 const NEAR_BOTTOM_PX = 40
 // Задача C1: скрепка — "приложить пару фото к сообщению", не массовая
@@ -20,19 +20,6 @@ function rateLimitMessage(response: Response) {
 	if (response.status !== 429) return null
 	const retryAfter = Number(response.headers.get('Retry-After'))
 	return retryAfter > 0 ? `Слишком много сообщений подряд — попробуйте через ${retryAfter} сек.` : 'Слишком много сообщений подряд, подождите немного.'
-}
-
-function AttachmentRow({ attachment }: { attachment: Attachment }) {
-	if (attachment.isImage) {
-		return <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 block max-w-[220px] overflow-hidden rounded-tight border border-line-soft">
-			<img src={attachment.url} alt={attachment.fileName} className="block max-h-[220px] w-full object-cover" />
-		</a>
-	}
-	return <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="mt-1.5 flex items-center gap-1.5 rounded-tight border border-line-soft bg-surface/60 px-2 py-1.5 text-2xs hover:border-brand/40">
-		<Icon icon={Paperclip} size={12} className="flex-none text-faint" />
-		<span className="min-w-0 flex-1 truncate">{attachment.fileName}</span>
-		<span className="flex-none tnum text-faint">{formatBytes(attachment.sizeBytes)}</span>
-	</a>
 }
 
 export default function ChatPanel({ endpoint, title }: { endpoint: string; title: string }) {
@@ -162,7 +149,7 @@ export default function ChatPanel({ endpoint, title }: { endpoint: string; title
 		if (!response.ok) { setError('Не удалось удалить сообщение.'); return }
 		setMessages((current) => current.filter((message) => message.id !== messageId))
 	}
-	return <section className="overflow-hidden rounded-[14px] border border-line bg-surface"><div className="border-b border-line-soft px-4 py-3"><b className="text-base">{title}</b><span className="ml-2 text-xs text-faint">обновление каждые 12 сек.</span></div><div ref={listRef} className="max-h-64 space-y-2 overflow-y-auto p-3">{error ? <p className="rounded-lg bg-warn-bg p-3 text-xs text-warn">{error}</p> : messages.length ? <>{hasMore && <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} className="mb-1 block w-full rounded-lg py-1.5 text-center text-xs font-semibold text-brand-ink hover:bg-raised disabled:opacity-60">{loadingOlder ? 'Загрузка…' : 'Показать раньше'}</button>}{messages.map((message) => <div key={message.id} className={`rounded-control px-3 py-2 text-xs ${message.own ? 'ml-5 bg-brand-soft' : 'mr-5 bg-raised'}`}><div className="flex justify-between gap-2 text-2xs text-faint"><span>{message.author.name}</span><span>{formatDateTime(message.createdAt)}</span></div>{message.text && <p className="mt-1 whitespace-pre-wrap">{message.text}</p>}{message.attachments.map((attachment) => <AttachmentRow key={attachment.id} attachment={attachment} />)}{message.canDelete && canWrite && <button type="button" onClick={() => void remove(message.id)} className="mt-1 text-2xs text-danger hover:underline">Удалить</button>}</div>)}</> : <p className="py-5 text-center text-xs text-faint">Сообщений пока нет.</p>}</div>{canWrite && <div className="border-t border-line-soft p-3">
+	return <section className="overflow-hidden rounded-[14px] border border-line bg-surface"><div className="border-b border-line-soft px-4 py-3"><b className="text-base">{title}</b><span className="ml-2 text-xs text-faint">обновление каждые 12 сек.</span></div><div ref={listRef} className="max-h-64 space-y-2 overflow-y-auto p-3">{error ? <p className="rounded-lg bg-warn-bg p-3 text-xs text-warn">{error}</p> : messages.length ? <>{hasMore && <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} className="mb-1 block w-full rounded-lg py-1.5 text-center text-xs font-semibold text-brand-ink hover:bg-raised disabled:opacity-60">{loadingOlder ? 'Загрузка…' : 'Показать раньше'}</button>}{messages.map((message) => <div key={message.id} className={`rounded-control px-3 py-2 text-xs ${message.own ? 'ml-5 bg-brand-soft' : 'mr-5 bg-raised'}`}><div className="flex justify-between gap-2 text-2xs text-faint"><span>{message.author.name}</span><span>{formatDateTime(message.createdAt)}</span></div>{message.text && <p className="mt-1 whitespace-pre-wrap">{message.text}</p>}{message.attachments.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment} className="mt-1.5" />)}{message.canDelete && canWrite && <button type="button" onClick={() => void remove(message.id)} className="mt-1 text-2xs text-danger hover:underline">Удалить</button>}</div>)}</> : <p className="py-5 text-center text-xs text-faint">Сообщений пока нет.</p>}</div>{canWrite && <div className="border-t border-line-soft p-3">
 		{attachOpen && <div className="mb-2.5">
 			<FileDropField
 				key={attachResetKey}
