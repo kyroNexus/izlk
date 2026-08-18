@@ -9,6 +9,7 @@ export const RATE_LIMITS = {
 	'document-download': { limit: 30, windowMs: 10 * 60_000 },
 	'chat-message': { limit: 30, windowMs: 5 * 60_000 },
 	'stage-comment': { limit: 20, windowMs: 5 * 60_000 },
+	'task-attachment': { limit: 20, windowMs: 5 * 60_000 },
 } as const
 
 export type RateLimitName = keyof typeof RATE_LIMITS

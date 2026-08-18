@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { canManageInvoices, canSeeAmounts, canSeeSchedules, canWrite, contractScope, isAdmin } from '../src/lib/access'
+import { canManageInvoices, canSeeAmounts, canSeeSchedules, canWrite, contractScope, isAdmin, taskScope } from '../src/lib/access'
 
 type Role = 'ADMIN' | 'MANAGER' | 'DESIGNER' | 'BUILDER' | 'PRODUCTION' | 'ACCOUNTING' | 'VIEWER_DESIGN' | 'VIEWER'
 const asUser = (role: Role) => ({ id: `user-${role}`, name: role, email: `${role}@izlk.test`, role })
@@ -38,6 +38,15 @@ for (const role of ['BUILDER', 'PRODUCTION', 'DESIGNER', 'VIEWER_DESIGN', 'VIEWE
 	assert.equal(canManageInvoices(asUser(role)), false, `${role} не должна управлять счетами`)
 }
 
+// taskScope (задача C4): вынесено из трёх дублей на странице задачи —
+// ADMIN видит все, MANAGER свои/подчинённые по договору, остальные — только
+// где сами исполнитель.
+assert.deepEqual(taskScope(asUser('ADMIN')), { deletedAt: null })
+assert.deepEqual(taskScope(asUser('MANAGER')), { deletedAt: null, OR: [{ assigneeId: 'user-MANAGER' }, { creatorId: 'user-MANAGER' }, { contract: { managerId: 'user-MANAGER' } }] })
+for (const role of ['DESIGNER', 'BUILDER', 'PRODUCTION', 'ACCOUNTING', 'VIEWER_DESIGN', 'VIEWER'] as Role[]) {
+	assert.deepEqual(taskScope(asUser(role)), { deletedAt: null, assigneeId: `user-${role}` }, `${role} должен видеть только задачи, где сам исполнитель`)
+}
+
 // Узкие write-пути реально подключены в перечисленных файлах (не просто "должны быть").
 const read = (file: string) => fs.readFileSync(file, 'utf8')
 const checks: [string, RegExp][] = [
@@ -61,6 +70,14 @@ const checks: [string, RegExp][] = [
 	['src/app/(dashboard)/contracts/[id]/invoices/new/page.tsx', /canManageInvoices/],
 	['src/app/(dashboard)/contracts/[id]/page.tsx', /canManageInvoices/],
 	['src/components/contract/TabAgreements.tsx', /canEditInvoices/],
+	// Задача C4: вложения к задаче и к комментарию задачи — везде видимость
+	// через taskScope, не через отдельно продублированные ролевые условия.
+	['src/app/(dashboard)/tasks/[id]/page.tsx', /taskScope\(user\)/],
+	['src/app/(dashboard)/tasks/[id]/page.tsx', /taskScope\(acting\)/],
+	['src/app/api/tasks/attachments/[id]/route.ts', /taskScope\(user\)/],
+	['src/app/api/tasks/comment-attachments/[id]/route.ts', /taskScope\(user\)/],
+	['src/app/api/tasks/[id]/attachments/route.ts', /taskScope\(user\)/],
+	['src/app/api/tasks/[id]/comments/route.ts', /taskScope\(user\)/],
 ]
 for (const [file, pattern] of checks) assert.match(read(file), pattern, `${file} должен содержать ${pattern}`)
 

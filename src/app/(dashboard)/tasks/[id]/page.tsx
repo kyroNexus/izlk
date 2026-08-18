@@ -12,14 +12,18 @@ import {
   selectClass,
   textareaClass,
 } from '@/components/ui'
-import { canWrite, contractScope, requireUser } from '@/lib/access'
+import { canWrite, contractScope, requireUser, taskScope } from '@/lib/access'
 import { formatDateTime, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { writeAudit } from '@/lib/audit'
 import { notify } from '@/lib/notifications'
+import TaskAttachmentsBox from '@/components/TaskAttachmentsBox'
+import TaskCommentsBox from '@/components/TaskCommentsBox'
 
 const taskStatuses: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']
 const taskPriorities: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+const taskAttachmentUrl = (id: string) => `/api/tasks/attachments/${id}`
+const taskCommentAttachmentUrl = (id: string) => `/api/tasks/comment-attachments/${id}`
 
 export default async function TaskPage({
   params,
@@ -29,21 +33,9 @@ export default async function TaskPage({
   searchParams: { error?: string }
 }) {
   const user = await requireUser()
-  const visibility =
-    user.role === 'ADMIN'
-      ? {}
-      : user.role === 'MANAGER'
-        ? {
-            OR: [
-              { assigneeId: user.id },
-              { creatorId: user.id },
-              { contract: { managerId: user.id } },
-            ],
-          }
-        : { assigneeId: user.id }
 
   const task = await prisma.task.findFirst({
-    where: { id: params.id, deletedAt: null, ...visibility },
+    where: { id: params.id, ...taskScope(user) },
     include: {
       contract: {
         select: {
@@ -54,8 +46,15 @@ export default async function TaskPage({
       },
       assignee: { select: { id: true, name: true } },
       creator: { select: { name: true } },
+      attachments: {
+        select: { id: true, fileName: true, sizeBytes: true, isImage: true },
+        orderBy: { createdAt: 'asc' },
+      },
       comments: {
-        include: { author: { select: { name: true } } },
+        include: {
+          author: { select: { name: true } },
+          attachments: { select: { id: true, fileName: true, sizeBytes: true, isImage: true } },
+        },
         orderBy: { createdAt: 'asc' },
       },
     },
@@ -95,19 +94,7 @@ export default async function TaskPage({
     if (!canWrite(acting)) redirect('/tasks')
 
     const current = await prisma.task.findFirst({
-      where: {
-        id: params.id,
-        deletedAt: null,
-        ...(acting.role === 'ADMIN'
-          ? {}
-          : {
-              OR: [
-                { assigneeId: acting.id },
-                { creatorId: acting.id },
-                { contract: { managerId: acting.id } },
-              ],
-            }),
-      },
+      where: { id: params.id, ...taskScope(acting) },
       select: { id: true, assigneeId: true, title: true },
     })
     if (!current) redirect('/tasks')
@@ -168,45 +155,6 @@ export default async function TaskPage({
       await notify({ userId: allowedAssignee.id, type: 'ASSIGNMENT', title: 'Вы назначены исполнителем задачи', message: title, href: `/tasks/${current.id}`, dedupeKey: `task-assignment:${current.id}:${allowedAssignee.id}` })
     }
     redirect(`/tasks/${current.id}`)
-  }
-
-  async function addComment(formData: FormData) {
-    'use server'
-    const acting = await requireUser()
-    const text = String(formData.get('text') ?? '').trim()
-    const visible = await prisma.task.findFirst({
-      where: {
-        id: params.id,
-        deletedAt: null,
-        ...(acting.role === 'ADMIN'
-          ? {}
-          : acting.role === 'MANAGER'
-            ? {
-                OR: [
-                  { assigneeId: acting.id },
-                  { creatorId: acting.id },
-                  { contract: { managerId: acting.id } },
-                ],
-              }
-            : { assigneeId: acting.id }),
-      },
-      select: { id: true, assigneeId: true, creatorId: true, title: true },
-    })
-    if (visible && text) {
-      const comment = await prisma.taskComment.create({
-        data: { taskId: visible.id, authorId: acting.id, text },
-        select: { id: true },
-      })
-      await writeAudit({
-        userId: acting.id,
-        action: 'CREATE',
-        entityType: 'TaskComment',
-        entityId: comment.id,
-      })
-      if (visible.assigneeId !== acting.id) await notify({ userId: visible.assigneeId, type: 'INFO', title: 'Новый комментарий к задаче', message: visible.title, href: `/tasks/${visible.id}`, dedupeKey: `task-comment:${comment.id}:assignee` })
-      if (visible.creatorId !== acting.id && visible.creatorId !== visible.assigneeId) await notify({ userId: visible.creatorId, type: 'INFO', title: 'Новый комментарий к задаче', message: visible.title, href: `/tasks/${visible.id}`, dedupeKey: `task-comment:${comment.id}:creator` })
-    }
-    redirect(`/tasks/${params.id}`)
   }
 
   async function deleteTask() {
@@ -373,6 +321,12 @@ export default async function TaskPage({
               )}
             </form>
 
+            <TaskAttachmentsBox
+              taskId={task.id}
+              canEdit={canEdit}
+              initialAttachments={task.attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.fileName, sizeBytes: Number(attachment.sizeBytes), isImage: attachment.isImage, url: taskAttachmentUrl(attachment.id) }))}
+            />
+
             {canDelete && (
               <form action={deleteTask} className="mt-[10px] border-t border-line pt-2.5">
                 <button className="h-control rounded-tight border border-danger-bd px-3.5 text-sm font-semibold text-danger">
@@ -384,38 +338,16 @@ export default async function TaskPage({
 
           <Card>
             <CardHeader title="Комментарии" extra={task.comments.length} />
-            <div className="max-h-[430px] overflow-auto">
-              {task.comments.length === 0 ? (
-                <div className="p-[22px] text-center text-sm text-faint">
-                  Комментариев пока нет
-                </div>
-              ) : (
-                task.comments.map((comment) => (
-                  <div key={comment.id} className="border-b border-line-soft px-3.5 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <b className="text-xs">{comment.author.name}</b>
-                      <span className="text-2xs text-faint">
-                        {formatDateTime(comment.createdAt)}
-                      </span>
-                    </div>
-                    <div className="mt-[5px] whitespace-pre-wrap text-sm leading-5">
-                      {comment.text}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <form action={addComment} className="border-t border-line p-3">
-              <textarea
-                name="text"
-                required
-                placeholder="Написать комментарий…"
-                className={`${textareaClass} min-h-[72px]`}
-              />
-              <button className="brand-gradient mt-[7px] h-[34px] w-full rounded-tight text-xs font-semibold text-white">
-                Добавить комментарий
-              </button>
-            </form>
+            <TaskCommentsBox
+              taskId={task.id}
+              initialComments={task.comments.map((comment) => ({
+                id: comment.id,
+                text: comment.text,
+                authorName: comment.author.name,
+                createdAt: comment.createdAt.toISOString(),
+                attachments: comment.attachments.map((attachment) => ({ id: attachment.id, fileName: attachment.fileName, sizeBytes: Number(attachment.sizeBytes), isImage: attachment.isImage, url: taskCommentAttachmentUrl(attachment.id) })),
+              }))}
+            />
             {task.contract && (
               <div className="border-t border-line p-3">
                 <Link

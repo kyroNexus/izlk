@@ -98,6 +98,23 @@ export function contractScope(user: SessionUser): Prisma.ContractWhereInput {
 }
 
 /**
+ * Область видимости задач для роли (задача C4) — раньше это условие было
+ * продублировано трижды на странице задачи (просмотр, updateTask, addComment).
+ * ADMIN видит все; MANAGER — свои (исполнитель/постановщик) и задачи
+ * договоров, которыми управляет; остальные роли — только там, где сами исполнитель.
+ */
+export function taskScope(user: SessionUser): Prisma.TaskWhereInput {
+	return {
+		deletedAt: null,
+		...(user.role === 'ADMIN'
+			? {}
+			: user.role === 'MANAGER'
+				? { OR: [{ assigneeId: user.id }, { creatorId: user.id }, { contract: { managerId: user.id } }] }
+				: { assigneeId: user.id }),
+	}
+}
+
+/**
  * Every newly created contract is visible to active designers immediately.
  * This is an explicit per-contract grant rather than opening historical or
  * unrelated contracts to the whole design department.

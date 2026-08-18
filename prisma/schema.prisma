@@ -70,6 +70,7 @@ model User {
   stageComments     StageComment[]         @relation("StageCommentAuthor")
   pr1ConfirmedContracts Contract[] @relation("ContractPr1ConfirmedBy")
   chatMessages      ChatMessage[]
+  uploadedTaskAttachments TaskAttachment[] @relation("TaskAttachmentUploader")
 
   @@index([email])
   @@index([role])
@@ -450,6 +451,7 @@ model Task {
   updatedAt   DateTime      @updatedAt
   deletedAt   DateTime?
   comments    TaskComment[]
+  attachments TaskAttachment[]
 
   @@index([contractId])
   @@index([assigneeId, status])
@@ -463,11 +465,50 @@ model TaskComment {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
-  text      String
+  /// Задача C4: необязателен — комментарий может быть только вложением, без подписи.
+  text      String?
   createdAt DateTime @default(now())
+  attachments TaskCommentAttachment[]
 
   @@index([taskId, createdAt])
   @@index([authorId])
+}
+
+/// Задача C4: файл, приложенный прямо к задаче (не к комментарию) — например,
+/// референс или ТЗ. Отдельно от TaskCommentAttachment ниже, тот же принцип
+/// разделения, что и у Document/ChatAttachment/StageCommentAttachment.
+model TaskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  storagePath  String
+  mimeType     String?
+  sizeBytes    BigInt
+  sha256       String
+  isImage      Boolean  @default(false)
+  uploadedById String?
+  uploadedBy   User?    @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+/// Задача C4: вложение к комментарию задачи — тот же паттерн, что и
+/// ChatAttachment (C1) и StageCommentAttachment (C3).
+model TaskCommentAttachment {
+  id          String      @id @default(cuid())
+  commentId   String
+  comment     TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  fileName    String
+  storagePath String
+  mimeType    String?
+  sizeBytes   BigInt
+  sha256      String
+  isImage     Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  @@index([commentId])
 }
 
 /// Доп. соглашение. parentId — ссылка на предыдущее ДС в цепочке

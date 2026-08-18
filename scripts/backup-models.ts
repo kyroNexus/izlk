@@ -34,6 +34,8 @@ export const restoreOrder = [
   'document',
   'task',
   'taskComment',
+  'taskAttachment',
+  'taskCommentAttachment',
   'notification',
   'inboxItem',
   'importEvent',
