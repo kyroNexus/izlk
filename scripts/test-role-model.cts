@@ -64,7 +64,11 @@ const checks: [string, RegExp][] = [
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'BUILDER'/],
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role !== 'BUILDER' && user\.role !== 'ACCOUNTING' && formData/],
 	['src/components/Sidebar.tsx', /canSeeSchedules/],
-	['src/app/(dashboard)/settings/page.tsx', /VIEWER_DESIGN/],
+	// Список ролей в форме "Настройки" больше не захардкожен в самой
+	// странице — берётся из общего ROLE_LABELS (src/lib/format.ts), поэтому
+	// VIEWER_DESIGN проверяем там, а не литеральной строкой в settings/page.tsx.
+	['src/lib/format.ts', /VIEWER_DESIGN:/],
+	['src/app/(dashboard)/settings/page.tsx', /ROLES = Object\.keys\(ROLE_LABELS\)/],
 	['src/app/(dashboard)/settings/page.tsx', /async function updateUser[\s\S]*id !== acting\.id[\s\S]*passwordHash/],
 	['src/app/(dashboard)/settings/page.tsx', /async function deleteUser[\s\S]*id === acting\.id[\s\S]*deletedAt: new Date\(\)/],
 	['src/app/(dashboard)/contracts/[id]/page.tsx', /id: 'documents'[\s\S]*id: 'agreements'/],
