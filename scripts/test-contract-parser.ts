@@ -19,6 +19,10 @@ const manualEstimateAddress = parseManualEstimateWorkbook(estimateBuffer([['Ст
 assert.equal(manualEstimateAddress.objectAddress, 'Московская обл., г.о. Подольск, п. Поливаново, к.н. 50:27:0020412:1803')
 assert.equal(parseManualEstimateWorkbook(estimateBuffer([['Смета без адреса объекта']])).objectAddress, null)
 assert.equal(parseManualEstimateWorkbook(estimateBuffer([['Стройка: 117461, г. Москва, ул. Каховка, дом 20А, помещ. 10/4']])).objectAddress, null)
+const manualFoundation = parseManualEstimateWorkbook(estimateBuffer([['Ж/б фундамент Серия ФБР-1600.ИЗЛКРус.2021'], ['Устройство химических анкеров']]))
+assert.equal(manualFoundation.foundationType, 'ФБР-1600')
+assert.equal(manualFoundation.customerOwnSlab, true)
+assert.equal(parseManualEstimateWorkbook(estimateBuffer([['Смета без фундамента']])).foundationType, null)
 
 const parsed = parseContractText('Договор_ТЕСТ-701-ИЗЛК-СМР-2026.docx', `
 ДОГОВОР № ТЕСТ-701-ИЗЛК-СМР-2026 от 15.08.2026

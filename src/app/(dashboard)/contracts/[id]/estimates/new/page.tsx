@@ -87,6 +87,8 @@ export default async function NewEstimatePage({
 		const estimateFile = uploadedFile instanceof File && uploadedFile.size > 0 ? uploadedFile : null
 		let parsedWorkingDays: number | null = null
 		let parsedObjectAddress: string | null = null
+		let parsedFoundationType: string | null = null
+		let parsedCustomerOwnSlab = false
 		let estimateBuffer: Buffer | null = null
 		if (estimateFile) {
 			if (estimateFile.size > MAX_UPLOAD_BYTES) fail('Файл сметы больше допустимых 200 МБ')
@@ -95,6 +97,8 @@ export default async function NewEstimatePage({
 			const parsedFile = parseEstimateWorkbook(estimateBuffer)
 			parsedWorkingDays = parsedFile.workingDays
 			parsedObjectAddress = parsedFile.objectAddress
+			parsedFoundationType = parsedFile.foundationType
+			parsedCustomerOwnSlab = parsedFile.customerOwnSlab
 			if (!amount && parsedFile.amount != null) amount = parsedFile.amount.toFixed(2)
 		}
 
@@ -175,11 +179,15 @@ export default async function NewEstimatePage({
 				data: { objectAddress: parsedObjectAddress },
 			})
 		}
+		if (parsedFoundationType) {
+			await prisma.contract.updateMany({ where: { id: contractId, OR: [{ foundationType: null }, { foundationType: '' }] }, data: { foundationType: parsedFoundationType } })
+		}
+		if (parsedCustomerOwnSlab) await prisma.contract.update({ where: { id: contractId }, data: { customerOwnSlab: true } })
 
 		const summary = estimateFile
 			? parsedWorkingDays != null
-				? `Смета создана. Срок из файла: ${parsedWorkingDays} раб. дн.${parsedObjectAddress ? ' Адрес объекта заполнен из сметы.' : ''}`
-				: `Смета создана. Срок в файле не найден — его можно указать при подтверждении ПР1.${parsedObjectAddress ? ' Адрес объекта заполнен из сметы.' : ''}`
+				? `Смета создана. Срок из файла: ${parsedWorkingDays} раб. дн.${parsedObjectAddress ? ' Адрес объекта заполнен из сметы.' : ''}${parsedFoundationType ? ` Фундамент: ${parsedFoundationType}.` : parsedCustomerOwnSlab ? ' У заказчика своя плита.' : ''}`
+				: `Смета создана. Срок в файле не найден — его можно указать при подтверждении ПР1.${parsedObjectAddress ? ' Адрес объекта заполнен из сметы.' : ''}${parsedFoundationType ? ` Фундамент: ${parsedFoundationType}.` : parsedCustomerOwnSlab ? ' У заказчика своя плита.' : ''}`
 			: 'Смета создана'
 		redirect(`/contracts/${contractId}?success=${encodeURIComponent(summary)}`)
 	}
@@ -246,7 +254,7 @@ export default async function NewEstimatePage({
 						<div>
 							<label className="mb-[6px] block text-sm font-medium text-muted">Excel-файл сметы</label>
 							<input type="file" name="estimateFile" accept=".xlsx,.xls,.csv" className="block w-full rounded-control border border-line bg-surface px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-1 file:text-sm" />
-			<p className="mt-[6px] text-xs leading-5 text-faint">Прикрепим смету к договору и автоматически найдём итоговую сумму, срок и адрес объекта. Адрес заполним только если он ещё не указан; введённая вручную сумма имеет приоритет.</p>
+			<p className="mt-[6px] text-xs leading-5 text-faint">Прикрепим смету к договору и автоматически найдём итоговую сумму, срок, адрес и фундамент. Адрес и тип фундамента не перезаписывают заполненные вручную поля.</p>
 						</div>
 
 						<div className="mt-[6px] flex gap-2.5">

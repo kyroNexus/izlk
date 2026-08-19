@@ -4,6 +4,8 @@ export type EstimateParseResult = {
 	workingDays: number | null
 	amount: number | null
 	objectAddress: string | null
+	foundationType: string | null
+	customerOwnSlab: boolean
 	warnings: string[]
 }
 
@@ -71,6 +73,8 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 	let workingDays: number | null = null
 	let amount: number | null = null
 	let objectAddress: string | null = null
+	let foundationType: string | null = null
+	let customerOwnSlab = false
 	let workbook: XLSX.WorkBook
 
 	try {
@@ -78,7 +82,7 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 			? XLSX.read(buffer, { type: 'buffer', cellDates: true })
 			: XLSX.read(decodeCsvText(buffer), { type: 'string', cellDates: true })
 	} catch {
-		return { workingDays, amount, objectAddress, warnings: ['Не удалось прочитать таблицу как Excel-файл'] }
+		return { workingDays, amount, objectAddress, foundationType, customerOwnSlab, warnings: ['Не удалось прочитать таблицу как Excel-файл'] }
 	}
 
 	for (const name of workbook.SheetNames) {
@@ -106,11 +110,14 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 					const address = asText(cell.replace(/^[\s\S]*?(?:стройка|адрес\s+объекта)\s*:\s*/i, ''))
 					if (address.length >= 5 && !isIzlkAddress(address)) objectAddress = address
 				}
+
+				if (!customerOwnSlab && /устройств[а-яё]*\s+хим(?:ическ[а-яё]*)?\s+анкер/i.test(cell)) customerOwnSlab = true
+				if (foundationType == null && /серия\s+([A-ZА-ЯЁ]{2,8}[-–—]\d{2,5})\s*\.\s*ИЗЛКРус/i.test(cell)) foundationType = cell.match(/серия\s+([A-ZА-ЯЁ]{2,8}[-–—]\d{2,5})\s*\.\s*ИЗЛКРус/i)?.[1].replace(/[–—]/g, '-') ?? null
 			}
 		}
 	}
 
 	if (workingDays == null) warnings.push('Срок в рабочих днях не найден — укажите его вручную при подтверждении ПР1')
 	if (amount == null) warnings.push('Итоговая сумма не найдена — оставлена без изменений')
-	return { workingDays, amount, objectAddress, warnings }
+	return { workingDays, amount, objectAddress, foundationType, customerOwnSlab, warnings }
 }
