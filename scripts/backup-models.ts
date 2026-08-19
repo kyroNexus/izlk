@@ -20,6 +20,7 @@ export const restoreOrder = [
   'documentRouteRule',
   'contractor',
   'contract',
+  'contractCustomer',
   'productionPlan',
   'agreement',
   'estimate',

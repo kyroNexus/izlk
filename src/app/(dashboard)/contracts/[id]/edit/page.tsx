@@ -7,6 +7,7 @@ import { initials } from '@/lib/format'
 import { assertContractAccess, canWrite, requireUser } from '@/lib/access'
 import { writeAudit } from '@/lib/audit'
 import { contractSchema, firstIssue, orNull, parseAmount, parseDate } from '@/lib/validation'
+import { additionalCustomerIds } from '@/lib/contract-customers'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,7 @@ export default async function EditContractPage({
 				number: true,
 				cipher: true,
 				contractorId: true,
+				additionalCustomers: { select: { contractorId: true } },
 				managerId: true,
 				date: true,
 				amount: true,
@@ -109,6 +111,11 @@ export default async function EditContractPage({
 			select: { id: true },
 		})
 		if (!contractor) fail('Контрагент не найден')
+		const extraCustomerIds = additionalCustomerIds(formData.getAll('additionalContractorIds'), data.contractorId)
+		if (extraCustomerIds.length) {
+			const found = await prisma.contractor.count({ where: { id: { in: extraCustomerIds }, deletedAt: null } })
+			if (found !== extraCustomerIds.length) fail('Один из дополнительных заказчиков не найден')
+		}
 
 		// Уникальность номера — без учёта текущего договора.
 		const duplicate = await prisma.contract.findFirst({
@@ -123,6 +130,7 @@ export default async function EditContractPage({
 				number: data.number,
 				cipher: orNull(data.cipher),
 				contractorId: data.contractorId,
+				additionalCustomers: { deleteMany: {}, createMany: { data: extraCustomerIds.map((contractorId) => ({ contractorId })) } },
 				managerId: orNull(data.managerId),
 				date: date as Date,
 				amount: amount as string,
@@ -154,6 +162,7 @@ export default async function EditContractPage({
 	const smrAmountValue = contract.smrAmount == null ? '' : String(contract.smrAmount)
 	const mkAmountValue = contract.mkAmount == null ? '' : String(contract.mkAmount)
 	const deliveryAmountValue = contract.deliveryAmount == null ? '' : String(contract.deliveryAmount)
+	const extraCustomerIds = contract.additionalCustomers.map((customer) => customer.contractorId)
 	const canEdit = canWrite(user)
 
 	return (
@@ -198,6 +207,11 @@ export default async function EditContractPage({
 											{c.name}
 										</option>
 									))}
+								</select>
+							</Field>
+							<Field label="Дополнительные заказчики" hint="Необязательно; основной выбран выше">
+								<select name="additionalContractorIds" multiple defaultValue={extraCustomerIds} className={`${selectClass} h-auto py-2`}>
+									{contractors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
 								</select>
 							</Field>
 

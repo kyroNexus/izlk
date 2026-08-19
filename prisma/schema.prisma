@@ -169,7 +169,8 @@ model Contractor {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  contracts Contract[]
+  contracts Contract[] @relation("PrimaryContractor")
+  additionalCustomerContracts ContractCustomer[]
 
   @@index([inn])
   @@index([name])
@@ -217,7 +218,8 @@ model Contract {
   number        String         @unique
   cipher        String?
   contractorId  String
-  contractor    Contractor     @relation(fields: [contractorId], references: [id])
+  contractor    Contractor     @relation("PrimaryContractor", fields: [contractorId], references: [id])
+  additionalCustomers ContractCustomer[]
   managerId     String?
   manager       User?          @relation("ContractManager", fields: [managerId], references: [id])
   date          DateTime
@@ -271,6 +273,19 @@ model Contract {
   @@index([kind])
   @@index([workflowStage])
   @@index([pr1ConfirmedById])
+}
+
+/// Дополнительный заказчик по договору. Основной заказчик остаётся в
+/// Contract.contractor — это сохраняет совместимость со старыми договорами.
+model ContractCustomer {
+  contractId   String
+  contractorId String
+  contract     Contract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractor   Contractor @relation(fields: [contractorId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+
+  @@id([contractId, contractorId])
+  @@index([contractorId])
 }
 
 /// Неизменяемый журнал переходов по рабочим стадиям договора.

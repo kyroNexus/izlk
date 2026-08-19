@@ -5,6 +5,7 @@ import { classifyDocumentPath } from '../src/lib/document-classifier'
 import { assertDocumentRulePattern, DEFAULT_DOCUMENT_ROUTE_RULES, testDocumentRoute } from '../src/lib/document-route-rules'
 import { matchDocumentContract, routeDocument } from '../src/lib/document-routing'
 import './test-document-routing.cts'
+import './test-contract-customers.cts'
 import { isValidOgrn } from '../src/lib/validation'
 import { parseEstimateWorkbook as parseManualEstimateWorkbook } from '../src/lib/estimate-parser'
 

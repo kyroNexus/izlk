@@ -8,6 +8,7 @@ import { canWrite, grantDesignReadAccess, requireUser } from '@/lib/access'
 import { writeAudit } from '@/lib/audit'
 import { EXEC_TEMPLATES } from '@/lib/executive'
 import { contractSchema, firstIssue, orNull, parseAmount, parseDate } from '@/lib/validation'
+import { additionalCustomerIds } from '@/lib/contract-customers'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +84,11 @@ export default async function NewContractPage({
 			select: { id: true },
 		})
 		if (!contractor) fail('Контрагент не найден')
+		const extraCustomerIds = additionalCustomerIds(formData.getAll('additionalContractorIds'), data.contractorId)
+		if (extraCustomerIds.length) {
+			const found = await prisma.contractor.count({ where: { id: { in: extraCustomerIds }, deletedAt: null } })
+			if (found !== extraCustomerIds.length) fail('Один из дополнительных заказчиков не найден')
+		}
 
 		const managerId = orNull(data.managerId)
 		if (managerId) {
@@ -106,6 +112,7 @@ export default async function NewContractPage({
 				number: data.number,
 				cipher: orNull(data.cipher),
 				contractorId: data.contractorId,
+				additionalCustomers: { createMany: { data: extraCustomerIds.map((contractorId) => ({ contractorId })) } },
 				// A contract must always have an owner. An administrator may reassign it
 				// later, but an empty manager makes the card and import workflow ambiguous.
 				managerId: managerId ?? actingUser.id,
@@ -187,6 +194,12 @@ export default async function NewContractPage({
 										<input name="cipher" className={inputClass} />
 									</Field>
 								</div>
+
+								<Field label="Дополнительные заказчики" hint="Необязательно; основной выберите ниже">
+									<select name="additionalContractorIds" multiple className={`${selectClass} h-auto py-2`}>
+										{contractors.map((c) => <option key={c.id} value={c.id}>{c.name}{c.inn ? ` · ИНН ${c.inn}` : ''}</option>)}
+									</select>
+								</Field>
 
 								<div className="flex items-end gap-2.5">
 									<Field label="Контрагент" required>

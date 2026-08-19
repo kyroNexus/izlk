@@ -7,6 +7,7 @@ import type { Prisma, SiteStatus } from '@prisma/client'
  */
 export const CONTRACT_INCLUDE = {
 	contractor: true,
+	additionalCustomers: { include: { contractor: true } },
 	manager: { select: { name: true } },
 	estimates: { where: { deletedAt: null }, orderBy: { date: 'asc' } },
 	agreements: { where: { deletedAt: null }, orderBy: { date: 'asc' }, include: { estimates: { where: { deletedAt: null } } } },
