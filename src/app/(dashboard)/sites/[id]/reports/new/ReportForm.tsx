@@ -55,7 +55,10 @@ export default function ReportForm({ siteId, today }: { siteId: string; today: s
 	}
 	useEffect(() => {
 		const raw = localStorage.getItem(key)
-		const draft: Draft | null = raw ? JSON.parse(raw) : null
+		let draft: Draft | null = null
+		if (raw) {
+			try { draft = JSON.parse(raw) as Draft } catch { localStorage.removeItem(key) }
+		}
 		setSubmissionId(draft?.submissionId ?? newId()); setReportId(draft?.reportId ?? null)
 		if (draft) { setCrew(draft.crew || []); setCosts(draft.costs || []); setMessage(draft.reportId ? 'Черновик восстановлен. Повторите выбор фото и отправку: уже загруженные файлы не задублируются.' : 'Черновик восстановлен.') }
 		requestAnimationFrame(() => Object.entries(draft?.fields ?? {}).forEach(([name, value]) => { const item = formRef.current?.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null; if (item) { if (item instanceof HTMLInputElement && item.type === 'checkbox') item.checked = value === 'on'; else item.value = value } }))
