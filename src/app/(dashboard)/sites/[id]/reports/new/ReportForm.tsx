@@ -13,7 +13,9 @@ type Draft = { fields: Record<string, string>; crew: Crew[]; costs: Cost[]; subm
 const MAX_PHOTOS = 10
 const num = (value: string) => Number(value.replace(',', '.')) || 0
 const money = (value: number) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
-const newId = () => crypto.randomUUID()
+// The production site is also used over plain HTTP on a local network, where
+// Web Crypto's randomUUID is not exposed by browsers.
+const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 async function checksum(file: File) {
 	const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
