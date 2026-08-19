@@ -54,19 +54,6 @@ function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
 	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-bold ring-1 ${tone}`}><i className="h-2 w-2 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
 }
 
-function WorkflowRail({ stage }: { stage: ContractWorkflowStage }) {
-	const currentIndex = WORKFLOW_STAGES.indexOf(stage)
-	return <div className="mt-1.5 flex items-center" role="list" aria-label={`Все этапы договора; текущий: ${WORKFLOW_STAGE_LABEL[stage]}`}>
-		{WORKFLOW_STAGES.map((item, index) => {
-			const current = item === stage
-			const passed = currentIndex > index
-			return <span key={item} className="flex shrink-0 items-center" role="listitem">
-				<span title={WORKFLOW_STAGE_LABEL[item]} aria-label={WORKFLOW_STAGE_LABEL[item]} className={`h-2.5 w-2.5 rounded-full ${current ? 'bg-brand ring-2 ring-brand/25' : passed ? 'bg-ok' : 'bg-line'}`} />
-				{index < WORKFLOW_STAGES.length - 1 && <span className={`h-px w-3 ${passed ? 'bg-ok/60' : 'bg-line'}`} />}
-			</span>
-		})}
-	</div>
-}
 function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queueStatus: string; documents: Array<{ id: string }> }> }) {
 	if (sections.length === 0) return <span className="mt-1 block text-2xs text-faint">Разделы ещё не созданы</span>
 	return <span className="mt-1 flex flex-wrap gap-1">{sections.filter((item) => ['KM', 'KZH', 'AR'].includes(item.code)).map((item) => {
@@ -213,7 +200,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 							<span><span className="rounded-md bg-raised px-2 py-1 text-xs font-bold">{KIND_LABELS[contract.kind]}</span></span>
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate font-semibold">{contract.contractor.name}</span><span className="block truncate text-2xs text-faint">ИНН {contract.contractor.inn}</span></Link>
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate">{contract.objectAddress ?? 'Адрес не указан'}</span>{canSeeAmounts && <span className="mt-0.5 block truncate text-2xs font-semibold text-muted">{formatMoney(contract.amount, contract.currency)}</span>}</Link>
-								<Link href={`/contracts/${contract.id}`} className="tnum text-muted">{formatDate(contract.date)}</Link><div className="min-w-0 overflow-hidden"><WorkflowChip stage={contract.workflowStage} /><div className="contract-stage-scroll mt-1 max-w-full overflow-x-auto pb-2"><div className="min-w-max"><WorkflowRail stage={contract.workflowStage} /><StageCommentEditor contractId={contract.id} stages={COMMENT_STAGES} comments={threadByStage} canWrite={canWrite(user)} /></div></div>{stageComment ? <span title={stageComment} className="mt-1 block truncate text-2xs text-muted">{stageComment}</span> : <span className="mt-1 block text-2xs text-faint">Нажмите на этап для комментария</span>}</div>
+								<Link href={`/contracts/${contract.id}`} className="tnum text-muted">{formatDate(contract.date)}</Link><div className="min-w-0 overflow-hidden"><WorkflowChip stage={contract.workflowStage} /><div className="contract-stage-scroll mt-1 max-w-full overflow-x-auto pb-2"><div className="min-w-max"><StageCommentEditor contractId={contract.id} stages={COMMENT_STAGES} comments={threadByStage} canWrite={canWrite(user)} /></div></div>{stageComment ? <span title={stageComment} className="mt-1 block truncate text-2xs text-muted">{stageComment}</span> : <span className="mt-1 block text-2xs text-faint">Нажмите на этап для комментария</span>}</div>
 							<span className="flex items-center gap-1.5 text-muted"><span className="text-faint"><DocumentsIcon /></span><span className="font-semibold">{contract._count.documents}</span></span>
 						</div> })}</div>
 					</div>}
