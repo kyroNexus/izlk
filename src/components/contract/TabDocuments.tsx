@@ -88,7 +88,7 @@ export default function TabDocuments({
 								</Link>
 								{canEdit && <RenameFileButton type="document" id={d.id} fileName={d.fileName} />}
 								{canEdit && <form action={changeDocumentState}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-tight border border-line bg-surface px-2.5 py-1.5 text-xs font-semibold text-muted hover:border-brand/40 hover:text-brand-ink">{d.state === 'ARCHIVE' ? 'Восстановить' : 'В архив'}</button></form>}
-								{isAdminUser && <form action={deleteDocument}><input type="hidden" name="documentId" value={d.id} /><button className="rounded-tight border border-danger/20 bg-danger/5 px-2 py-1.5 text-xs font-semibold text-danger hover:bg-danger/10">Удалить</button></form>}
+								{isAdminUser && <form action={deleteDocument}><input type="hidden" name="documentId" value={d.id} /><input type="hidden" name="returnTo" value="documents" /><button className="rounded-tight border border-danger/20 bg-danger/5 px-2 py-1.5 text-xs font-semibold text-danger hover:bg-danger/10">Удалить</button></form>}
 								</div>
 							)})}
 							{section.byKind.get(kind)!.length > 12 && <Link href={`/documents?contractId=${contract.id}&kind=${kind}&state=${section.key}`} className="mx-2 mt-1 inline-flex rounded-tight border border-dashed border-line-soft bg-raised/40 px-2.5 py-2 text-xs font-semibold text-brand-ink hover:bg-brand-soft">Показать все {section.byKind.get(kind)!.length} файлов в реестре</Link>}

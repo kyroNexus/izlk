@@ -78,6 +78,11 @@ const checks: [string, RegExp][] = [
 	['src/components/ContractSectionNav.tsx', /section\.hasFiles[\s\S]*Есть файлы/],
 	['src/components/contract/TabProject.tsx', /Исходники \(DWG\)[\s\S]*Итоговые файлы \(PDF\)/],
 	['src/components/contract/TabProject.tsx', /function FileGroup[\s\S]*InlineDocumentUpload/],
+	// Задача: кнопка "Удалить" у файлов проекта — тот же ADMIN-only паттерн,
+	// что и у файлов в разделе "Документы", плюс возврат именно в раздел
+	// "Проект" после удаления (returnTo), а не всегда в "Документы".
+	['src/components/contract/TabProject.tsx', /isAdminUser && <form action=\{deleteDocument\}>[\s\S]*name="returnTo" value="project"/],
+	['src/app/(dashboard)/contracts/[id]/page.tsx', /const returnTo = String\(formData\.get\('returnTo'\) \?\? 'documents'\)[\s\S]*redirect\(`\/contracts\/\$\{params\.id\}#\$\{returnTo\}`\)/],
 	['src/app/api/files/[type]/[id]/route.ts', /projectSection.*responsibleId[\s\S]*entityType: 'FileName'/],
 	// Задача C2: узкий доступ ACCOUNTING к счетам — та же схема, что у BUILDER выше.
 	['src/app/api/contracts/[id]/documents/route.ts', /user\.role === 'ACCOUNTING'/],

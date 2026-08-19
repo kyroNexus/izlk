@@ -14,6 +14,8 @@ function FileGroup({
 	contractId,
 	projectSectionId,
 	canManage,
+	isAdminUser,
+	deleteDocument,
 }: {
 	title: string
 	documents: ProjectDocument[]
@@ -21,6 +23,8 @@ function FileGroup({
 	contractId: string
 	projectSectionId: string
 	canManage: boolean
+	isAdminUser: boolean
+	deleteDocument: (formData: FormData) => Promise<void>
 }) {
 	return <details open={documents.length <= 3} className="group overflow-hidden rounded-tight border border-line-soft bg-surface/60">
 		<summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 text-xs font-bold text-muted hover:bg-raised"><span className="text-faint transition-transform group-open:rotate-90">›</span><span className="min-w-0 flex-1">{title}</span><span className="rounded-full bg-raised px-2 py-0.5 text-2xs">{documents.length}</span></summary>
@@ -29,6 +33,7 @@ function FileGroup({
 			{documents.map((document) => <div key={document.id} className="flex items-start gap-1 rounded-tight border border-line-soft bg-surface p-2">
 				<a href={`/api/documents/${document.id}`} title={document.fileName} className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold text-brand-ink hover:underline"><FileIcon fileName={document.fileName} /><span className="min-w-0 break-all">{document.fileName}</span></a>
 				{canManage && <RenameFileButton type="document" id={document.id} fileName={document.fileName} />}
+				{isAdminUser && <form action={deleteDocument}><input type="hidden" name="documentId" value={document.id} /><input type="hidden" name="returnTo" value="project" /><button className="rounded-tight border border-danger/20 bg-danger/5 px-2 py-1 text-2xs font-semibold text-danger hover:bg-danger/10">Удалить</button></form>}
 			</div>)}
 			{canManage && <InlineDocumentUpload contractId={contractId} extraFields={{ projectSectionId, kind }} />}
 		</div>
@@ -43,6 +48,8 @@ export default function TabProject({
 	userId,
 	userRole,
 	addProjectSection,
+	isAdminUser,
+	deleteDocument,
 }: {
 	contractId: string
 	projectSections: ContractWithRelations['projectSections']
@@ -51,6 +58,8 @@ export default function TabProject({
 	userId: string
 	userRole: Role
 	addProjectSection: (formData: FormData) => Promise<void>
+	isAdminUser: boolean
+	deleteDocument: (formData: FormData) => Promise<void>
 }) {
 	return (
 		<Card id="project" hidden role="tabpanel" aria-labelledby="tab-project">
@@ -68,8 +77,8 @@ export default function TabProject({
 							<div className="mt-[10px] truncate text-base font-medium">{section.responsible?.name ?? 'Ответственный не назначен'}</div>
 							<div className="tnum mt-[4px] text-xs text-faint">{section.dateFrom ? formatDate(section.dateFrom) : '—'}{' – '}{section.dateTo ? formatDate(section.dateTo) : '—'}</div>
 							<div className="mt-3 space-y-2">
-								<FileGroup title="Исходники (DWG)" documents={sourceDocs} kind="PROJECT_DWG" contractId={contractId} projectSectionId={section.id} canManage={canManage} />
-								<FileGroup title="Итоговые файлы (PDF)" documents={finalDocs} kind="PROJECT_PDF" contractId={contractId} projectSectionId={section.id} canManage={canManage} />
+								<FileGroup title="Исходники (DWG)" documents={sourceDocs} kind="PROJECT_DWG" contractId={contractId} projectSectionId={section.id} canManage={canManage} isAdminUser={isAdminUser} deleteDocument={deleteDocument} />
+								<FileGroup title="Итоговые файлы (PDF)" documents={finalDocs} kind="PROJECT_PDF" contractId={contractId} projectSectionId={section.id} canManage={canManage} isAdminUser={isAdminUser} deleteDocument={deleteDocument} />
 							</div>
 						</div>
 					})}
