@@ -6,12 +6,18 @@ import { assertDocumentRulePattern, DEFAULT_DOCUMENT_ROUTE_RULES, testDocumentRo
 import { matchDocumentContract, routeDocument } from '../src/lib/document-routing'
 import './test-document-routing.cts'
 import { isValidOgrn } from '../src/lib/validation'
+import { parseEstimateWorkbook as parseManualEstimateWorkbook } from '../src/lib/estimate-parser'
 
 function estimateBuffer(rows: string[][], sheetName = 'Смета') {
 	const workbook = XLSX.utils.book_new()
 	XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName)
 	return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
+
+const manualEstimateAddress = parseManualEstimateWorkbook(estimateBuffer([['Стройка: Московская обл., г.о. Подольск, п. Поливаново, к.н. 50:27:0020412:1803']]))
+assert.equal(manualEstimateAddress.objectAddress, 'Московская обл., г.о. Подольск, п. Поливаново, к.н. 50:27:0020412:1803')
+assert.equal(parseManualEstimateWorkbook(estimateBuffer([['Смета без адреса объекта']])).objectAddress, null)
+assert.equal(parseManualEstimateWorkbook(estimateBuffer([['Стройка: 117461, г. Москва, ул. Каховка, дом 20А, помещ. 10/4']])).objectAddress, null)
 
 const parsed = parseContractText('Договор_ТЕСТ-701-ИЗЛК-СМР-2026.docx', `
 ДОГОВОР № ТЕСТ-701-ИЗЛК-СМР-2026 от 15.08.2026

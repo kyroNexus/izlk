@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 export type EstimateParseResult = {
 	workingDays: number | null
 	amount: number | null
+	objectAddress: string | null
 	warnings: string[]
 }
 
@@ -22,6 +23,10 @@ function toNumber(value: unknown): number | null {
 
 function validWorkingDays(value: number | null): value is number {
 	return value != null && Number.isInteger(value) && value >= 1 && value <= 730
+}
+
+function isIzlkAddress(value: string): boolean {
+	return [/117461/, /черёмушки|черемушки/i, /каховк/i, /дом\s*20\s*а\b/i, /помещ\.?\s*10\/4/i].filter((marker) => marker.test(value)).length >= 2
 }
 
 const ZIP_SIGNATURES = [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]]
@@ -65,6 +70,7 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 	const warnings: string[] = []
 	let workingDays: number | null = null
 	let amount: number | null = null
+	let objectAddress: string | null = null
 	let workbook: XLSX.WorkBook
 
 	try {
@@ -72,7 +78,7 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 			? XLSX.read(buffer, { type: 'buffer', cellDates: true })
 			: XLSX.read(decodeCsvText(buffer), { type: 'string', cellDates: true })
 	} catch {
-		return { workingDays, amount, warnings: ['Не удалось прочитать таблицу как Excel-файл'] }
+		return { workingDays, amount, objectAddress, warnings: ['Не удалось прочитать таблицу как Excel-файл'] }
 	}
 
 	for (const name of workbook.SheetNames) {
@@ -95,11 +101,16 @@ export function parseEstimateWorkbook(buffer: Buffer): EstimateParseResult {
 					const candidate = inline && inline > 100 ? inline : toNumber(cells[index + 1])
 					if (candidate != null && candidate > 100) amount = candidate
 				}
+
+				if (objectAddress == null && /(?:стройка|адрес\s+объекта)\s*:/i.test(cell)) {
+					const address = asText(cell.replace(/^[\s\S]*?(?:стройка|адрес\s+объекта)\s*:\s*/i, ''))
+					if (address.length >= 5 && !isIzlkAddress(address)) objectAddress = address
+				}
 			}
 		}
 	}
 
 	if (workingDays == null) warnings.push('Срок в рабочих днях не найден — укажите его вручную при подтверждении ПР1')
 	if (amount == null) warnings.push('Итоговая сумма не найдена — оставлена без изменений')
-	return { workingDays, amount, warnings }
+	return { workingDays, amount, objectAddress, warnings }
 }
