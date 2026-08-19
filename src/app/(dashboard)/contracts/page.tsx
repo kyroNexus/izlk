@@ -51,20 +51,22 @@ const FOCUS_LABEL = { working: 'В работе — показаны актив�
 
 function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
 	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
-	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-2xs font-bold ring-1 ${tone}`}><i className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
+	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-bold ring-1 ${tone}`}><i className="h-2 w-2 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
 }
 
 function WorkflowRail({ stage }: { stage: ContractWorkflowStage }) {
 	const currentIndex = WORKFLOW_STAGES.indexOf(stage)
-	return <div className="mt-1.5 flex items-center" role="list" aria-label={`Все этапы договора; текущий: ${WORKFLOW_STAGE_LABEL[stage]}`}>
+	return <div className="mt-1.5 max-w-full overflow-x-auto pb-1.5" aria-label={`Все этапы договора; текущий: ${WORKFLOW_STAGE_LABEL[stage]}`}>
+		<div className="flex min-w-max items-center" role="list">
 		{WORKFLOW_STAGES.map((item, index) => {
 			const current = item === stage
 			const passed = currentIndex > index
-			return <span key={item} className="flex items-center" role="listitem">
-				<span title={WORKFLOW_STAGE_LABEL[item]} aria-label={WORKFLOW_STAGE_LABEL[item]} className={`h-1.5 w-1.5 rounded-full ${current ? 'bg-brand ring-2 ring-brand/25' : passed ? 'bg-ok' : 'bg-line'}`} />
-				{index < WORKFLOW_STAGES.length - 1 && <span className={`h-px w-1 ${passed ? 'bg-ok/60' : 'bg-line'}`} />}
+			return <span key={item} className="flex shrink-0 items-center" role="listitem">
+				<span title={WORKFLOW_STAGE_LABEL[item]} aria-label={WORKFLOW_STAGE_LABEL[item]} className={`h-2.5 w-2.5 rounded-full ${current ? 'bg-brand ring-2 ring-brand/25' : passed ? 'bg-ok' : 'bg-line'}`} />
+				{index < WORKFLOW_STAGES.length - 1 && <span className={`h-px w-3 ${passed ? 'bg-ok/60' : 'bg-line'}`} />}
 			</span>
 		})}
+		</div>
 	</div>
 }
 function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queueStatus: string; documents: Array<{ id: string }> }> }) {

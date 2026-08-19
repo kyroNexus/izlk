@@ -23,6 +23,7 @@ assert.match(contracts, /Нет назначенных договоров/)
 assert.match(contracts, /<Icon icon=\{Folder\}/)
 assert.match(contracts, /function WorkflowRail/)
 assert.match(contracts, /role="list"/)
+assert.match(contracts, /overflow-x-auto/)
 assert.doesNotMatch(contracts, /min-w-\[1120px\]/)
 assert.match(contracts, /SHIPPED/)
 // C2: пункт сайдбара раньше вёл жёстко на /departments/production для всех ролей —
