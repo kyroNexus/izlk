@@ -89,11 +89,11 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		if (!canWrite(acting)) redirect(`/contracts/${params.id}`)
 		const documentId = String(formData.get('documentId') ?? '')
 		const target = await prisma.document.findFirst({ where: { id: documentId, contractId: params.id, deletedAt: null, contract: contractScope(acting) }, select: { id: true, state: true, signedAt: true } })
-		if (!target) redirect(`/contracts/${params.id}#documents`)
+		if (!target) redirect(`/contracts/${params.id}?tab=documents#documents`)
 		const nextState: DocumentState = target.state === 'ARCHIVE' ? (target.signedAt ? 'SIGNED' : 'SOURCE') : 'ARCHIVE'
 		await prisma.document.update({ where: { id: target.id }, data: { state: nextState } })
 		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: nextState === 'ARCHIVE' ? 'DocumentArchived' : 'DocumentRestored', entityId: target.id })
-		redirect(`/contracts/${params.id}#documents`)
+		redirect(`/contracts/${params.id}?tab=documents#documents`)
 	}
 
 	async function deleteDocument(formData: FormData) {
@@ -103,14 +103,14 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		// Раздел, откуда вызвали удаление (Документы/Проект/...) — чтобы после
 		// удаления вернуть человека туда же, а не всегда на "Документы". Тот же
 		// класс бага, что и с хлебными крошками: неправильный путь после действия.
-		const returnTo = String(formData.get('returnTo') ?? 'documents')
+		const returnTo = formData.get('returnTo') === 'project' ? 'project' : 'documents'
 		if (!isAdmin(acting)) redirect(`/contracts/${params.id}`)
 		const target = await prisma.document.findFirst({ where: { id: documentId, contractId: params.id, deletedAt: null }, select: { id: true } })
 		if (target) {
 			await prisma.document.update({ where: { id: target.id }, data: { deletedAt: new Date() } })
 			await writeAudit({ userId: acting.id, action: 'DELETE', entityType: 'DocumentDeleted', entityId: target.id })
 		}
-		redirect(`/contracts/${params.id}#${returnTo}`)
+		redirect(`/contracts/${params.id}?tab=${returnTo}#${returnTo}`)
 	}
 
 	async function deleteContract() {
@@ -133,12 +133,12 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		const workingRaw = String(formData.get('workingDays') ?? '').trim()
 		const workingDays = workingRaw ? Number.parseInt(workingRaw, 10) : null
 		const signedAt = rawDate ? new Date(`${rawDate}T12:00:00`) : new Date()
-		if (Number.isNaN(signedAt.getTime())) redirect(`/contracts/${params.id}#workflow`)
+		if (Number.isNaN(signedAt.getTime())) redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 		const document = await prisma.document.findFirst({ where: { contractId: params.id, kind: 'APPENDIX', state: 'SIGNED', deletedAt: null }, select: { id: true } })
 		if (!document) redirect(`/contracts/${params.id}/upload`)
 		await confirmSignedPr1Workflow({ contractId: params.id, actorId: acting.id, signedAt, workingDays })
 		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: 'ContractPr1Confirmed', entityId: params.id })
-		redirect(`/contracts/${params.id}#workflow`)
+		redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 	}
 
 	async function moveWorkflowStage(formData: FormData) {
@@ -157,15 +157,15 @@ export default async function ContractPage({ params, searchParams }: { params: {
 				},
 			},
 		})
-		if (!current || !getNextWorkflowStages(current.workflowStage).includes(toStage) || (toStage === 'DESIGN' && !current.pr1ConfirmedAt)) redirect(`/contracts/${params.id}#workflow`)
+		if (!current || !getNextWorkflowStages(current.workflowStage).includes(toStage) || (toStage === 'DESIGN' && !current.pr1ConfirmedAt)) redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 		// Реальный переход в цех нельзя «прокликать»: производству нужен утверждённый КМ и его итоговый PDF.
 		if (toStage === 'WAITING_PRODUCTION') {
 			const km = current.projectSections[0]
-			if (!km || km.queueStatus !== 'DONE' || km.documents.length === 0) redirect(`/contracts/${params.id}?workflowError=km-final-file-required#workflow`)
+			if (!km || km.queueStatus !== 'DONE' || km.documents.length === 0) redirect(`/contracts/${params.id}?tab=workflow&workflowError=km-final-file-required#workflow`)
 		}
 		await transitionContractStage({ contractId: params.id, toStage, actorId: acting.id, comment: String(formData.get('comment') ?? '') })
 		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: 'ContractWorkflowStage', entityId: params.id })
-		redirect(`/contracts/${params.id}#workflow`)
+		redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 	}
 
 	async function revokePr1(formData: FormData) {
@@ -173,10 +173,10 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		const acting = await requireUser()
 		if (!isAdmin(acting)) redirect(`/contracts/${params.id}`)
 		const reason = String(formData.get('reason') ?? '').trim()
-		if (!reason) redirect(`/contracts/${params.id}#workflow`)
+		if (!reason) redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 		await revokePr1Confirmation({ contractId: params.id, actorId: acting.id, reason })
 		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: 'ContractPr1Revoked', entityId: params.id })
-		redirect(`/contracts/${params.id}#workflow`)
+		redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 	}
 
 	async function addProjectSection(formData: FormData) {
@@ -185,10 +185,10 @@ export default async function ContractPage({ params, searchParams }: { params: {
 		if (!canWrite(acting)) redirect(`/contracts/${params.id}`)
 		const code = String(formData.get('code') ?? '') as SectionCode
 		const contract = await prisma.contract.findFirst({ where: { id: params.id, ...contractScope(acting) }, select: { id: true } })
-		if (!contract || !(['KM', 'KZH', 'AR', 'OTHER'] as SectionCode[]).includes(code)) redirect(`/contracts/${params.id}#project`)
+		if (!contract || !(['KM', 'KZH', 'AR', 'OTHER'] as SectionCode[]).includes(code)) redirect(`/contracts/${params.id}?tab=project#project`)
 		await addMissingProjectSection({ contractId: params.id, code, actorId: acting.id })
 		await writeAudit({ userId: acting.id, action: 'CREATE', entityType: 'ProjectSection', entityId: params.id })
-		redirect(`/contracts/${params.id}#project`)
+		redirect(`/contracts/${params.id}?tab=project#project`)
 	}
 
 	async function applyDemoStep(formData: FormData) {
@@ -206,7 +206,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 			await transitionContractStage({ contractId: params.id, toStage: 'WAITING_PRODUCTION', actorId: acting.id, isAutomatic: true, force: true, comment: 'Демо: все проектные разделы готовы' })
 		}
 		await writeAudit({ userId: acting.id, action: 'UPDATE', entityType: 'ContractDemoStep', entityId: params.id })
-		redirect(`/contracts/${params.id}#workflow`)
+		redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 	}
 
 	const documentIds = contract.documents.map((document) => document.id)

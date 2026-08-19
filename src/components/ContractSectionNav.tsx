@@ -16,7 +16,7 @@ export default function ContractSectionNav({ sections }: { sections: Section[] }
 				if (panel) panel.hidden = section.id !== nextId
 			})
 		}
-		const syncHash = () => select(window.location.hash.slice(1))
+		const syncHash = () => select(window.location.hash.slice(1) || new URLSearchParams(window.location.search).get('tab') || '')
 		syncHash()
 		window.addEventListener('hashchange', syncHash)
 		return () => window.removeEventListener('hashchange', syncHash)
