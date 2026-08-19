@@ -15,10 +15,10 @@ import { createVersionedDocument } from '@/lib/document-versioning'
 import { logger } from '@/lib/logger'
 import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
 import type { DocumentRouteRuleInput } from '@/lib/document-route-rules'
+import { isLibraryPathIgnored } from '@/lib/library-ignore'
 
 export { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 
-const IGNORE = [/^thumbs\.db$/i, /^desktop\.ini$/i, /^~\$/, /\.bak$/i, /\.lnk$/i, /\.log$/i, /\.tmp$/i]
 const OCR_SOURCE_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg'])
 // Inbox can contain an entire historical archive. OCR is intentionally limited
 // per scan, otherwise 1,000 scanned PDFs could occupy the worker for hours.
@@ -30,9 +30,16 @@ const MAX_INBOX_ZIP_BYTES = 500 * 1024 * 1024
 const MAX_INBOX_ZIP_ENTRIES = 5000
 
 /** "_мусор/<employee>" is intentionally a private work area, not an import source. */
-function isPrivateTrashPath(filePath: string) {
-	const segments = path.relative(INBOX_PATH, filePath).split(path.sep).map((item) => item.toLocaleLowerCase('ru-RU'))
-	return segments.includes('_мусор') || segments.includes('мусор')
+function inboxRelativePath(filePath: string) {
+	return path.relative(INBOX_PATH, filePath)
+}
+
+function isPrivateTrashPath(filePath: string, rules: Awaited<ReturnType<typeof getIgnoreRules>>) {
+	return isLibraryPathIgnored(inboxRelativePath(filePath), false, rules.filter((rule) => rule.type === 'SUBTREE'))
+}
+
+async function getIgnoreRules() {
+	return prisma.libraryIgnoreRule.findMany({ where: { enabled: true }, select: { type: true, value: true, enabled: true } })
 }
 
 /**
@@ -51,11 +58,11 @@ function isPrivateTrashPath(filePath: string) {
  * у любого только что появившегося в Inbox файла.
  */
 /** Exported for a deterministic regression test: extraction, idempotency, zip-slip. */
-export async function expandInboxZips(files: string[]): Promise<{ expanded: Set<string>; failed: Map<string, string> }> {
+export async function expandInboxZips(files: string[], rules: Awaited<ReturnType<typeof getIgnoreRules>> = []): Promise<{ expanded: Set<string>; failed: Map<string, string> }> {
 	const expanded = new Set<string>()
 	const failed = new Map<string, string>()
 	for (const sourcePath of files) {
-		if (path.extname(sourcePath).toLowerCase() !== '.zip' || isPrivateTrashPath(sourcePath)) continue
+		if (path.extname(sourcePath).toLowerCase() !== '.zip' || isPrivateTrashPath(sourcePath, rules)) continue
 		const resolved = path.resolve(sourcePath)
 		const targetDir = sourcePath.slice(0, -'.zip'.length)
 		try {
@@ -85,7 +92,7 @@ export async function expandInboxZips(files: string[]): Promise<{ expanded: Set<
 	return { expanded, failed }
 }
 
-async function walk(dir: string): Promise<string[]> {
+async function walk(dir: string, rules: Awaited<ReturnType<typeof getIgnoreRules>>): Promise<string[]> {
 	let entries: Dirent[]
 	try {
 		entries = await readdir(dir, { withFileTypes: true })
@@ -96,7 +103,9 @@ async function walk(dir: string): Promise<string[]> {
 	const files: string[] = []
 	for (const entry of entries) {
 		const full = path.join(dir, entry.name)
-		if (entry.isDirectory() && !isPrivateTrashPath(full)) files.push(...await walk(full))
+		const isDirectory = entry.isDirectory()
+		if (isLibraryPathIgnored(inboxRelativePath(full), isDirectory, rules)) continue
+		if (isDirectory) files.push(...await walk(full, rules))
 		else files.push(full)
 	}
 	return files
@@ -338,13 +347,16 @@ async function autoImportRecognizedItems(routeRules: DocumentRouteRuleInput[]) {
 }
 
 export async function scanInbox() {
-	const routeRules = await prisma.documentRouteRule.findMany({ where: { enabled: true }, orderBy: [{ target: 'asc' }, { sortOrder: 'asc' }] })
-	const files = await walk(INBOX_PATH)
+	const [routeRules, ignoreRules] = await Promise.all([
+		prisma.documentRouteRule.findMany({ where: { enabled: true }, orderBy: [{ target: 'asc' }, { sortOrder: 'asc' }] }),
+		getIgnoreRules(),
+	])
+	const files = await walk(INBOX_PATH, ignoreRules)
 	const result = { found: files.length, queued: 0, autoImported: 0, duplicates: 0, ignored: 0, parsed: 0, errors: 0, archivesExpanded: 0, issues: [] as string[] }
 	// Задача D2: сначала разворачиваем архивы — их содержимое подхватит уже
 	// СЛЕДУЮЩИЙ вызов scanInbox() (см. комментарий у expandInboxZips), а сам
 	// .zip дальше в этом проходе пропускается основным циклом ниже.
-	const { expanded: expandedZips, failed: zipFailures } = await expandInboxZips(files)
+	const { expanded: expandedZips, failed: zipFailures } = await expandInboxZips(files, ignoreRules)
 	result.archivesExpanded = expandedZips.size
 	for (const [zipPath, message] of zipFailures) {
 		result.errors++
@@ -373,7 +385,7 @@ export async function scanInbox() {
 	// Его номер и шифр наследуют все остальные вложения этой папки.
 	for (const sourcePath of files) {
 		const fileName = path.basename(sourcePath)
-		if (IGNORE.some((pattern) => pattern.test(fileName)) || !(PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(fileName).toLowerCase())) continue
+		if (isLibraryPathIgnored(inboxRelativePath(sourcePath), false, ignoreRules) || !(PARSABLE_EXTENSIONS as readonly string[]).includes(path.extname(fileName).toLowerCase())) continue
 		try {
 			const parsed = await parseContractFile(fileName, await readFile(sourcePath), !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)))
 			parsedByPath.set(path.resolve(sourcePath), parsed)
@@ -389,7 +401,7 @@ export async function scanInbox() {
 		// его содержимое уже посчитано через archivesExpanded выше, а сами
 		// извлечённые файлы подхватит следующий проход (см. expandInboxZips).
 		if (expandedZips.has(path.resolve(sourcePath))) continue
-		if (IGNORE.some((pattern) => pattern.test(fileName))) { result.ignored++; continue }
+		if (isLibraryPathIgnored(inboxRelativePath(sourcePath), false, ignoreRules)) { result.ignored++; continue }
 		try {
 			const sha256 = await sha256File(sourcePath)
 			const hint = folderHints.get(folderKey(sourcePath))

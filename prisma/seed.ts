@@ -2,12 +2,52 @@ import { PrismaClient, Role, ContractStatus, SiteStatus, SiteEventType, SectionC
 import bcrypt from 'bcryptjs';
 import { DEFAULT_DOCUMENT_ROUTE_RULES } from '../src/lib/document-route-rules';
 
+const DEFAULT_LIBRARY_IGNORE_RULES = [
+  { type: 'NAME_PATTERN', value: '~$*', note: 'Временные файлы Microsoft Office' },
+  { type: 'NAME_PATTERN', value: 'Thumbs.db', note: 'Служебный файл Windows' },
+  { type: 'NAME_PATTERN', value: 'desktop.ini', note: 'Служебный файл Windows' },
+  { type: 'EXTENSION', value: '.bak', note: 'Резервная копия' },
+  { type: 'EXTENSION', value: '.lnk', note: 'Ярлык Windows' },
+  { type: 'EXTENSION', value: '.log', note: 'Журнал' },
+  { type: 'EXTENSION', value: '.tmp', note: 'Временный файл' },
+  { type: 'SUBTREE', value: '_мусор', note: 'Приватная рабочая область' },
+  { type: 'SUBTREE', value: 'мусор', note: 'Приватная рабочая область' },
+] as const;
+
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Сидирование базы данных ИЗЛК...');
 
   await prisma.documentRouteRule.createMany({ data: DEFAULT_DOCUMENT_ROUTE_RULES, skipDuplicates: true });
+  await prisma.libraryIgnoreRule.createMany({ data: [...DEFAULT_LIBRARY_IGNORE_RULES], skipDuplicates: true });
+  await prisma.libraryRoot.createMany({
+    data: [
+      { label: 'Договоры', path: '\\\\192.168.24.102\\share\\Договоры', kind: 'CONTRACTS', folderTemplate: 'Договора {year} года/{contract}' },
+      { label: 'Проекты в работе', path: '\\\\192.168.5.103\\share\\Проекты\\Проекты в работе', kind: 'PROJECTS_ACTIVE', folderTemplate: '{contract}' },
+      { label: 'Выполненные проекты', path: '\\\\192.168.5.103\\share\\Проекты\\Проекты выполненные', kind: 'PROJECTS_DONE', folderTemplate: '{contract}' },
+    ],
+    skipDuplicates: true,
+  });
+  const contractsRoot = await prisma.libraryRoot.findUniqueOrThrow({ where: { path: '\\\\192.168.24.102\\share\\Договоры' } });
+  await prisma.librarySettings.upsert({
+    where: { id: 'library' },
+    update: { defaultContractsRootId: contractsRoot.id },
+    create: { id: 'library', defaultContractsRootId: contractsRoot.id },
+  });
+
+  const izlkRus = await prisma.ownEntity.upsert({
+    where: { id: 'seed-own-entity-izlk-rus' },
+    update: {},
+    create: {
+      id: 'seed-own-entity-izlk-rus',
+      name: 'ООО «ИЗЛК Рус»',
+      shortName: 'ИЗЛК Рус',
+      inn: '9725024975',
+      ogrn: '1197746687731',
+      isDefault: true,
+    },
+  });
 
   // --- Пользователи ---
   const adminPass = await bcrypt.hash('admin123', 10);
@@ -63,6 +103,7 @@ async function main() {
       amount: 12450000,
       currency: 'RUB',
       status: ContractStatus.ACTIVE,
+      ownEntityId: izlkRus.id,
     },
   });
 

@@ -18,6 +18,11 @@ export const backupTables: BackupTable[] = Prisma.dmmf.datamodel.models.map(({ n
 export const restoreOrder = [
   'user',
   'documentRouteRule',
+  'libraryIgnoreRule',
+  'libraryRoot',
+  'librarySettings',
+  'libraryScan',
+  'ownEntity',
   'contractor',
   'contract',
   'contractCustomer',
