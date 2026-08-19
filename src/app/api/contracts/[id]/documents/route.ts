@@ -126,6 +126,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		const explicitInvoiceId = invoice?.id ?? null
 		const validSourceKinds = ['IGI', 'GPZU', 'TOPO', 'GEOBASE', 'CONSTRAINTS'] as const
 		const explicitSourceDataKind = validSourceKinds.includes(sourceDataKindRaw as typeof validSourceKinds[number]) ? sourceDataKindRaw as SourceDataKind : null
+		const routeRules = await prisma.documentRouteRule.findMany({ where: { enabled: true }, orderBy: [{ target: 'asc' }, { sortOrder: 'asc' }] })
 
 		let uploadedCount = 0
 		let skippedCount = 0
@@ -152,7 +153,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				// (kinds[i], задача B2: уже посчитан классификатором в браузере, тут
 				// только проверяется валидность enum). Если и его нет (форма без JS) —
 				// сервер сам классифицирует по имени (задача B1).
-				const routed = routeDocument(pathsRaw[index] || upload.name)
+				const routed = routeDocument(pathsRaw[index] || upload.name, routeRules)
 				const sentKind = kindsRaw[index]
 				const validSentKind: DocumentKind | null = sentKind && (DOCUMENT_KIND_ORDER as readonly string[]).includes(sentKind) ? sentKind as DocumentKind : null
 				const kind: DocumentKind = user.role === 'DESIGNER'

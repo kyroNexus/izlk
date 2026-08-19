@@ -4,6 +4,7 @@ import { detectContractorType, parseContractFolder, parseContractText, parseEsti
 import { classifyDocumentPath } from '../src/lib/document-classifier'
 import { assertDocumentRulePattern, DEFAULT_DOCUMENT_ROUTE_RULES, testDocumentRoute } from '../src/lib/document-route-rules'
 import { matchDocumentContract, routeDocument } from '../src/lib/document-routing'
+import './test-document-routing.cts'
 import { isValidOgrn } from '../src/lib/validation'
 
 function estimateBuffer(rows: string[][], sheetName = 'Смета') {

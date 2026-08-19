@@ -1,5 +1,6 @@
 import type { DocumentKind, DocumentState, SectionCode, SourceDataKind } from '@prisma/client'
 import { classifyDocumentPath, detectProjectSectionCode, detectSourceDataSubtype, documentStateForPath } from './document-classifier'
+import { testDocumentRoute, type DocumentRouteRuleInput } from './document-route-rules'
 
 export type DocumentRoute = {
 	kind: DocumentKind
@@ -42,7 +43,7 @@ function versionState(kind: DocumentKind, ext: string, fallback: DocumentState) 
 	return fallback
 }
 
-export function routeDocument(filePath: string): DocumentRoute {
+export function routeDocument(filePath: string, rules: DocumentRouteRuleInput[] = []): DocumentRoute {
 	// NFKC turns the business-significant `№` into `No`; NFC preserves it.
 	const value = filePath.normalize('NFC')
 	const stem = fileStem(value)
@@ -50,13 +51,14 @@ export function routeDocument(filePath: string): DocumentRoute {
 	const fullNumber = stem.match(/(\d{2,5}[-_][\p{L}\p{N}._/-]*?(?:19|20)\d{2})(?!\d)/iu)?.[1]
 	const cipherMatch = stem.match(/кб[-–—]\s*\d+(?:\.\d+){2,}/iu)?.[0]
 	const cipher = cipherMatch?.replace(/[–—]/gu, '-').replace(/\s+/gu, '').toLocaleUpperCase('ru-RU')
-	const sourceDataKind = detectSourceDataSubtype(value) ?? undefined
-	const sectionCode = detectProjectSectionCode(value) ?? undefined
+	let sourceDataKind = detectSourceDataSubtype(value) ?? undefined
+	let sectionCode = detectProjectSectionCode(value) ?? undefined
 	const invoice = stem.match(/сч[её]т\s+на\s+оплату\s*№?\s*(\d{1,6})\s*от\s*(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})/iu)
 	const agreement = stem.match(/доп\.?\s*соглашени\p{L}*\s*№\s*(\d{1,3})\s*к\s*(\d{2,5}[-_][\p{L}\p{N}._/-]{2,60})\s*$/iu)
 	const linkedAgreement = fullNumber && /№\s*\d{1,3}(?:\s*,\s*\d{1,3})*\s+.*(?:смета|график)/iu.test(stem)
 		? stem.match(/к\s*дс\s*№\s*(\d{1,3})(?!\d)/iu)?.[1]
 		: undefined
+	let agreementNumber = agreement?.[1] ?? linkedAgreement
 	const pr1Token = stem.match(/(?:пр\s*\.?\s*№?\s*1|приложение\s*№?\s*1)(?!\d)/iu)
 	const pr1Tail = pr1Token ? stem.slice((pr1Token.index ?? 0) + pr1Token[0].length) : ''
 	const signedDate = stem.match(/\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4}/u)?.[0]
@@ -74,12 +76,20 @@ export function routeDocument(filePath: string): DocumentRoute {
 	if (agreement) kind = 'AGREEMENT'
 	if (linkedAgreement) kind = /смета/iu.test(stem) ? 'ESTIMATE' : 'APPENDIX'
 	if (isSignedPr1) kind = 'APPENDIX'
+	const configured = rules.length ? testDocumentRoute(value, rules) : null
+	if (configured?.matchedRule) {
+		kind = configured.kind
+		sourceDataKind = configured.sourceDataKind ?? sourceDataKind
+		agreementNumber = configured.agreementNumber ?? agreementNumber
+		const configuredSection = configured.matchedRule.target.match(/^PROJECT:(KZH|KM|AR)$/u)?.[1] as SectionCode | undefined
+		sectionCode = configuredSection ?? sectionCode
+	}
 
 	const route: DocumentRoute = {
 		kind,
 		state: isSignedPr1 ? 'SIGNED' : versionState(kind, ext, documentStateForPath(value)),
 		...(sourceDataKind ? { sourceDataKind } : {}),
-		...(agreement?.[1] || linkedAgreement ? { agreementNumber: agreement?.[1] ?? linkedAgreement } : {}),
+		...(agreementNumber ? { agreementNumber } : {}),
 		...(invoice ? { invoiceNumber: invoice[1], invoiceDate: isoDate(invoice[2]) } : {}),
 		...(isSignedPr1 ? { pr1SignedAt: isoDate(signedDate) } : {}),
 		...(agreement?.[2] || fullNumber ? { contractNumberFull: agreement?.[2] ?? fullNumber } : {}),

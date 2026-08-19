@@ -14,6 +14,7 @@ import { classifyDocumentPath } from '@/lib/document-classifier'
 import { createVersionedDocument } from '@/lib/document-versioning'
 import { logger } from '@/lib/logger'
 import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
+import type { DocumentRouteRuleInput } from '@/lib/document-route-rules'
 
 export { classifyDocumentPath, documentStateForPath } from '@/lib/document-classifier'
 
@@ -185,7 +186,7 @@ async function retryFailedQueueItem(input: {
 	fileName: string
 	hint?: { number?: string; cipher?: string }
 	allowOcr?: boolean
-}) {
+}, routeRules: DocumentRouteRuleInput[]) {
 	try {
 		const fileInfo = await stat(input.sourcePath)
 		if (!fileInfo.isFile()) throw new Error('По указанному пути находится не файл')
@@ -210,7 +211,7 @@ async function retryFailedQueueItem(input: {
 				status: parseError ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'),
 				parsedContractNumber,
 				parsedCipher,
-				suggestedKind: routeDocument(input.sourcePath).kind,
+				suggestedKind: routeDocument(input.sourcePath, routeRules).kind,
 				errorMessage: parseError,
 			},
 		})
@@ -227,14 +228,14 @@ async function retryFailedQueueItem(input: {
 	}
 }
 
-async function autoImportRecognizedItems() {
+async function autoImportRecognizedItems(routeRules: DocumentRouteRuleInput[]) {
 	const items = await prisma.inboxItem.findMany({
 		where: { status: { in: ['PENDING', 'SUGGESTED'] } },
 		orderBy: { createdAt: 'asc' },
 	})
 	let imported = 0
 	for (const item of items) {
-		const route = routeDocument(item.sourcePath)
+		const route = routeDocument(item.sourcePath, routeRules)
 		const routeFilters = [
 			...(route.cipher ? [{ cipher: { equals: route.cipher, mode: 'insensitive' as const } }] : []),
 			...(route.contractNumberFull ? [{ number: { equals: route.contractNumberFull, mode: 'insensitive' as const } }] : []),
@@ -337,6 +338,7 @@ async function autoImportRecognizedItems() {
 }
 
 export async function scanInbox() {
+	const routeRules = await prisma.documentRouteRule.findMany({ where: { enabled: true }, orderBy: [{ target: 'asc' }, { sortOrder: 'asc' }] })
 	const files = await walk(INBOX_PATH)
 	const result = { found: files.length, queued: 0, autoImported: 0, duplicates: 0, ignored: 0, parsed: 0, errors: 0, archivesExpanded: 0, issues: [] as string[] }
 	// Задача D2: сначала разворачиваем архивы — их содержимое подхватит уже
@@ -413,7 +415,7 @@ export async function scanInbox() {
 						const ignored = await prisma.inboxItem.create({ data: {
 							sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: 'IGNORED',
 							parsedContractNumber: hint?.number, parsedCipher: hint?.cipher,
-							suggestedKind: routeDocument(sourcePath).kind, errorMessage: 'Точная копия уже прикреплена к этому договору.', matchedContractId: target?.id,
+							suggestedKind: routeDocument(sourcePath, routeRules).kind, errorMessage: 'Точная копия уже прикреплена к этому договору.', matchedContractId: target?.id,
 						} })
 						await writeImportEvent({ inboxItemId: ignored.id, fileName, event: 'SCANNED', outcome: 'IGNORED', contractId: target?.id, message: 'Точная копия уже прикреплена к этому договору.' })
 					} catch (error) {
@@ -425,7 +427,7 @@ export async function scanInbox() {
 			}
 			if (queued) {
 				if (queued.status === 'FAILED') {
-					const recovered = await retryFailedQueueItem({ id: queued.id, sourcePath, fileName, hint, allowOcr: !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)) })
+					const recovered = await retryFailedQueueItem({ id: queued.id, sourcePath, fileName, hint, allowOcr: !OCR_SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase()) || ocrCandidates.has(path.resolve(sourcePath)) }, routeRules)
 					if (recovered) result.parsed++
 					else result.errors++
 					continue
@@ -435,7 +437,7 @@ export async function scanInbox() {
 						status: 'SUGGESTED',
 						parsedContractNumber: hint.number,
 						parsedCipher: hint.cipher,
-						suggestedKind: routeDocument(sourcePath).kind,
+						suggestedKind: routeDocument(sourcePath, routeRules).kind,
 						errorMessage: null,
 					} })
 				}
@@ -461,7 +463,7 @@ export async function scanInbox() {
 			}
 			const info = await stat(sourcePath)
 			try {
-				const created = await prisma.inboxItem.create({ data: { sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: errorMessage ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'), parsedContractNumber, parsedCipher, suggestedKind: routeDocument(sourcePath).kind, errorMessage } })
+				const created = await prisma.inboxItem.create({ data: { sourcePath, fileName, sizeBytes: BigInt(info.size), sha256, status: errorMessage ? 'FAILED' : (parsedContractNumber || parsedCipher ? 'SUGGESTED' : 'PENDING'), parsedContractNumber, parsedCipher, suggestedKind: routeDocument(sourcePath, routeRules).kind, errorMessage } })
 				await writeImportEvent({ inboxItemId: created.id, fileName, event: 'SCANNED', outcome: errorMessage ? 'FAILED' : 'QUEUED', message: errorMessage ?? (parsedContractNumber ? `Распознан договор № ${parsedContractNumber}` : 'Ожидает выбора договора') })
 				result.queued++
 			} catch (error) {
@@ -475,6 +477,6 @@ export async function scanInbox() {
 			result.issues.push(`${fileName}: ${error instanceof Error ? error.message : 'Ошибка обработки'}`)
 		}
 	}
-	result.autoImported = await autoImportRecognizedItems()
+	result.autoImported = await autoImportRecognizedItems(routeRules)
 	return result
 }

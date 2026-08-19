@@ -14,6 +14,7 @@ import { createVersionedDocument } from '@/lib/document-versioning'
 import { findMatchingContractor, normalizeCompanyName } from '@/lib/contractor-match'
 import { logger } from '@/lib/logger'
 import { matchDocumentContract, routeDocument } from '@/lib/document-routing'
+import type { DocumentRouteRuleInput } from '@/lib/document-route-rules'
 
 export const runtime = 'nodejs'
 
@@ -43,7 +44,7 @@ async function removeUnlinkedUpload(storagePath: string) {
 	if (linked === 0) logger.warn('contract_import.unlinked_upload', { entityType: 'StorageObject' })
 }
 
-async function attachFolderToContract(input: { contractId: string; uploads: FolderUpload[]; userId: string }) {
+async function attachFolderToContract(input: { contractId: string; uploads: FolderUpload[]; userId: string; routeRules: DocumentRouteRuleInput[] }) {
 	const [projectSections, executiveDocs, contract] = await Promise.all([
 		prisma.projectSection.findMany({ where: { contractId: input.contractId, deletedAt: null } }),
 		prisma.executiveDoc.findMany({ where: { contractId: input.contractId, deletedAt: null } }),
@@ -68,7 +69,7 @@ async function attachFolderToContract(input: { contractId: string; uploads: Fold
 		const buffer = Buffer.from(await file.arrayBuffer())
 		const sha256 = sha256Buffer(buffer)
 		if (await prisma.document.findFirst({ where: { contractId: input.contractId, sha256 }, select: { id: true } })) { await skip(file.name, 'Точная копия уже есть в этом договоре.'); continue }
-		const route = routeDocument(relativePath)
+		const route = routeDocument(relativePath, input.routeRules)
 		const { kind, state } = route
 		const searchable = relativePath.toLocaleLowerCase('ru-RU')
 		const projectSection = await projectSectionForPath(input.contractId, relativePath, projectSections, route.sectionCode)
@@ -131,6 +132,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		requestedFileName = file instanceof File ? file.name : null
 		const folderFiles = form.getAll('files').filter((entry): entry is File => entry instanceof File && entry.size > 0)
 		const relativePaths = form.getAll('relativePaths').map(String)
+		const routeRules = await prisma.documentRouteRule.findMany({ where: { enabled: true }, orderBy: [{ target: 'asc' }, { sortOrder: 'asc' }] })
 		const rejectImport = async (message: string, status: number, input: { fileName?: string; contractId?: string; outcome?: 'FAILED' | 'IGNORED'; event?: 'CONTRACT_CREATED' | 'MANUAL_IMPORTED' } = {}) => {
 			await writeImportEvent({
 				fileName: input.fileName ?? requestedFileName ?? folderFiles[0]?.name ?? 'Пакет импорта',
@@ -166,14 +168,14 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				score: explicitNumber && (explicitNumber === contract.number || contract.number.startsWith(`${explicitNumber}-`) || contract.number.startsWith(`${explicitNumber}_`))
 					? 100_000
 					: folderUploads.reduce((score, upload) => {
-						const route = routeDocument(upload.relativePath)
+						const route = routeDocument(upload.relativePath, routeRules)
 						const matched = matchDocumentContract(route, [contract]).contract
 						return score + (matched ? route.cipher ? 100 : route.contractNumberFull ? 10 : 1 : contractNumberInName(upload.relativePath, contract.number) ? 1 : 0)
 					}, 0),
 			})).filter((item) => item.score > 0).sort((a, b) => b.score - a.score)
 			if (!matches.length) return rejectImport('Номер существующего договора не найден в названиях файлов. Добавьте номер в формате «765 — смета.xlsx» или укажите его вручную.', 400, { event: 'MANUAL_IMPORTED' })
 			if (matches.length > 1 && matches[0].score === matches[1].score) return rejectImport('Найдено несколько договоров с одинаковым совпадением. Укажите номер договора вручную.', 409, { event: 'MANUAL_IMPORTED' })
-			const result = await attachFolderToContract({ contractId: matches[0].contract.id, uploads: folderUploads, userId: user.id })
+			const result = await attachFolderToContract({ contractId: matches[0].contract.id, uploads: folderUploads, userId: user.id, routeRules })
 			return NextResponse.json({ contractId: matches[0].contract.id, importedFiles: result.attached, skippedFiles: result.skipped, issues: result.issues, matchedNumber: matches[0].contract.number })
 		}
 		if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: 'Файл потерян — выберите его ещё раз' }, { status: 400 })
@@ -296,7 +298,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 				// the same name/size must not disappear from the imported package.
 				if (attachmentHash === digest) continue
 				if (await prisma.document.findFirst({ where: { contractId: contract.id, sha256: attachmentHash }, select: { id: true } })) { await skipAttachment(attachment.name, 'Точная копия уже есть в этом договоре.'); continue }
-				const route = routeDocument(relativePath)
+				const route = routeDocument(relativePath, routeRules)
 				const documentKind = route.kind
 				const documentState = route.state
 				const searchable = relativePath.toLocaleLowerCase('ru-RU')
