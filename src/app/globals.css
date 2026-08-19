@@ -284,6 +284,11 @@ select option { background: var(--surface); color: var(--ink); }
 ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 70%, transparent); background-clip: padding-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
 .app-scrollbar { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent; }
+.contract-stage-scroll { scrollbar-width: thin; scrollbar-color: var(--brand) color-mix(in srgb, var(--brand) 10%, transparent); }
+.contract-stage-scroll::-webkit-scrollbar { height: 7px; }
+.contract-stage-scroll::-webkit-scrollbar-track { border-radius: 999px; background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.contract-stage-scroll::-webkit-scrollbar-thumb { border: 1px solid transparent; border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--brand-ink)); background-clip: padding-box; }
+.contract-stage-scroll::-webkit-scrollbar-thumb:hover { background: var(--brand-deep); background-clip: padding-box; }
 
 @keyframes fade-in {
 	from {

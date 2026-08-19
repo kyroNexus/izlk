@@ -25,6 +25,8 @@ assert.match(contracts, /function WorkflowRail/)
 assert.match(contracts, /role="list"/)
 assert.match(contracts, /overflow-x-auto/)
 assert.match(contracts, /min-w-0 overflow-hidden/)
+assert.match(contracts, /contract-stage-scroll/)
+assert.match(css, /\.contract-stage-scroll::-webkit-scrollbar/)
 assert.doesNotMatch(contracts, /min-w-\[1120px\]/)
 assert.match(contracts, /SHIPPED/)
 // C2: пункт сайдбара раньше вёл жёстко на /departments/production для всех ролей —
