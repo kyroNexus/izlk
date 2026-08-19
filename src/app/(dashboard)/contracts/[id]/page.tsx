@@ -121,7 +121,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	async function deleteContract() {
 		'use server'
 		const acting = await requireUser()
-		if (!isAdmin(acting)) redirect('/contracts')
+		if (!isAdmin(acting)) redirect(`/contracts/${params.id}`)
 		const target = await prisma.contract.findFirst({ where: { id: params.id, deletedAt: null }, select: { id: true } })
 		if (target) {
 			await prisma.contract.update({ where: { id: target.id }, data: { deletedAt: new Date(), status: 'ARCHIVED' } })
@@ -351,7 +351,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	return (
 		<>
 			<Topbar
-				crumbs={[{ label: 'Договоры', href: '/contracts' }, { label: contract.number }]}
+				crumbs={[{ label: 'Главная', href: '/' }, { label: 'Договоры', href: '/contracts' }, { label: contract.number }]}
 				userName={name.split(' ')[0]}
 				initials={initials(name)}
 			/>

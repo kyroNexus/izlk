@@ -28,4 +28,26 @@ for (const code of ['commercial', 'engineering', 'production', 'construction']) 
 	assert.match(departmentsPicker, new RegExp(`/departments/\\$\\{department\\.key\\}`))
 	assert.match(departmentsPicker, new RegExp(code))
 }
-console.log('Design-system checks passed: icons, empty state, density, sticky headers, reduced motion, and department picker routing.')
+
+// Задача: хлебные крошки на страницах, открываемых со страницы договора
+// (файл, задача, площадка), должны вести обратно через сам договор, а не
+// через свой глобальный список (жалоба: "перешёл из договора 731 в
+// документы — сверху показывает Главная → Все документы"). Каждая из этих
+// страниц уже грузит contract из связи — проверяем, что крошки её
+// действительно используют, а не игнорируют.
+const documentViewer = read('src/app/(dashboard)/documents/[id]/page.tsx')
+assert.match(documentViewer, /label: `№ \$\{document\.contract\.number\}`, href: `\/contracts\/\$\{document\.contract\.id\}#documents`/)
+const taskDetail = read('src/app/(dashboard)/tasks/[id]/page.tsx')
+assert.match(taskDetail, /crumbs=\{task\.contract \? \[/)
+assert.match(taskDetail, /label: `№ \$\{task\.contract\.number\}`, href: `\/contracts\/\$\{task\.contract\.id\}#tasks`/)
+const siteDetail = read('src/app/(dashboard)/sites/[id]/page.tsx')
+assert.match(siteDetail, /label: `№ \$\{site\.contract\.number\}`, href: `\/contracts\/\$\{site\.contract\.id\}#site`/)
+// Карточка договора — самая посещаемая страница — крошки начинались сразу с
+// "Договоры", без "Главная" (несогласовано со всеми остальными страницами).
+const contractDetail = read('src/app/(dashboard)/contracts/[id]/page.tsx')
+assert.match(contractDetail, /crumbs=\{\[\{ label: 'Главная', href: '\/' \}, \{ label: 'Договоры', href: '\/contracts' \}, \{ label: contract\.number \}\]\}/)
+// "В корзину" при отказе в доступе раньше уводило на общий список договоров,
+// а не обратно на карточку — тот же класс "неправильного пути", что и крошки.
+assert.match(contractDetail, /async function deleteContract\(\)[\s\S]{0,120}?if \(!isAdmin\(acting\)\) redirect\(`\/contracts\/\$\{params\.id\}`\)/)
+
+console.log('Design-system checks passed: icons, empty state, density, sticky headers, reduced motion, department picker routing, and contextual breadcrumbs.')

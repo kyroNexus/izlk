@@ -159,7 +159,8 @@ export default async function DocumentViewerPage({ params, searchParams }: { par
 	return <>
 		<Topbar crumbs={[
 			{ label: 'Главная', href: '/' },
-			{ label: 'Документы', href: '/documents' },
+			{ label: 'Договоры', href: '/contracts' },
+			{ label: `№ ${document.contract.number}`, href: `/contracts/${document.contract.id}#documents` },
 			{ label: document.fileName },
 		]} userName={name.split(' ')[0]} initials={initials(name)} />
 		<div className="mx-auto max-w-[1380px] px-[26px] py-[22px]">

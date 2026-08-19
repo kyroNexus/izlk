@@ -204,7 +204,12 @@ export default async function TaskPage({
   return (
     <>
       <Topbar
-        crumbs={[
+        crumbs={task.contract ? [
+          { label: 'Главная', href: '/' },
+          { label: 'Договоры', href: '/contracts' },
+          { label: `№ ${task.contract.number}`, href: `/contracts/${task.contract.id}#tasks` },
+          { label: task.title },
+        ] : [
           { label: 'Главная', href: '/' },
           { label: 'Задачи', href: '/tasks' },
           { label: task.title },
