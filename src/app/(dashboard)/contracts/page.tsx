@@ -25,7 +25,7 @@ const TABS: { key: string; label: string; status?: ContractStatus }[] = [
 
 const KIND_LABELS: Record<ContractKind, string> = { SMR: 'СМР', MK: 'МК', PROJECT: 'П' }
 const KINDS: ContractKind[] = ['SMR', 'MK', 'PROJECT']
-const WORKFLOW_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
+const WORKFLOW_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
 const COMMENT_STAGES: Array<{ key: ContractWorkflowStage; label: string }> = [
 	{ key: 'CONTRACT_PREPARATION', label: 'Договор' },
 	{ key: 'AWAITING_CONTRACT_SIGNATURE', label: 'Подписание' },
@@ -52,6 +52,22 @@ const FOCUS_LABEL = { working: 'В работе — показаны актив�
 function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
 	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
 	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-2xs font-bold ring-1 ${tone}`}><i className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
+}
+
+function WorkflowRail({ stage }: { stage: ContractWorkflowStage }) {
+	const currentIndex = WORKFLOW_STAGES.indexOf(stage)
+	return <div className="mt-1 overflow-x-auto pb-1" aria-label={`Все этапы договора; текущий: ${WORKFLOW_STAGE_LABEL[stage]}`}>
+		<div className="flex min-w-max items-center gap-1.5 pr-2" role="list">
+			{WORKFLOW_STAGES.map((item, index) => {
+				const current = item === stage
+				const passed = currentIndex > index
+				return <span key={item} role="listitem" className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-2xs font-semibold ${current ? 'bg-brand text-white' : passed ? 'bg-ok-bg text-ok' : 'bg-raised text-faint'}`}>
+					<span className={`h-1.5 w-1.5 rounded-full ${current ? 'bg-white' : passed ? 'bg-ok' : 'bg-line'}`} aria-hidden="true" />
+					{WORKFLOW_STAGE_LABEL[item]}
+				</span>
+			})}
+		</div>
+	</div>
 }
 function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queueStatus: string; documents: Array<{ id: string }> }> }) {
 	if (sections.length === 0) return <span className="mt-1 block text-2xs text-faint">Разделы ещё не созданы</span>
@@ -185,7 +201,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 						<ContractFilters kinds={KINDS.map((kind) => ({ key: kind, label: KIND_LABELS[kind], count: kindCount(kind) }))} sections={SECTION_FILTERS.map((section) => ({ key: section, label: SECTION_FILTER_LABEL[section], count: sectionScope.filter((contract) => contract.projectSections.some((item) => item.code === section)).length }))} />
 					</div>
 					{visibleContracts.length === 0 ? <RichEmptyState title={user.role === 'VIEWER' ? 'Нет назначенных договоров' : 'В этом разделе договоров нет'} description={user.role === 'VIEWER' ? 'Обратитесь к менеджеру или администратору, чтобы получить доступ к договору.' : 'Измените фильтры или создайте новый договор.'} icon={Folder} primaryAction={canWrite(user) ? <Link href="/contracts/new" className="brand-gradient rounded-lg px-3 py-2 text-sm font-semibold text-white">Создать договор</Link> : undefined} secondaryAction={<Link href="/contracts" className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-raised">Сбросить фильтры</Link>} /> : <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					<div className="min-w-[960px]"><div className="grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] gap-3 border-b border-line-soft bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-wide text-faint"><span>Номер / шифр</span><span>Тип</span><span>Контрагент</span><span>Объект</span><span>Дата</span><span>Этап работ</span><span>Файлы</span></div>
+					<div className="min-w-[1120px]"><div className="grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_300px_55px] gap-3 border-b border-line-soft bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-wide text-faint"><span>Номер / шифр</span><span>Тип</span><span>Контрагент</span><span>Объект</span><span>Дата</span><span>Этапы работ</span><span>Файлы</span></div>
 						{visibleContracts.map((contract) => {
 							const threadByStage: Record<string, { id: string; text: string | null; authorName: string | null; createdAt: string; attachments: { id: string; fileName: string; sizeBytes: number; isImage: boolean; url: string }[] }[]> = {}
 							for (const item of contract.stageCommentLog) (threadByStage[item.stage] ??= []).push({ id: item.id, text: item.text, authorName: item.author?.name ?? null, createdAt: item.createdAt.toISOString(), attachments: item.attachments.map((a) => ({ id: a.id, fileName: a.fileName, sizeBytes: Number(a.sizeBytes), isImage: a.isImage, url: `/api/stage-comments/attachments/${a.id}` })) })
@@ -194,12 +210,12 @@ export default async function ContractsPage({ searchParams }: { searchParams: { 
 							// Комментарий может быть только фото, без текста (задача C3) —
 							// тогда превью в таблице показывает хотя бы это, а не пустоту.
 							const stageComment = lastComment?.text || (lastComment?.attachments.length ? `📎 ${lastComment.attachments.length > 1 ? `${lastComment.attachments.length} файла` : lastComment.attachments[0].fileName}` : undefined)
-							return <div key={contract.id} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_140px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-xs last:border-0">
+							return <div key={contract.id} className="interactive-row group grid grid-cols-[170px_72px_minmax(150px,1fr)_minmax(170px,1.2fr)_92px_300px_55px] items-center gap-3 border-b border-line-soft px-4 py-3 text-xs last:border-0">
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate text-sm font-bold group-hover:text-brand-ink">№ {contract.number}</span><span className="mt-0.5 block truncate text-xs text-faint">{contract.cipher ?? 'Без шифра'}</span><ProjectBadges sections={contract.projectSections} /></Link>
 							<span><span className="rounded-md bg-raised px-2 py-1 text-xs font-bold">{KIND_LABELS[contract.kind]}</span></span>
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate font-semibold">{contract.contractor.name}</span><span className="block truncate text-2xs text-faint">ИНН {contract.contractor.inn}</span></Link>
 							<Link href={`/contracts/${contract.id}`} className="min-w-0"><span className="block truncate">{contract.objectAddress ?? 'Адрес не указан'}</span>{canSeeAmounts && <span className="mt-0.5 block truncate text-2xs font-semibold text-muted">{formatMoney(contract.amount, contract.currency)}</span>}</Link>
-							<Link href={`/contracts/${contract.id}`} className="tnum text-muted">{formatDate(contract.date)}</Link><span><WorkflowChip stage={contract.workflowStage} /><StageCommentEditor contractId={contract.id} stages={COMMENT_STAGES} comments={threadByStage} canWrite={canWrite(user)} />{stageComment ? <span title={stageComment} className="mt-1 block truncate text-2xs text-muted">{stageComment}</span> : <span className="mt-1 block text-2xs text-faint">Нажмите на этап для комментария</span>}</span>
+								<Link href={`/contracts/${contract.id}`} className="tnum text-muted">{formatDate(contract.date)}</Link><span><WorkflowChip stage={contract.workflowStage} /><WorkflowRail stage={contract.workflowStage} /><StageCommentEditor contractId={contract.id} stages={COMMENT_STAGES} comments={threadByStage} canWrite={canWrite(user)} />{stageComment ? <span title={stageComment} className="mt-1 block truncate text-2xs text-muted">{stageComment}</span> : <span className="mt-1 block text-2xs text-faint">Нажмите на этап для комментария</span>}</span>
 							<span className="flex items-center gap-1.5 text-muted"><span className="text-faint"><DocumentsIcon /></span><span className="font-semibold">{contract._count.documents}</span></span>
 						</div> })}</div>
 					</div>}

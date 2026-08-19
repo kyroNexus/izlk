@@ -21,6 +21,9 @@ assert.match(densityToggle, /aria-pressed/)
 assert.match(ui, /export function RichEmptyState/)
 assert.match(contracts, /Нет назначенных договоров/)
 assert.match(contracts, /<Icon icon=\{Folder\}/)
+assert.match(contracts, /function WorkflowRail/)
+assert.match(contracts, /overflow-x-auto/)
+assert.match(contracts, /SHIPPED/)
 // C2: пункт сайдбара раньше вёл жёстко на /departments/production для всех ролей —
 // теперь на страницу выбора, которая перечисляет все 4 отдела.
 assert.match(sidebar, /href: '\/departments', label: 'Отделы и чаты'/)
