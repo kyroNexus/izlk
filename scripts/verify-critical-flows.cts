@@ -107,10 +107,13 @@ Email: contracts@stroyinvest.example
 
 	// A contract moves through departments in a fixed order. Skipping a stage must
 	// stay impossible outside of an explicit administrative recovery action.
+	assert.equal(canTransitionWorkflowStage('AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN'), true)
+	assert.equal(canTransitionWorkflowStage('WAITING_DESIGN', 'DESIGN'), true)
 	assert.equal(canTransitionWorkflowStage('DESIGN', 'WAITING_PRODUCTION'), true)
 	assert.equal(canTransitionWorkflowStage('WAITING_PRODUCTION', 'PRODUCTION'), true)
 	assert.equal(canTransitionWorkflowStage('PRODUCTION', 'AWAITING_SHIPMENT'), true)
 	assert.equal(canTransitionWorkflowStage('DESIGN', 'PRODUCTION'), false)
+	assert.equal(canTransitionWorkflowStage('AWAITING_PR1_SIGNATURE', 'DESIGN'), false)
 	assert.equal(canTransitionWorkflowStage('INSTALL_KZH', 'CLOSED'), false)
 
 	const validImport = contractImportSchema.safeParse({

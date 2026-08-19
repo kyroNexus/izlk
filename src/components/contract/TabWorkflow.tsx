@@ -34,7 +34,7 @@ export default function TabWorkflow({
 			<CardHeader
 				title="Ход договора"
 				extra={
-					<Chip tone={contract.workflowStage === 'CLOSED' ? 'ok' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'}>
+					<Chip tone={contract.workflowStage === 'CLOSED' ? 'ok' : contract.workflowStage === 'WAITING_DESIGN' ? 'warn' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'}>
 						{WORKFLOW_STAGE_LABEL[contract.workflowStage]}
 					</Chip>
 				}

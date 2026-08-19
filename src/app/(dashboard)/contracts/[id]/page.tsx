@@ -158,7 +158,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 				},
 			},
 		})
-		if (!current || !getNextWorkflowStages(current.workflowStage).includes(toStage) || (toStage === 'DESIGN' && !current.pr1ConfirmedAt)) redirect(`/contracts/${params.id}?tab=workflow#workflow`)
+		if (!current || !getNextWorkflowStages(current.workflowStage).includes(toStage) || (toStage === 'WAITING_DESIGN' && !current.pr1ConfirmedAt)) redirect(`/contracts/${params.id}?tab=workflow#workflow`)
 		// Реальный переход в цех нельзя «прокликать»: производству нужен утверждённый КМ и его итоговый PDF.
 		if (toStage === 'WAITING_PRODUCTION') {
 			const km = current.projectSections[0]
@@ -300,7 +300,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const pr1Documents = contract.documents.filter((document) => document.kind === 'APPENDIX' && document.state === 'SIGNED')
 	const latestPr1 = pr1Documents[0]
 	const deadlineInfo = getDeadlineInfo(contract.deadline)
-	const nextWorkflowStages = getNextWorkflowStages(contract.workflowStage).filter((stage) => stage !== 'DESIGN' || Boolean(contract.pr1ConfirmedAt))
+	const nextWorkflowStages = getNextWorkflowStages(contract.workflowStage).filter((stage) => stage !== 'WAITING_DESIGN' || Boolean(contract.pr1ConfirmedAt))
 	const name = user.name ?? user.email ?? ''
 	const readyProjects = projectSections.filter((item) => item.queueStatus === 'DONE' || item.dateTo).length
 	const documentReady = contract.documents.length > 0
@@ -341,7 +341,7 @@ export default async function ContractPage({ params, searchParams }: { params: {
 	const problemEvent = site?.events.filter((event) => event.type === 'WARNING').at(-1)
 	const overdueProjects = projectSections.filter((item) => item.deadline && item.deadline < new Date() && item.queueStatus !== 'DONE' && !item.dateTo)
 	const overdueTasks = openTasks.filter((item) => item.dueDate && item.dueDate < new Date())
-	const workflowTone: 'ok' | 'warn' | 'off' | 'brand' = contract.workflowStage === 'CLOSED' ? 'ok' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(contract.workflowStage) ? 'warn' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'
+	const workflowTone: 'ok' | 'warn' | 'off' | 'brand' = contract.workflowStage === 'CLOSED' ? 'ok' : ['WAITING_DESIGN', 'INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(contract.workflowStage) ? 'warn' : contract.workflowStage === 'DESIGN' ? 'brand' : 'off'
 	const workflowError = searchParams.workflowError === 'km-final-file-required'
 
 	return (

@@ -7,7 +7,7 @@ import { canWrite, contractScope, requireUser } from '@/lib/access'
 import { formatDate, initials } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { notify } from '@/lib/notifications'
-import { advanceAfterProjectSectionsReady } from '@/lib/contract-workflow'
+import { advanceAfterProjectSectionStarted, advanceAfterProjectSectionsReady } from '@/lib/contract-workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -126,6 +126,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 					...(status === 'DONE' ? { dateTo: new Date() } : {}),
 				},
 			})
+			await advanceAfterProjectSectionStarted(current.contract.id, actingUser.id)
 			if (status === 'DONE') {
 				await advanceAfterProjectSectionsReady(current.contract.id, actingUser.id)
 				await notify({
@@ -185,6 +186,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pag
 				comment: String(formData.get('comment') ?? '').trim() || null,
 			},
 		})
+		await advanceAfterProjectSectionStarted(current.contract.id, actingUser.id)
+		if (status === 'DONE') await advanceAfterProjectSectionsReady(current.contract.id, actingUser.id)
 		if (responsibleId !== current.responsibleId) await notify({
 			userId: responsibleId,
 			type: 'ASSIGNMENT',

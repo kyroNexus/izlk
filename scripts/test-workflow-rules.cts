@@ -14,7 +14,7 @@ import type { ContractWorkflowStage } from '@prisma/client'
 // ---------- workflow-rules.ts ----------
 
 // Happy path: the real chain end to end, one hop at a time.
-const CHAIN: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED']
+const CHAIN: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED']
 for (let i = 0; i < CHAIN.length - 1; i++) {
 	assert.ok(canTransitionWorkflowStage(CHAIN[i], CHAIN[i + 1]), `${CHAIN[i]} -> ${CHAIN[i + 1]} must be allowed`)
 }
@@ -30,6 +30,7 @@ assert.ok(canTransitionWorkflowStage('DESIGN', 'DESIGN'))
 // Forbidden: skipping stages forward.
 assert.ok(!canTransitionWorkflowStage('CONTRACT_PREPARATION', 'CLOSED'), 'must not skip straight to the end')
 assert.ok(!canTransitionWorkflowStage('DESIGN', 'PRODUCTION'), 'must not skip WAITING_PRODUCTION')
+assert.ok(!canTransitionWorkflowStage('AWAITING_PR1_SIGNATURE', 'DESIGN'), 'must not skip WAITING_DESIGN')
 // Forbidden: going backward.
 assert.ok(!canTransitionWorkflowStage('PRODUCTION', 'DESIGN'), 'must not go back to an earlier stage')
 assert.ok(!canTransitionWorkflowStage('CLOSED', 'INSTALL_KM'), 'a closed contract must not reopen by re-entering an earlier stage')

@@ -15,6 +15,7 @@ export const WORKFLOW_STAGE_ORDER: ContractWorkflowStage[] = [
 	'AWAITING_CONTRACT_SIGNATURE',
 	'PR1_DEVELOPMENT',
 	'AWAITING_PR1_SIGNATURE',
+	'WAITING_DESIGN',
 	'DESIGN',
 	'WAITING_PRODUCTION',
 	'PRODUCTION',
@@ -30,6 +31,7 @@ export const WORKFLOW_STAGE_LABEL: Record<ContractWorkflowStage, string> = {
 	AWAITING_CONTRACT_SIGNATURE: 'Ожидание подписания договора и оплаты',
 	PR1_DEVELOPMENT: 'Разработка Приложения №1',
 	AWAITING_PR1_SIGNATURE: 'Ожидание подписания Приложения №1',
+	WAITING_DESIGN: 'Ожидание проектирования',
 	DESIGN: 'Проектирование',
 	WAITING_PRODUCTION: 'Ожидает производства',
 	PRODUCTION: 'Производство',
@@ -232,10 +234,10 @@ export async function confirmSignedPr1Workflow(input: ConfirmPr1Input) {
 
 		const transition = await transitionInTx(tx, {
 			contractId: contract.id,
-			toStage: 'DESIGN',
+			toStage: 'WAITING_DESIGN',
 			actorId: input.actorId,
 			isAutomatic: true,
-			comment: 'Подписанное Приложение №1 подтверждено: запущено проектирование',
+			comment: 'Подписанное Приложение №1 подтверждено: договор поставлен в очередь проектирования',
 			force: true,
 		})
 		return { contract, designer, siteCreated, sectionsCreated, tasksCreated, deadline, transition, alreadyConfirmed: Boolean(contract.pr1ConfirmedAt) }
@@ -282,6 +284,25 @@ export async function addMissingProjectSection(input: { contractId: string; code
 	})
 }
 
+/** Переводит договор из очереди в проектирование при фактическом старте любого раздела. */
+export async function advanceAfterProjectSectionStarted(contractId: string, actorId: string) {
+	return prisma.$transaction(async (tx) => {
+		const contract = await tx.contract.findUnique({
+			where: { id: contractId },
+			select: { workflowStage: true, projectSections: { where: { deletedAt: null }, select: { queueStatus: true } } },
+		})
+		if (!contract || contract.workflowStage !== 'WAITING_DESIGN') return false
+		if (!contract.projectSections.some((section) => section.queueStatus === 'IN_PROGRESS' || section.queueStatus === 'DONE')) return false
+		return (await transitionInTx(tx, {
+			contractId,
+			toStage: 'DESIGN',
+			actorId,
+			isAutomatic: true,
+			comment: 'Проектировщик начал работу над разделом проекта',
+		})).changed
+	})
+}
+
 /** Переводит договор в ожидание производства, когда все созданные проектные разделы завершены. */
 export async function advanceAfterProjectSectionsReady(contractId: string, actorId: string) {
 	const result = await prisma.$transaction(async (tx) => {
@@ -290,17 +311,18 @@ export async function advanceAfterProjectSectionsReady(contractId: string, actor
 			select: {
 				workflowStage: true,
 				projectSections: {
-					where: { deletedAt: null, code: 'KM' },
+					where: { deletedAt: null },
 					select: {
+						code: true,
 						queueStatus: true,
 						documents: { where: { deletedAt: null, kind: 'PROJECT_PDF' }, select: { id: true }, take: 1 },
 					},
 				},
 			},
 		})
-		const km = contract?.projectSections[0]
+		const km = contract?.projectSections.find((section) => section.code === 'KM')
 		// В цех нельзя передавать «готовый» КМ без итогового PDF: иначе у производства нет рабочего файла.
-		if (!contract || !km || km.queueStatus !== 'DONE' || km.documents.length === 0) return null
+		if (!contract || !km || contract.projectSections.length === 0 || contract.projectSections.some((section) => section.queueStatus !== 'DONE') || km.documents.length === 0) return null
 		if (contract.workflowStage !== 'DESIGN') return null
 		const moved = await transitionInTx(tx, {
 			contractId,

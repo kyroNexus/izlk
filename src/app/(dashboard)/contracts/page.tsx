@@ -25,11 +25,12 @@ const TABS: { key: string; label: string; status?: ContractStatus }[] = [
 
 const KIND_LABELS: Record<ContractKind, string> = { SMR: 'СМР', MK: 'МК', PROJECT: 'П' }
 const KINDS: ContractKind[] = ['SMR', 'MK', 'PROJECT']
-const WORKFLOW_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
+const WORKFLOW_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
 const COMMENT_STAGES: Array<{ key: ContractWorkflowStage; label: string }> = [
 	{ key: 'CONTRACT_PREPARATION', label: 'Договор' },
 	{ key: 'AWAITING_CONTRACT_SIGNATURE', label: 'Подписание' },
 	{ key: 'AWAITING_PR1_SIGNATURE', label: 'ПР1' },
+	{ key: 'WAITING_DESIGN', label: 'Очередь проекта' },
 	{ key: 'DESIGN', label: 'Проект' },
 	{ key: 'WAITING_PRODUCTION', label: 'Производство' },
 	{ key: 'AWAITING_SHIPMENT', label: 'Отгрузка' },
@@ -40,16 +41,16 @@ const SECTION_FILTERS: SectionCode[] = ['KM', 'KZH', 'AR']
 const SECTION_FILTER_LABEL: Record<string, string> = { KM: 'КМ', KZH: 'КЖ', AR: 'АР' }
 const DEPARTMENT_STAGES = {
 	commercial: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'],
-	engineering: ['DESIGN'],
+	engineering: ['WAITING_DESIGN', 'DESIGN'],
 	production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'],
 	construction: ['INSTALL_KZH', 'INSTALL_KM'],
 } as const satisfies Record<string, ContractWorkflowStage[]>
 const DEPARTMENT_LABEL: Record<keyof typeof DEPARTMENT_STAGES, string> = { commercial: 'Коммерческий', engineering: 'Конструкторский', production: 'Производственный', construction: 'Строительный' }
-const ATTENTION_STAGES: ContractWorkflowStage[] = ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT']
+const ATTENTION_STAGES: ContractWorkflowStage[] = ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT']
 const FOCUS_LABEL = { working: 'В работе — показаны активные договоры', attention: 'Требуют внимания — показаны договоры, ожидающие решения или подтверждения', today: 'Создано сегодня — показаны новые договоры за текущий день' } as const
 
 function WorkflowChip({ stage }: { stage: ContractWorkflowStage }) {
-	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
+	const tone = stage === 'CLOSED' ? 'bg-ok-bg text-ok ring-ok/20' : ['AWAITING_CONTRACT_SIGNATURE', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'WAITING_PRODUCTION', 'AWAITING_SHIPMENT'].includes(stage) ? 'bg-warn-bg text-warn ring-warn/20' : ['INSTALL_KZH', 'INSTALL_KM', 'PRODUCTION'].includes(stage) ? 'bg-brand-soft text-brand-ink ring-brand/20' : 'bg-raised text-muted ring-line'
 	return <span className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-2xs font-bold ring-1 ${tone}`}><i className="h-1.5 w-1.5 flex-none rounded-full bg-current opacity-80" /><span className="truncate">{WORKFLOW_STAGE_LABEL[stage]}</span></span>
 }
 function ProjectBadges({ sections }: { sections: Array<{ code: SectionCode; queueStatus: string; documents: Array<{ id: string }> }> }) {

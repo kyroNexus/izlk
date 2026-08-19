@@ -6,7 +6,7 @@ import { DOCUMENT_KIND_ORDER } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { assertSafeDocumentUpload, MAX_UPLOAD_BYTES, saveContractFile, sha256Buffer } from '@/lib/storage'
 import { orNull, parseDate } from '@/lib/validation'
-import { confirmSignedPr1Workflow, tryConfirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
+import { advanceAfterProjectSectionStarted, confirmSignedPr1Workflow, tryConfirmSignedPr1Workflow, trySyncWorkflowAfterDocumentUpload } from '@/lib/contract-workflow'
 import { configuredPublicOrigin } from '@/lib/request-security'
 import { withApiAuth } from '@/lib/api-auth'
 import { createVersionedDocument } from '@/lib/document-versioning'
@@ -56,7 +56,7 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 		const sourceDataKindRaw = String(formData.get('sub') ?? '')
 		const sourceDataKindsRaw = formData.getAll('subs').map(String)
 		const requestedProjectSectionId = String(formData.get('projectSectionId') ?? '')
-		const projectSection = requestedProjectSectionId ? await prisma.projectSection.findFirst({ where: { id: requestedProjectSectionId, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true } }) : null
+		const projectSection = requestedProjectSectionId ? await prisma.projectSection.findFirst({ where: { id: requestedProjectSectionId, contractId, deletedAt: null, ...(user.role === 'DESIGNER' ? { responsibleId: user.id } : {}) }, select: { id: true, code: true, queueStatus: true } }) : null
 		if (user.role === 'DESIGNER') {
 			if (!projectSection) return errorResponse(wantsJson, 'Раздел проекта не найден или недоступен', new URL('/projects', publicOrigin(request)))
 		} else if (user.role === 'BUILDER') {
@@ -224,7 +224,10 @@ async function post(request: Request, { user, requestId }: { user: SessionUser; 
 			: automaticWorkflow?.result ?? null
 		if (automaticWorkflow?.error) await writeImportEvent({ fileName: 'Подписанное ПР1', event: 'MANUAL_IMPORTED', outcome: 'FAILED', contractId, actorId: user.id, message: `Файл сохранён, но автоматическое подтверждение ПР1 не выполнено: ${automaticWorkflow.error}` })
 		const automaticStage = !workflow && contractUploadState ? (await trySyncWorkflowAfterDocumentUpload({ contractId, actorId: user.id, kind: 'CONTRACT', state: contractUploadState })).result : null
-		if (projectSection && uploadedCount > 0) await prisma.projectSection.update({ where: { id: projectSection.id }, data: { queueStatus: 'IN_PROGRESS', dateFrom: new Date() } })
+		if (projectSection && uploadedCount > 0) {
+			if (projectSection.queueStatus !== 'DONE') await prisma.projectSection.update({ where: { id: projectSection.id }, data: { queueStatus: 'IN_PROGRESS', dateFrom: new Date() } })
+			await advanceAfterProjectSectionStarted(contractId, user.id)
+		}
 		const destination = new URL(projectSection ? `/projects?section=${projectSection.code}` : executiveDocId ? `/executive/${contractId}` : explicitAgreementId || explicitInvoiceId ? `/contracts/${contractId}#agreements` : `/contracts/${contractId}`, publicOrigin(request))
 		const workflowText = workflow ? ` ПР1 подтверждён: площадка ${workflow.siteCreated ? 'создана' : 'уже существовала'}, разделов добавлено: ${workflow.sectionsCreated}, задач создано: ${workflow.tasksCreated}${workflow.responsibleName ? `, ответственный: ${workflow.responsibleName}` : ''}.` : automaticWorkflow?.error ? ' Файл сохранён, но ПР1 требует ручного подтверждения; причина записана в журнал.' : automaticStage?.changed ? ' Этап договора обновлён автоматически.' : ''
 		// "Загружено файлов: 0" на своём читается как сбой, даже когда дубликат

@@ -78,7 +78,7 @@ export const DEPARTMENT_NOTE: Record<DepartmentKey, { input: string; focus: stri
 	construction: { input: 'Изделия, площадка и план монтажа', focus: 'Площадки, монтаж, комментарии и фотоотчёты.', result: 'Работы закрыты, комплект исполнительной документации собран.', output: 'Исполнительная документация' },
 }
 
-const WORKFLOW_FUNNEL_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
+const WORKFLOW_FUNNEL_STAGES: ContractWorkflowStage[] = ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE', 'WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED']
 
 export type DesignRow = {
 	id: string
@@ -610,7 +610,7 @@ async function computeDashboard(user: SessionUser, now: Date, options: Dashboard
 					{ key: 'working', label: 'В работе', count: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'].reduce((n, key) => n + (funnelCounts.get(key as ContractWorkflowStage)?.count ?? 0), 0), tone: 'brand' },
 					{ key: 'attention', label: 'Требует внимания', count: departmentRows.commercial.filter((row) => row.attention).length, tone: 'warn' },
 					{ key: 'paused', label: 'Приостановлено', count: contracts.filter((item) => item.status === 'ARCHIVED').length, tone: 'muted' },
-					{ key: 'done', label: 'Передано дальше', count: contracts.filter((item) => ['DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(item.workflowStage)).length, tone: 'ok' },
+					{ key: 'done', label: 'Передано дальше', count: contracts.filter((item) => ['WAITING_DESIGN', 'DESIGN', 'WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED', 'INSTALL_KZH', 'INSTALL_KM', 'CLOSED'].includes(item.workflowStage)).length, tone: 'ok' },
 				],
 			},
 			{
@@ -643,7 +643,7 @@ async function computeDashboard(user: SessionUser, now: Date, options: Dashboard
 	]
 	const departmentStageGroups: Record<DepartmentKey, ContractWorkflowStage[]> = {
 		commercial: ['CONTRACT_PREPARATION', 'AWAITING_CONTRACT_SIGNATURE', 'PR1_DEVELOPMENT', 'AWAITING_PR1_SIGNATURE'],
-		engineering: ['DESIGN'],
+		engineering: ['WAITING_DESIGN', 'DESIGN'],
 		production: ['WAITING_PRODUCTION', 'PRODUCTION', 'AWAITING_SHIPMENT', 'SHIPPED'],
 		construction: ['INSTALL_KZH', 'INSTALL_KM', 'CLOSED'],
 	}
